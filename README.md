@@ -1,6 +1,6 @@
 # tacrust
 
-TACACS+ implementation in Rust ([RFC 8907](https://datatracker.ietf.org/doc/html/rfc8907))
+TACACS+ implementation in Rust ([RFC 8907](https://datatracker.ietf.org/doc/html/rfc8907), [context](https://salesforce.quip.com/ClnrA3p0oPbQ))
 
 ## Status
 
@@ -28,7 +28,7 @@ $ cargo test -- --nocapture
 
 ```
    Compiling tacrust v0.1.0 (/home/k.khan/rust/tacrust)
-    Finished test [unoptimized + debuginfo] target(s) in 0.73s
+    Finished test [unoptimized + debuginfo] target(s) in 0.63s
      Running unittests (target/debug/deps/tacrust-64b9a83a787ed433)
 
 running 0 tests
@@ -46,46 +46,7 @@ Length: 50 (0x32) bytes
 0030:   f8 b2                                                ..
 Result: Ok(
     (
-        [
-            195,
-            4,
-            196,
-            138,
-            4,
-            32,
-            119,
-            146,
-            86,
-            213,
-            254,
-            246,
-            202,
-            37,
-            96,
-            215,
-            243,
-            137,
-            10,
-            224,
-            240,
-            95,
-            11,
-            91,
-            13,
-            36,
-            63,
-            119,
-            42,
-            8,
-            147,
-            143,
-            244,
-            96,
-            253,
-            241,
-            248,
-            178,
-        ],
+        [],
         Packet {
             header: Header {
                 major_version: 12,
@@ -156,4 +117,5 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
 ```

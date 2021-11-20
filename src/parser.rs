@@ -125,7 +125,7 @@ pub fn parse_body<'a>(input: &'a [u8], header: Header) -> nom::IResult<&'a [u8],
 
 pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8], Packet> {
     let (input, header) = parse_header(input)?;
-    let (_, body) =
+    let (input, body) =
         nom::combinator::all_consuming(nom::bytes::complete::take(header.length))(input)?;
     let pseudo_pad = PseudoPad::new(header.session_id, key, header.version, header.seq_no);
 
