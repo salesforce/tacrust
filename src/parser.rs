@@ -1,6 +1,6 @@
-use crate::Header;
+use crate::{Header, Packet};
 
-pub fn parse(input: &[u8]) -> nom::IResult<&[u8], Header> {
+pub fn parse_header(input: &[u8]) -> nom::IResult<&[u8], Header> {
     let (input, versions) = nom::number::complete::be_u8(input)?;
     let major_version = (versions & 0b11110000) >> 4;
     let minor_version = versions & 0b00001111;
@@ -23,4 +23,10 @@ pub fn parse(input: &[u8]) -> nom::IResult<&[u8], Header> {
             length,
         },
     ))
+}
+
+pub fn parse_packet(input: &[u8]) -> nom::IResult<&[u8], Packet> {
+    let (input, header) = parse_header(input)?;
+    let (input, body) = nom::bytes::complete::take(header.length)(input)?;
+    Ok((input, Packet { header, body }))
 }

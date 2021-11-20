@@ -11,3 +11,9 @@ pub struct Header {
     session_id: u32,
     length: u32,
 }
+
+#[derive(Clone, Debug)]
+pub struct Packet<'a> {
+    header: Header,
+    body: &'a [u8],
+}
