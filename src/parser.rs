@@ -1,7 +1,6 @@
-use crate::{Header, Packet};
+use crate::{Body, Header, Packet, PacketType};
 use byteorder::{BigEndian, WriteBytesExt};
 use md5;
-use pretty_hex;
 
 const MD5_DIGEST_LENGTH: usize = 16;
 
@@ -55,11 +54,12 @@ impl<'a> Iterator for PseudoPad<'a> {
     }
 }
 
-pub fn parse_header(input: &[u8]) -> nom::IResult<&[u8], Header> {
+fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Header> {
     let (input, version) = nom::number::complete::be_u8(input)?;
     let major_version = (version & 0b11110000) >> 4;
     let minor_version = version & 0b00001111;
     let (input, r#type) = nom::number::complete::be_u8(input)?;
+    let r#type = num::FromPrimitive::from_u32(r#type as u32).unwrap();
     let (input, seq_no) = nom::number::complete::be_u8(input)?;
     let (input, flags) = nom::number::complete::be_u8(input)?;
     let (input, session_id) = nom::number::complete::be_u32(input)?;
@@ -80,9 +80,52 @@ pub fn parse_header(input: &[u8]) -> nom::IResult<&[u8], Header> {
     ))
 }
 
-pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8], Packet<'a>> {
+pub fn parse_authen_start<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Body> {
+    let (input, action) = nom::number::complete::be_u8(input)?;
+    let (input, priv_lvl) = nom::number::complete::be_u8(input)?;
+    let (input, authen_type) = nom::number::complete::be_u8(input)?;
+    let (input, authen_service) = nom::number::complete::be_u8(input)?;
+    let (input, user_len) = nom::number::complete::be_u8(input)?;
+    let (input, port_len) = nom::number::complete::be_u8(input)?;
+    let (input, rem_addr_len) = nom::number::complete::be_u8(input)?;
+    let (input, data_len) = nom::number::complete::be_u8(input)?;
+    let (input, user) = nom::bytes::complete::take(user_len)(input)?;
+    let (input, port) = nom::bytes::complete::take(port_len)(input)?;
+    let (input, rem_addr) = nom::bytes::complete::take(rem_addr_len)(input)?;
+    let (input, data) =
+        nom::combinator::all_consuming(nom::bytes::complete::take(data_len))(input)?;
+
+    let body = Body::AuthenticationStart {
+        action,
+        priv_lvl,
+        authen_type,
+        authen_service,
+        user_len,
+        port_len,
+        rem_addr_len,
+        data_len,
+        user: user.to_vec(),
+        port: port.to_vec(),
+        rem_addr: rem_addr.to_vec(),
+        data: data.to_vec(),
+    };
+
+    Ok((input, body))
+}
+
+pub fn parse_body<'a>(input: &'a [u8], header: Header) -> nom::IResult<&'a [u8], Body> {
+    match header.r#type {
+        PacketType::Authentication => parse_authen_start(input),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Fail,
+        ))),
+    }
+}
+
+pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8], Packet> {
     let (input, header) = parse_header(input)?;
-    let (input, body) =
+    let (_, body) =
         nom::combinator::all_consuming(nom::bytes::complete::take(header.length))(input)?;
     let pseudo_pad = PseudoPad::new(header.session_id, key, header.version, header.seq_no);
 
@@ -97,8 +140,13 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
         decrypted.extend_from_slice(&decrypted_chunk);
     }
 
-    println!("Decrypted:");
-    println!("{}", pretty_hex::pretty_hex(&decrypted));
+    let (_, parsed_body) = parse_body(&decrypted, header.clone()).unwrap();
 
-    Ok((input, Packet { header, body }))
+    Ok((
+        input,
+        Packet {
+            header,
+            body: parsed_body,
+        },
+    ))
 }
