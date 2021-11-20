@@ -27,8 +27,7 @@ $ cargo test -- --nocapture
 ```
 
 ```
-   Compiling tacrust v0.1.0 (/home/k.khan/rust/tacrust)
-    Finished test [unoptimized + debuginfo] target(s) in 0.63s
+    Finished test [unoptimized + debuginfo] target(s) in 0.01s
      Running unittests (target/debug/deps/tacrust-64b9a83a787ed433)
 
 running 0 tests
@@ -108,7 +107,7 @@ Result: Ok(
         },
     ),
 )
-test test_packet_1 ... ok
+test test_packet_authen_start ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
