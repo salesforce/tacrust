@@ -4,7 +4,7 @@ pub mod parser;
 pub struct Header {
     major_version: u8,
     minor_version: u8,
-    versions: u8,
+    version: u8,
     r#type: u8,
     seq_no: u8,
     flags: u8,
