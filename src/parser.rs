@@ -27,6 +27,8 @@ pub fn parse_header(input: &[u8]) -> nom::IResult<&[u8], Header> {
 
 pub fn parse_packet(input: &[u8]) -> nom::IResult<&[u8], Packet> {
     let (input, header) = parse_header(input)?;
-    let (input, body) = nom::bytes::complete::take(header.length)(input)?;
+    let (input, body) =
+        nom::combinator::all_consuming(nom::bytes::complete::take(header.length))(input)?;
+
     Ok((input, Packet { header, body }))
 }
