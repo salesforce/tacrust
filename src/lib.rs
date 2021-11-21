@@ -5,6 +5,9 @@ pub mod serializer;
 #[macro_use]
 extern crate num_derive;
 
+#[macro_use]
+extern crate simple_error;
+
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
 pub enum PacketType {
     Authentication = 0x01,

@@ -75,8 +75,8 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
     let (input, header) = parse_header(input)?;
     let (input, body) =
         nom::combinator::all_consuming(nom::bytes::complete::take(header.length))(input)?;
-    let pseudo_pad = PseudoPad::new(header.session_id, key, header.version, header.seq_no);
 
+    let pseudo_pad = PseudoPad::new(header.session_id, key, header.version, header.seq_no);
     let mut decrypted = vec![];
 
     for (input_chunk, input_digest) in body.chunks(MD5_DIGEST_LENGTH).zip(pseudo_pad) {

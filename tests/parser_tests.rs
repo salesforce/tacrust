@@ -15,4 +15,6 @@ pub fn test_packet_authen_start() {
     let serialized = serializer::serialize_packet(&parsed_packet, key).unwrap();
     println!("\n >> Serialized\n");
     println!("{}", pretty_hex(&serialized));
+
+    assert_eq!(&reference_packet[..], serialized);
 }
