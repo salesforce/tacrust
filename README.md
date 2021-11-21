@@ -16,6 +16,9 @@ TACACS+ implementation in Rust ([RFC 8907](https://datatracker.ietf.org/doc/html
   - [x] AuthenticationReply serialization
   - [ ] AuthorizationReply serialization
   - [ ] AccountingReply serialization
+- [ ] Networking
+  - [ ] Packet routing
+  - [ ] Single connect mode
 - [ ] Configuration support
   - [ ] Client stanzas
   - [ ] Client secret keys
@@ -38,7 +41,6 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/parser_tests.rs (target/debug/deps/parser_tests-1027d2bf91c9c163)
 
 running 1 test
-
  >> Reference Packet
 
 Length: 50 (0x32) bytes
@@ -57,6 +59,10 @@ Packet {
         type: Authentication,
         seq_no: 1,
         flags: 0,
+        parsed_flags: PacketFlags {
+            unencrypted: false,
+            single_connect: false,
+        },
         session_id: 2353290422,
         length: 38,
     },

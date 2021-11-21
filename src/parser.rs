@@ -1,5 +1,6 @@
 use crate::{
-    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, Body, Header, Packet, PacketType,
+    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, Body, Header, Packet, PacketFlags,
+    PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 
 fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Header> {
@@ -10,6 +11,10 @@ fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Header> {
     let r#type = num::FromPrimitive::from_u32(r#type as u32).unwrap();
     let (input, seq_no) = nom::number::complete::be_u8(input)?;
     let (input, flags) = nom::number::complete::be_u8(input)?;
+    let parsed_flags = PacketFlags {
+        unencrypted: flags & TAC_PLUS_UNENCRYPTED_FLAG != 0,
+        single_connect: flags & TAC_PLUS_SINGLE_CONNECT_FLAG != 0,
+    };
     let (input, session_id) = nom::number::complete::be_u32(input)?;
     let (input, length) = nom::number::complete::be_u32(input)?;
 
@@ -22,6 +27,7 @@ fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Header> {
             r#type,
             seq_no,
             flags,
+            parsed_flags,
             session_id,
             length,
         },

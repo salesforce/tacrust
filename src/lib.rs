@@ -8,11 +8,20 @@ extern crate num_derive;
 #[macro_use]
 extern crate simple_error;
 
+pub const TAC_PLUS_UNENCRYPTED_FLAG: u8 = 0b00000001;
+pub const TAC_PLUS_SINGLE_CONNECT_FLAG: u8 = 0b00000100;
+
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
 pub enum PacketType {
     Authentication = 0x01,
     Authorization = 0x02,
     Accounting = 0x03,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct PacketFlags {
+    unencrypted: bool,
+    single_connect: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -23,6 +32,7 @@ pub struct Header {
     r#type: PacketType,
     seq_no: u8,
     flags: u8,
+    parsed_flags: PacketFlags,
     session_id: u32,
     length: u32,
 }
