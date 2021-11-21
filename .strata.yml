@@ -1,0 +1,8 @@
+pipeline_template: utest-only/Jenkinsfile-1
+email_reply_to: kuleana@salesforce.com
+docker_test_images:                                 # The image(s) that will be used to run your unit tests (Unit tests will be run against each image)
+  - dva/kuleana-rust-builder
+unit_tests_command: make test                       # The command we'll run for the unit tests stage
+compliance_required: false
+time_out_mins: 180
+production_branch: master
