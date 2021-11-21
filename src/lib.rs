@@ -1,9 +1,11 @@
 pub mod parser;
+mod pseudo_pad;
+pub mod serializer;
 
 #[macro_use]
 extern crate num_derive;
 
-#[derive(Copy, Clone, FromPrimitive, Debug)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
 pub enum PacketType {
     Authentication = 0x01,
     Authorization = 0x02,
