@@ -1,4 +1,7 @@
-use crate::{pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, Body, Packet, PacketType};
+use crate::{
+    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, Body, Packet, PacketType,
+    TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
+};
 use byteorder::{BigEndian, WriteBytesExt};
 use std::error;
 
@@ -11,10 +14,6 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             priv_lvl,
             authen_type,
             authen_service,
-            user_len,
-            port_len,
-            rem_addr_len,
-            data_len,
             user,
             port,
             rem_addr,
@@ -24,10 +23,10 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             serialized.write_u8(*priv_lvl)?;
             serialized.write_u8(*authen_type)?;
             serialized.write_u8(*authen_service)?;
-            serialized.write_u8(*user_len)?;
-            serialized.write_u8(*port_len)?;
-            serialized.write_u8(*rem_addr_len)?;
-            serialized.write_u8(*data_len)?;
+            serialized.write_u8(user.len().try_into().unwrap())?;
+            serialized.write_u8(port.len().try_into().unwrap())?;
+            serialized.write_u8(rem_addr.len().try_into().unwrap())?;
+            serialized.write_u8(data.len().try_into().unwrap())?;
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(port);
             serialized.extend_from_slice(rem_addr);
@@ -39,16 +38,6 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
 }
 
 pub fn serialize_packet(packet: &Packet, key: &[u8]) -> Result<Vec<u8>, Box<dyn error::Error>> {
-    let mut serialized: Vec<u8> = Vec::new();
-
-    serialized.write_u8(packet.header.version)?;
-    let packet_type = num::ToPrimitive::to_u8(&(packet.header.r#type)).unwrap();
-    serialized.write_u8(packet_type)?;
-    serialized.write_u8(packet.header.seq_no)?;
-    serialized.write_u8(packet.header.flags)?;
-    serialized.write_u32::<BigEndian>(packet.header.session_id)?;
-    serialized.write_u32::<BigEndian>(packet.header.length)?;
-
     let plaintext_body = match packet.header.r#type {
         PacketType::Authentication => serialize_authen_start(&(packet.body)),
         _ => bail!("not implemented yet"),
@@ -71,6 +60,22 @@ pub fn serialize_packet(packet: &Packet, key: &[u8]) -> Result<Vec<u8>, Box<dyn 
         encrypted.extend_from_slice(&decrypted_chunk);
     }
 
+    let mut serialized: Vec<u8> = Vec::new();
+
+    serialized.write_u8(packet.header.version)?;
+    let packet_type = num::ToPrimitive::to_u8(&(packet.header.r#type)).unwrap();
+    serialized.write_u8(packet_type)?;
+    serialized.write_u8(packet.header.seq_no)?;
+    let mut flags: u8 = 0;
+    if packet.header.flags.unencrypted {
+        flags |= TAC_PLUS_UNENCRYPTED_FLAG;
+    }
+    if packet.header.flags.single_connect {
+        flags |= TAC_PLUS_SINGLE_CONNECT_FLAG;
+    }
+    serialized.write_u8(flags)?;
+    serialized.write_u32::<BigEndian>(packet.header.session_id)?;
+    serialized.write_u32::<BigEndian>(encrypted.len().try_into().unwrap())?;
     serialized.extend_from_slice(&encrypted);
 
     Ok(serialized)

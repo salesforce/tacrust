@@ -58,23 +58,17 @@ Packet {
         version: 192,
         type: Authentication,
         seq_no: 1,
-        flags: 0,
-        parsed_flags: PacketFlags {
+        flags: PacketFlags {
             unencrypted: false,
             single_connect: false,
         },
         session_id: 2353290422,
-        length: 38,
     },
     body: AuthenticationStart {
         action: 1,
         priv_lvl: 0,
         authen_type: 1,
         authen_service: 1,
-        user_len: 6,
-        port_len: 11,
-        rem_addr_len: 13,
-        data_len: 0,
         user: [
             107,
             114,

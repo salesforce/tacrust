@@ -31,10 +31,8 @@ pub struct Header {
     version: u8,
     r#type: PacketType,
     seq_no: u8,
-    flags: u8,
-    parsed_flags: PacketFlags,
+    flags: PacketFlags,
     session_id: u32,
-    length: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -44,10 +42,6 @@ pub enum Body {
         priv_lvl: u8,
         authen_type: u8,
         authen_service: u8,
-        user_len: u8,
-        port_len: u8,
-        rem_addr_len: u8,
-        data_len: u8,
         user: Vec<u8>,
         port: Vec<u8>,
         rem_addr: Vec<u8>,

@@ -3,7 +3,7 @@ use crate::{
     PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 
-fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Header> {
+fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], (u32, Header)> {
     let (input, version) = nom::number::complete::be_u8(input)?;
     let major_version = (version & 0b11110000) >> 4;
     let minor_version = version & 0b00001111;
@@ -11,7 +11,7 @@ fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Header> {
     let r#type = num::FromPrimitive::from_u32(r#type as u32).unwrap();
     let (input, seq_no) = nom::number::complete::be_u8(input)?;
     let (input, flags) = nom::number::complete::be_u8(input)?;
-    let parsed_flags = PacketFlags {
+    let flags = PacketFlags {
         unencrypted: flags & TAC_PLUS_UNENCRYPTED_FLAG != 0,
         single_connect: flags & TAC_PLUS_SINGLE_CONNECT_FLAG != 0,
     };
@@ -20,17 +20,18 @@ fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Header> {
 
     Ok((
         input,
-        Header {
-            major_version,
-            minor_version,
-            version,
-            r#type,
-            seq_no,
-            flags,
-            parsed_flags,
-            session_id,
+        (
             length,
-        },
+            Header {
+                major_version,
+                minor_version,
+                version,
+                r#type,
+                seq_no,
+                flags,
+                session_id,
+            },
+        ),
     ))
 }
 
@@ -54,10 +55,6 @@ pub fn parse_authen_start<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Body> {
         priv_lvl,
         authen_type,
         authen_service,
-        user_len,
-        port_len,
-        rem_addr_len,
-        data_len,
         user: user.to_vec(),
         port: port.to_vec(),
         rem_addr: rem_addr.to_vec(),
@@ -78,9 +75,8 @@ pub fn parse_body<'a>(input: &'a [u8], header: Header) -> nom::IResult<&'a [u8],
 }
 
 pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8], Packet> {
-    let (input, header) = parse_header(input)?;
-    let (input, body) =
-        nom::combinator::all_consuming(nom::bytes::complete::take(header.length))(input)?;
+    let (input, (length, header)) = parse_header(input)?;
+    let (input, body) = nom::combinator::all_consuming(nom::bytes::complete::take(length))(input)?;
 
     let pseudo_pad = PseudoPad::new(header.session_id, key, header.version, header.seq_no);
     let mut decrypted = vec![];
