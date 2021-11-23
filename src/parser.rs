@@ -3,7 +3,7 @@ use crate::{
     PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 
-fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], (u32, Header)> {
+fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
     let (input, version) = nom::number::complete::be_u8(input)?;
     let major_version = (version & 0b11110000) >> 4;
     let minor_version = version & 0b00001111;
@@ -35,7 +35,7 @@ fn parse_header<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], (u32, Header)> {
     ))
 }
 
-pub fn parse_authen_start<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Body> {
+pub fn parse_authen_start(input: &[u8]) -> nom::IResult<&[u8], Body> {
     let (input, action) = nom::number::complete::be_u8(input)?;
     let (input, priv_lvl) = nom::number::complete::be_u8(input)?;
     let (input, authen_type) = nom::number::complete::be_u8(input)?;
@@ -64,7 +64,7 @@ pub fn parse_authen_start<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], Body> {
     Ok((input, body))
 }
 
-pub fn parse_body<'a>(input: &'a [u8], header: Header) -> nom::IResult<&'a [u8], Body> {
+pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
         PacketType::Authentication => parse_authen_start(input),
         _ => Err(nom::Err::Error(nom::error::Error::new(
@@ -90,7 +90,7 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
         decrypted.extend_from_slice(&decrypted_chunk);
     }
 
-    let (_, parsed_body) = parse_body(&decrypted, header.clone()).unwrap();
+    let (_, parsed_body) = parse_body(&decrypted, header).unwrap();
 
     Ok((
         input,

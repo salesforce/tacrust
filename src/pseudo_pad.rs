@@ -1,5 +1,4 @@
 use byteorder::{BigEndian, WriteBytesExt};
-use md5;
 
 pub const MD5_DIGEST_LENGTH: usize = 16;
 
