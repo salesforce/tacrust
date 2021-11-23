@@ -1,8 +1,12 @@
-pipeline_template: utest-only/Jenkinsfile-1
-email_reply_to: kuleana@salesforce.com
-docker_test_images:                                 # The image(s) that will be used to run your unit tests (Unit tests will be run against each image)
-  - dva/kuleana-rust-builder
-unit_tests_command: make test                       # The command we'll run for the unit tests stage
-compliance_required: false
-time_out_mins: 180
-production_branch: master
+pipeline_template: rpm/Jenkinsfile
+email_reply_to: kuleana@salesforce.com                  # Change this to your group's e-mail address!
+compliance_required: false                              # (Optional) default = true
+docker_test_images:                                     # The image(s) that will be used to run your unit tests (Unit tests will be run against each image)
+    - dva/kuleana-rust-builder:27
+unit_tests_command: STRATA=yes ./test.sh                # The command we'll run for the unit tests stage
+docker_package_images: dva/kuleana-rust-builder:27      # The image that will be used to package your RPM
+package_generation_command: ./build.sh                  # The command we'll run to package your RPMs
+package_repository: kuleana                             # Please see the list of available yum repos and create a PR if your group
+publish_to_gcp: true
+docker_images:                                          # Provide a map of image names to custom Dockerfile names
+   kuleana-rust-hello-world: ./Dockerfile

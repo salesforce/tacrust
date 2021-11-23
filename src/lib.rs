@@ -26,7 +26,9 @@ pub struct PacketFlags {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Header {
+    #[allow(dead_code)]
     major_version: u8,
+    #[allow(dead_code)]
     minor_version: u8,
     version: u8,
     r#type: PacketType,
