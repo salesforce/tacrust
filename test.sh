@@ -10,4 +10,3 @@ if [ "$STRATA" == "yes" ]; then
 	bash <(curl -s https://codecov.moe.prd-sam.prd.slb.sfdc.net/bash) -t $TOKEN -f coveralls.json -Z
 fi
 
-
