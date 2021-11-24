@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-export TOKEN="7209b18b-1fb8-46e1-b532-ab894c3f64d5 "
+export TOKEN="66632e33-d018-4a35-afce-3cafcac256cc"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 cargo make strata
