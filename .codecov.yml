@@ -11,6 +11,9 @@ coverage:
   # Between 60 and 80 is a gradient from red to green.
   range: "60...80"
 
+  ignore:
+    - "vendor/*"
+
   status:
     # Coverage evaluation on master.
     project:
