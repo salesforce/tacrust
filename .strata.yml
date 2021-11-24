@@ -9,4 +9,4 @@ package_generation_command: ./build.sh                  # The command we'll run 
 package_repository: kuleana                             # Please see the list of available yum repos and create a PR if your group
 publish_to_gcp: true
 docker_images:                                          # Provide a map of image names to custom Dockerfile names
-   kuleana-rust-hello-world: ./Dockerfile
+   kuleana-tacrust: ./Dockerfile
