@@ -2,7 +2,7 @@ codecov:
   # The GHE user to update PR status.
   bot: svc-moe-ci
   # Token to use for uploading coverage reports to https://codecov.moe.prd-sam.prd.slb.sfdc.net/ghe.
-  token: 7209b18b-1fb8-46e1-b532-ab894c3f64d5
+  token: 66632e33-d018-4a35-afce-3cafcac256cc
 
 coverage:
   precision: 2
