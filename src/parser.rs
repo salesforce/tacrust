@@ -3,6 +3,8 @@ use crate::{
     PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 
+use nom::branch::alt;
+
 fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
     let (input, version) = nom::number::complete::be_u8(input)?;
     let major_version = (version & 0b11110000) >> 4;
@@ -36,6 +38,9 @@ fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
 }
 
 pub fn parse_authen_start(input: &[u8]) -> nom::IResult<&[u8], Body> {
+    // let mut parser = tuple((
+    //   be_u8)
+    //   )(input);
     let (input, action) = nom::number::complete::be_u8(input)?;
     let (input, priv_lvl) = nom::number::complete::be_u8(input)?;
     let (input, authen_type) = nom::number::complete::be_u8(input)?;
@@ -64,9 +69,30 @@ pub fn parse_authen_start(input: &[u8]) -> nom::IResult<&[u8], Body> {
     Ok((input, body))
 }
 
+pub fn parse_authen_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
+    let (input, status) = nom::number::complete::be_u8(input)?;
+    let (input, flags) = nom::number::complete::be_u8(input)?;
+    let (input, server_msg_len) = nom::number::complete::be_u16(input)?;
+    let (input, data_len) = nom::number::complete::be_u16(input)?;
+    let (input, server_msg) = nom::bytes::complete::take(server_msg_len)(input)?;
+    let (input, data) =
+        nom::combinator::all_consuming(nom::bytes::complete::take(data_len))(input)?;
+
+    let body = Body::AuthenticationReply {
+        status: num::FromPrimitive::from_u8(status).unwrap(),
+        flags,
+        server_msg_len,
+        data_len,
+        server_msg: server_msg.to_vec(),
+        data: data.to_vec(),
+    };
+
+    Ok((input, body))
+}
+
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
-        PacketType::Authentication => parse_authen_start(input),
+        PacketType::Authentication => alt((parse_authen_start, parse_authen_reply))(input),
         _ => Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::Fail,
@@ -89,9 +115,7 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
             .collect();
         decrypted.extend_from_slice(&decrypted_chunk);
     }
-
     let (_, parsed_body) = parse_body(&decrypted, header).unwrap();
-
     Ok((
         input,
         Packet {
