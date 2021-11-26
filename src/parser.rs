@@ -64,40 +64,9 @@ pub fn parse_authen_start(input: &[u8]) -> nom::IResult<&[u8], Body> {
     Ok((input, body))
 }
 
-pub fn parse_authen_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
-    let (input, status) = nom::number::complete::be_u8(input)?;
-    let (input, flags) = nom::number::complete::be_u8(input)?;
-    let (input, server_msg_len) = nom::number::complete::be_u16(input)?;
-    let (input, data_len) = nom::number::complete::be_u16(input)?;
-    let (input, server_msg) = nom::bytes::complete::take(server_msg_len)(input)?;
-    let (input, data) =
-        nom::combinator::all_consuming(nom::bytes::complete::take(data_len))(input)?;
-
-    let body = Body::AuthenticationReply {
-        status: num::FromPrimitive::from_u8(status).unwrap(),
-        flags,
-        server_msg_len,
-        data_len,
-        server_msg: server_msg.to_vec(),
-        data: data.to_vec(),
-    };
-
-    Ok((input, body))
-}
-
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
         PacketType::Authentication => parse_authen_start(input),
-        _ => Err(nom::Err::Error(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Fail,
-        ))),
-    }
-}
-
-pub fn parse_authen_reply_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
-    match header.r#type {
-        PacketType::Authentication => parse_authen_reply(input),
         _ => Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::Fail,
@@ -121,24 +90,13 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
         decrypted.extend_from_slice(&decrypted_chunk);
     }
 
-    if header.seq_no % 2 == 0 {
-        // Packet sub-type identification need to be worked in future
-        let (_, parsed_body) = parse_authen_reply_body(&decrypted, header).unwrap();
-        Ok((
-            input,
-            Packet {
-                header,
-                body: parsed_body,
-            },
-        ))
-    } else {
-        let (_, parsed_body) = parse_body(&decrypted, header).unwrap();
-        Ok((
-            input,
-            Packet {
-                header,
-                body: parsed_body,
-            },
-        ))
-    }
+    let (_, parsed_body) = parse_body(&decrypted, header).unwrap();
+
+    Ok((
+        input,
+        Packet {
+            header,
+            body: parsed_body,
+        },
+    ))
 }
