@@ -4,6 +4,7 @@ use crate::{
 };
 use byteorder::{BigEndian, WriteBytesExt};
 use std::error;
+use std::ops::Deref;
 
 fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
     let mut serialized: Vec<u8> = Vec::new();
@@ -30,6 +31,26 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(port);
             serialized.extend_from_slice(rem_addr);
+            serialized.extend_from_slice(data);
+        }
+        Body::AuthenticationReply {
+            status,
+            flags,
+            server_msg_len,
+            data_len,
+            server_msg,
+            data,
+        } => {
+            let status_der = num::ToPrimitive::to_u8(status).unwrap();
+            serialized.write_u8(status_der)?;
+            serialized.write_u8(*flags)?;
+            let bytes = server_msg_len.to_be_bytes();
+            serialized.write_u8(bytes[0])?;
+            serialized.write_u8(bytes[1])?;
+            let bytes_len = data_len.to_be_bytes();
+            serialized.write_u8(bytes_len[0])?;
+            serialized.write_u8(bytes_len[1])?;
+            serialized.extend_from_slice(server_msg);
             serialized.extend_from_slice(data);
         }
     }

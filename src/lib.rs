@@ -2,6 +2,7 @@ pub mod parser;
 mod pseudo_pad;
 pub mod serializer;
 
+
 #[macro_use]
 extern crate num_derive;
 
@@ -16,6 +17,18 @@ pub enum PacketType {
     Authentication = 0x01,
     Authorization = 0x02,
     Accounting = 0x03,
+}
+
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
+pub enum AuthenticationStatus {
+    Pass = 0x01,
+    Fail = 0x02,
+    Getdata = 0x03,
+    GetUser = 0x04,
+    GetPass = 0x05,
+    Restart = 0x06,
+    Error = 0x07,
+    Follow = 0x21,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -49,6 +62,15 @@ pub enum Body {
         rem_addr: Vec<u8>,
         data: Vec<u8>,
     },
+
+    AuthenticationReply {
+        status: AuthenticationStatus,
+        flags: u8,
+        server_msg_len: u16,
+        data_len: u16,
+        server_msg: Vec<u8>,
+        data: Vec<u8>
+    }
 }
 
 #[derive(Clone, Debug)]
