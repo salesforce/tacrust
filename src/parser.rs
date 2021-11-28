@@ -38,9 +38,6 @@ fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
 }
 
 pub fn parse_authen_start(input: &[u8]) -> nom::IResult<&[u8], Body> {
-    // let mut parser = tuple((
-    //   be_u8)
-    //   )(input);
     let (input, action) = nom::number::complete::be_u8(input)?;
     let (input, priv_lvl) = nom::number::complete::be_u8(input)?;
     let (input, authen_type) = nom::number::complete::be_u8(input)?;
