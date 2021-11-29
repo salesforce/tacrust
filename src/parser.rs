@@ -3,6 +3,8 @@ use crate::{
     PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 
+use nom::branch::alt;
+
 fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
     let (input, version) = nom::number::complete::be_u8(input)?;
     let major_version = (version & 0b11110000) >> 4;
@@ -87,17 +89,7 @@ pub fn parse_authen_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
 
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
-        PacketType::Authentication => parse_authen_start(input),
-        _ => Err(nom::Err::Error(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Fail,
-        ))),
-    }
-}
-
-pub fn parse_authen_reply_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
-    match header.r#type {
-        PacketType::Authentication => parse_authen_reply(input),
+        PacketType::Authentication => alt((parse_authen_start, parse_authen_reply))(input),
         _ => Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::Fail,
@@ -120,25 +112,12 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
             .collect();
         decrypted.extend_from_slice(&decrypted_chunk);
     }
-
-    if header.seq_no % 2 == 0 {
-        // Packet sub-type identification need to be worked in future
-        let (_, parsed_body) = parse_authen_reply_body(&decrypted, header).unwrap();
-        Ok((
-            input,
-            Packet {
-                header,
-                body: parsed_body,
-            },
-        ))
-    } else {
-        let (_, parsed_body) = parse_body(&decrypted, header).unwrap();
-        Ok((
-            input,
-            Packet {
-                header,
-                body: parsed_body,
-            },
-        ))
-    }
+    let (_, parsed_body) = parse_body(&decrypted, header).unwrap();
+    Ok((
+        input,
+        Packet {
+            header,
+            body: parsed_body,
+        },
+    ))
 }

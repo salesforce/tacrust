@@ -4,7 +4,6 @@ use crate::{
 };
 use byteorder::{BigEndian, WriteBytesExt};
 use std::error;
-use std::ops::Deref;
 
 fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
     let mut serialized: Vec<u8> = Vec::new();

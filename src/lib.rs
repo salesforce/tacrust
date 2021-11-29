@@ -2,7 +2,6 @@ pub mod parser;
 mod pseudo_pad;
 pub mod serializer;
 
-
 #[macro_use]
 extern crate num_derive;
 
@@ -69,8 +68,8 @@ pub enum Body {
         server_msg_len: u16,
         data_len: u16,
         server_msg: Vec<u8>,
-        data: Vec<u8>
-    }
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Clone, Debug)]
