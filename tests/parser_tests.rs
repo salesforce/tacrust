@@ -34,3 +34,12 @@ pub fn test_packet_authen_reply() {
     println!("\n >> Serialized\n");
     println!("{}", pretty_hex(&serialized));
 }
+
+#[test]
+pub fn test_no_panic() {
+    let key = "tackey".as_bytes();
+    let input: [u8; 20] = [1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8];
+    let result = parser::parse_packet(&input, key);
+
+    assert_eq!(result.is_err(), true);
+}

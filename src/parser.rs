@@ -1,16 +1,57 @@
 use crate::{
-    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, Body, Header, Packet, PacketFlags,
-    PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
+    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationStatus, Body, Header,
+    Packet, PacketFlags, PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 
 use nom::branch::alt;
+
+pub struct BodyParseError<I, J: Default> {
+    error: nom::error::Error<I>,
+    inner_error: nom::Err<nom::error::Error<J>>,
+}
+
+impl<I, J: Default> BodyParseError<I, J> {
+    fn new(
+        input: I,
+        code: nom::error::ErrorKind,
+        inner_error: nom::Err<nom::error::Error<J>>,
+    ) -> Self {
+        Self {
+            error: nom::error::Error::new(input, code),
+            inner_error,
+        }
+    }
+}
+
+impl<I, J: Default> nom::error::ParseError<I> for BodyParseError<I, J> {
+    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
+        Self::new(
+            input,
+            kind,
+            nom::Err::Error(nom::error::Error::new(
+                Default::default(),
+                nom::error::ErrorKind::Fail,
+            )),
+        )
+    }
+
+    fn append(input: I, kind: nom::error::ErrorKind, other: Self) -> Self {
+        Self::new(input, kind, other.inner_error)
+    }
+}
+
+impl<I, J: Default> From<BodyParseError<I, J>> for nom::Err<nom::error::Error<I>> {
+    fn from(err: BodyParseError<I, J>) -> Self {
+        nom::Err::Error(err.error)
+    }
+}
 
 fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
     let (input, version) = nom::number::complete::be_u8(input)?;
     let major_version = (version & 0b11110000) >> 4;
     let minor_version = version & 0b00001111;
     let (input, r#type) = nom::number::complete::be_u8(input)?;
-    let r#type = num::FromPrimitive::from_u32(r#type as u32).unwrap();
+    let r#type = num::FromPrimitive::from_u32(r#type as u32).unwrap_or(PacketType::Authentication);
     let (input, seq_no) = nom::number::complete::be_u8(input)?;
     let (input, flags) = nom::number::complete::be_u8(input)?;
     let flags = PacketFlags {
@@ -76,7 +117,7 @@ pub fn parse_authen_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
         nom::combinator::all_consuming(nom::bytes::complete::take(data_len))(input)?;
 
     let body = Body::AuthenticationReply {
-        status: num::FromPrimitive::from_u8(status).unwrap(),
+        status: num::FromPrimitive::from_u8(status).unwrap_or(AuthenticationStatus::Error),
         flags,
         server_msg_len,
         data_len,
@@ -112,7 +153,8 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
             .collect();
         decrypted.extend_from_slice(&decrypted_chunk);
     }
-    let (_, parsed_body) = parse_body(&decrypted, header).unwrap();
+    let (_, parsed_body) = parse_body(&decrypted, header)
+        .map_err(|e| BodyParseError::new(input, nom::error::ErrorKind::Fail, e.to_owned()))?;
     Ok((
         input,
         Packet {
