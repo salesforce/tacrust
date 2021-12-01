@@ -135,9 +135,30 @@ pub fn parse_authen_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
     Ok((input, body))
 }
 
+pub fn parse_authen_cont(input: &[u8]) -> nom::IResult<&[u8], Body> {
+    let (input, user_len) = nom::number::complete::be_u16(input)?;
+    let (input, data_len) = nom::number::complete::be_u16(input)?;
+    let (input, flags) = nom::number::complete::be_u8(input)?;
+    let (input, user) = nom::bytes::complete::take(user_len)(input)?;
+    let (input, data) =
+        nom::combinator::all_consuming(nom::bytes::complete::take(data_len))(input)?;
+
+    let body = Body::AuthenticationContinue {
+        user_len,
+        data_len,
+        flags,
+        user: user.to_vec(),
+        data: data.to_vec(),
+    };
+
+    Ok((input, body))
+}
+
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
-        PacketType::Authentication => alt((parse_authen_start, parse_authen_reply))(input),
+        PacketType::Authentication => {
+            alt((parse_authen_start, parse_authen_reply, parse_authen_cont))(input)
+        }
         _ => Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::Fail,
