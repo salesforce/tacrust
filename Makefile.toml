@@ -23,7 +23,7 @@ dependencies = ["clean"]
 
 [tasks.test]
 command = "cargo"
-args = ["test", "--", "--nocapture"]
+args = ["test", "--", "--nocapture", "--test-threads=1"]
 dependencies = ["clean"]
 
 [tasks.strata]

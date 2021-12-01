@@ -43,3 +43,14 @@ pub fn test_no_panic() {
 
     assert_eq!(result.is_err(), true);
 }
+
+#[test]
+pub fn test_bad_key() {
+    let key = "badkey".as_bytes();
+    let reference_packet = include_bytes!("../packets/sample_packet_authen_reply");
+    let result = parser::parse_packet(reference_packet, key);
+
+    println!("\n >> Result: {:?}", result);
+
+    assert_eq!(result.is_err(), true);
+}

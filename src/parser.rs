@@ -2,15 +2,16 @@ use crate::{
     pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationStatus, Body, Header,
     Packet, PacketFlags, PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
+use std::fmt::Debug;
 
 use nom::branch::alt;
 
-pub struct BodyParseError<I, J: Default> {
+pub struct ParserError<I, J: Default + Debug> {
     error: nom::error::Error<I>,
     inner_error: nom::Err<nom::error::Error<J>>,
 }
 
-impl<I, J: Default> BodyParseError<I, J> {
+impl<I, J: Default + Debug> ParserError<I, J> {
     fn new(
         input: I,
         code: nom::error::ErrorKind,
@@ -23,7 +24,13 @@ impl<I, J: Default> BodyParseError<I, J> {
     }
 }
 
-impl<I, J: Default> nom::error::ParseError<I> for BodyParseError<I, J> {
+impl<I, J: Default + Debug> Debug for ParserError<I, J> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Parser inner error: {}", self.inner_error)
+    }
+}
+
+impl<I, J: Default + Debug> nom::error::ParseError<I> for ParserError<I, J> {
     fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
         Self::new(
             input,
@@ -40,8 +47,8 @@ impl<I, J: Default> nom::error::ParseError<I> for BodyParseError<I, J> {
     }
 }
 
-impl<I, J: Default> From<BodyParseError<I, J>> for nom::Err<nom::error::Error<I>> {
-    fn from(err: BodyParseError<I, J>) -> Self {
+impl<I, J: Default + Debug> From<ParserError<I, J>> for nom::Err<nom::error::Error<I>> {
+    fn from(err: ParserError<I, J>) -> Self {
         nom::Err::Error(err.error)
     }
 }
@@ -138,9 +145,20 @@ pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     }
 }
 
-pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8], Packet> {
-    let (input, (length, header)) = parse_header(input)?;
-    let (input, body) = nom::combinator::all_consuming(nom::bytes::complete::take(length))(input)?;
+pub type ParserResult<I, J, O> = Result<(I, O), ParserError<I, J>>;
+
+pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> ParserResult<&'a [u8], Vec<u8>, Packet> {
+    let (input, (length, header)) = parse_header(input).map_err(|e| {
+        return ParserError::new(input, nom::error::ErrorKind::Fail, e.to_owned());
+    })?;
+    let (input, body) = nom::combinator::all_consuming(nom::bytes::complete::take(length))(input)
+        .map_err(|e| {
+        return ParserError::new(
+            input,
+            nom::error::ErrorKind::Fail,
+            nom::Err::<nom::error::Error<&[u8]>>::to_owned(e),
+        );
+    })?;
 
     let pseudo_pad = PseudoPad::new(header.session_id, key, header.version, header.seq_no);
     let mut decrypted = vec![];
@@ -153,8 +171,9 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> nom::IResult<&'a [u8]
             .collect();
         decrypted.extend_from_slice(&decrypted_chunk);
     }
-    let (_, parsed_body) = parse_body(&decrypted, header)
-        .map_err(|e| BodyParseError::new(input, nom::error::ErrorKind::Fail, e.to_owned()))?;
+    let (_, parsed_body) = parse_body(&decrypted, header).map_err(|e| {
+        return ParserError::new(input, nom::error::ErrorKind::Fail, e.to_owned());
+    })?;
     Ok((
         input,
         Packet {
