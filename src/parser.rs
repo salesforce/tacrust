@@ -148,16 +148,15 @@ pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
 pub type ParserResult<I, J, O> = Result<(I, O), ParserError<I, J>>;
 
 pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> ParserResult<&'a [u8], Vec<u8>, Packet> {
-    let (input, (length, header)) = parse_header(input).map_err(|e| {
-        return ParserError::new(input, nom::error::ErrorKind::Fail, e.to_owned());
-    })?;
+    let (input, (length, header)) = parse_header(input)
+        .map_err(|e| ParserError::new(input, nom::error::ErrorKind::Fail, e.to_owned()))?;
     let (input, body) = nom::combinator::all_consuming(nom::bytes::complete::take(length))(input)
         .map_err(|e| {
-        return ParserError::new(
+        ParserError::new(
             input,
             nom::error::ErrorKind::Fail,
             nom::Err::<nom::error::Error<&[u8]>>::to_owned(e),
-        );
+        )
     })?;
 
     let pseudo_pad = PseudoPad::new(header.session_id, key, header.version, header.seq_no);
@@ -171,9 +170,8 @@ pub fn parse_packet<'a>(input: &'a [u8], key: &'a [u8]) -> ParserResult<&'a [u8]
             .collect();
         decrypted.extend_from_slice(&decrypted_chunk);
     }
-    let (_, parsed_body) = parse_body(&decrypted, header).map_err(|e| {
-        return ParserError::new(input, nom::error::ErrorKind::Fail, e.to_owned());
-    })?;
+    let (_, parsed_body) = parse_body(&decrypted, header)
+        .map_err(|e| ParserError::new(input, nom::error::ErrorKind::Fail, e.to_owned()))?;
     Ok((
         input,
         Packet {
