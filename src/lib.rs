@@ -70,6 +70,14 @@ pub enum Body {
         server_msg: Vec<u8>,
         data: Vec<u8>,
     },
+
+    AuthenticationContinue {
+        user_len: u16,
+        data_len: u16,
+        flags: u8,
+        user: Vec<u8>,
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Clone, Debug)]
