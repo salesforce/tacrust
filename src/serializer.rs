@@ -61,12 +61,12 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             data,
         } => {
             let user_bytes = user_len.to_be_bytes();
-            serialized.write_u8(user_bytes[0]);
-            serialized.write_u8(user_bytes[1]);
+            serialized.write_u8(user_bytes[0])?;
+            serialized.write_u8(user_bytes[1])?;
             let data_bytes = data_len.to_be_bytes();
-            serialized.write_u8(data_bytes[0]);
-            serialized.write_u8(data_bytes[1]);
-            serialized.write_u8(*flags);
+            serialized.write_u8(data_bytes[0])?;
+            serialized.write_u8(data_bytes[1])?;
+            serialized.write_u8(*flags)?;
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(data);
         }
