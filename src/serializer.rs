@@ -35,37 +35,21 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
         Body::AuthenticationReply {
             status,
             flags,
-            server_msg_len,
-            data_len,
             server_msg,
             data,
         } => {
             let status_der = num::ToPrimitive::to_u8(status).unwrap();
             serialized.write_u8(status_der)?;
             serialized.write_u8(*flags)?;
-            let bytes = server_msg_len.to_be_bytes();
-            serialized.write_u8(bytes[0])?;
-            serialized.write_u8(bytes[1])?;
-            let bytes_len = data_len.to_be_bytes();
-            serialized.write_u8(bytes_len[0])?;
-            serialized.write_u8(bytes_len[1])?;
+            serialized.write_u16::<BigEndian>(server_msg.len().try_into().unwrap())?;
+            serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
             serialized.extend_from_slice(server_msg);
             serialized.extend_from_slice(data);
         }
 
-        Body::AuthenticationContinue {
-            user_len,
-            data_len,
-            flags,
-            user,
-            data,
-        } => {
-            let user_bytes = user_len.to_be_bytes();
-            serialized.write_u8(user_bytes[0])?;
-            serialized.write_u8(user_bytes[1])?;
-            let data_bytes = data_len.to_be_bytes();
-            serialized.write_u8(data_bytes[0])?;
-            serialized.write_u8(data_bytes[1])?;
+        Body::AuthenticationContinue { flags, user, data } => {
+            serialized.write_u16::<BigEndian>(user.len().try_into().unwrap())?;
+            serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
             serialized.write_u8(*flags)?;
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(data);

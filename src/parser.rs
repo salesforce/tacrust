@@ -1,5 +1,7 @@
-use crate::{pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationStatus, Body, Header, Packet, PacketFlags, PacketType,
-            TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG};
+use crate::{
+    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationStatus, Body, Header,
+    Packet, PacketFlags, PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
+};
 use std::fmt::Debug;
 
 use nom::branch::alt;
@@ -124,8 +126,6 @@ pub fn parse_authen_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
     let body = Body::AuthenticationReply {
         status: num::FromPrimitive::from_u8(status).unwrap_or(AuthenticationStatus::Error),
         flags,
-        server_msg_len,
-        data_len,
         server_msg: server_msg.to_vec(),
         data: data.to_vec(),
     };
@@ -142,8 +142,6 @@ pub fn parse_authen_cont(input: &[u8]) -> nom::IResult<&[u8], Body> {
         nom::combinator::all_consuming(nom::bytes::complete::take(data_len))(input)?;
 
     let body = Body::AuthenticationContinue {
-        user_len,
-        data_len,
         flags,
         user: user.to_vec(),
         data: data.to_vec(),
@@ -154,7 +152,9 @@ pub fn parse_authen_cont(input: &[u8]) -> nom::IResult<&[u8], Body> {
 
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
-        PacketType::Authentication => alt((parse_authen_start, parse_authen_reply, parse_authen_cont))(input),
+        PacketType::Authentication => {
+            alt((parse_authen_start, parse_authen_reply, parse_authen_cont))(input)
+        }
         _ => Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::Fail,
