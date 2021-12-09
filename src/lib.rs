@@ -65,15 +65,11 @@ pub enum Body {
     AuthenticationReply {
         status: AuthenticationStatus,
         flags: u8,
-        server_msg_len: u16,
-        data_len: u16,
         server_msg: Vec<u8>,
         data: Vec<u8>,
     },
 
     AuthenticationContinue {
-        user_len: u16,
-        data_len: u16,
         flags: u8,
         user: Vec<u8>,
         data: Vec<u8>,
