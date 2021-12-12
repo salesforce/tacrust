@@ -54,14 +54,56 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(data);
         }
-    }
 
+        _ => bail!("not implemented yet"),
+    };
+
+    Ok(serialized)
+}
+
+fn serialize_author(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
+    let mut serialized: Vec<u8> = Vec::new();
+
+    match body {
+        Body::AuthorizationRequest {
+            auth_method,
+            priv_lvl,
+            authen_type,
+            authen_service,
+            user,
+            port,
+            rem_address,
+            args,
+        } => {
+            let auth = num::ToPrimitive::to_u8(auth_method).unwrap();
+            serialized.write_u8(auth)?;
+            serialized.write_u8(*priv_lvl)?;
+            serialized.write_u8(*authen_type)?;
+            serialized.write_u8(*authen_service)?;
+            serialized.write_u8(user.len().try_into().unwrap())?;
+            serialized.write_u8(port.len().try_into().unwrap())?;
+            serialized.write_u8(rem_address.len().try_into().unwrap())?;
+            serialized.write_u8(args.len().try_into().unwrap())?;
+            for i in 0..args.len() {
+                serialized.write_u8(args.get(i).unwrap().len().try_into().unwrap())?;
+            }
+            serialized.extend_from_slice(user);
+            serialized.extend_from_slice(port);
+            serialized.extend_from_slice(rem_address);
+            for i in 0..args.len() {
+                serialized.extend_from_slice(args.get(i).unwrap());
+            }
+        }
+
+        _ => bail!("not implemented yet"),
+    }
     Ok(serialized)
 }
 
 pub fn serialize_packet(packet: &Packet, key: &[u8]) -> Result<Vec<u8>, Box<dyn error::Error>> {
     let plaintext_body = match packet.header.r#type {
         PacketType::Authentication => serialize_authen_start(&(packet.body)),
+        PacketType::Authorization => serialize_author(&(packet.body)),
         _ => bail!("not implemented yet"),
     }?;
 

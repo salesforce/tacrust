@@ -30,6 +30,21 @@ pub enum AuthenticationStatus {
     Follow = 0x21,
 }
 
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
+pub enum AuthenticationMethod {
+    AuthNotSet = 0x00,
+    AuthNone = 0x01,
+    AuthKrb5 = 0x02,
+    AuthLine = 0x03,
+    AuthEnable = 0x04,
+    AuthLocal = 0x05,
+    AuthTacPLus = 0x06,
+    AuthGuest = 0x08,
+    AuthRadius = 0x10,
+    AUthKrb4 = 0x11,
+    AuthRcmd = 0x20,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct PacketFlags {
     unencrypted: bool,
@@ -73,6 +88,17 @@ pub enum Body {
         flags: u8,
         user: Vec<u8>,
         data: Vec<u8>,
+    },
+
+    AuthorizationRequest {
+        auth_method: AuthenticationMethod,
+        priv_lvl: u8,
+        authen_type: u8,
+        authen_service: u8,
+        user: Vec<u8>,
+        port: Vec<u8>,
+        rem_address: Vec<u8>,
+        args: Vec<Vec<u8>>,
     },
 }
 
