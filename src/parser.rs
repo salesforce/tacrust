@@ -1,10 +1,13 @@
 use crate::{
-    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationStatus, Body, Header,
-    Packet, PacketFlags, PacketType, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
+    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationMethod,
+    AuthenticationStatus, Body, Header, Packet, PacketFlags, PacketType,
+    TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 use std::fmt::Debug;
 
 use nom::branch::alt;
+use nom::multi::count;
+use nom::IResult;
 
 pub struct ParserError<I, J: Default + Debug> {
     error: nom::error::Error<I>,
@@ -150,10 +153,56 @@ pub fn parse_authen_cont(input: &[u8]) -> nom::IResult<&[u8], Body> {
     Ok((input, body))
 }
 
+pub fn parse_author_req(input: &[u8]) -> nom::IResult<&[u8], Body> {
+    let (input, auth_method) = nom::number::complete::be_u8(input)?;
+    let (input, priv_lvl) = nom::number::complete::be_u8(input)?;
+    let (input, authen_type) = nom::number::complete::be_u8(input)?;
+    let (input, authen_service) = nom::number::complete::be_u8(input)?;
+    let (input, user_len) = nom::number::complete::be_u8(input)?;
+    let (input, port_len) = nom::number::complete::be_u8(input)?;
+    let (input, remaddr_len) = nom::number::complete::be_u8(input)?;
+    let (input, arg_cnt) = nom::number::complete::be_u8(input)?;
+    let val: IResult<&[u8], Vec<u8>> = count(nom::number::complete::be_u8, arg_cnt.into())(input);
+    if val.is_err() {
+        return Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Fail,
+        )));
+    }
+    let (input, user) = nom::bytes::complete::take(user_len)(val.as_ref().ok().unwrap().0)?;
+    let (input, port) = nom::bytes::complete::take(port_len)(input)?;
+    let (input, rem_address) = nom::bytes::complete::take(remaddr_len)(input)?;
+    let mut args: Vec<Vec<u8>> = Vec::with_capacity(arg_cnt as usize);
+    let total: u8 = val.as_ref().ok().unwrap().1.iter().sum();
+    let (input, args_com) = nom::bytes::complete::take(total)(input)?;
+    let mut start: u8 = 0;
+    for (_, num) in val.ok().unwrap().1.iter().enumerate() {
+        args.push(args_com[start as usize..(start + *num) as usize].to_vec());
+        start = start + *num;
+    }
+
+    let body = Body::AuthorizationRequest {
+        auth_method: num::FromPrimitive::from_u8(auth_method)
+            .unwrap_or(AuthenticationMethod::AuthNone),
+        priv_lvl,
+        authen_type,
+        authen_service,
+        user: user.to_vec(),
+        port: port.to_vec(),
+        rem_address: rem_address.to_vec(),
+        args: args.to_vec(),
+    };
+
+    Ok((input, body))
+}
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
         PacketType::Authentication => {
             alt((parse_authen_start, parse_authen_reply, parse_authen_cont))(input)
+        }
+
+        PacketType::Authorization => {
+            parse_author_req(input)
         }
         _ => Err(nom::Err::Error(nom::error::Error::new(
             input,
