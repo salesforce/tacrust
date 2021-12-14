@@ -1,6 +1,6 @@
 use crate::{
     pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationMethod,
-    AuthenticationStatus, Body, Header, Packet, PacketFlags, PacketType,
+    AuthenticationStatus, AuthorizationStatus, Body, Header, Packet, PacketFlags, PacketType,
     TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 use std::fmt::Debug;
@@ -195,15 +195,47 @@ pub fn parse_author_req(input: &[u8]) -> nom::IResult<&[u8], Body> {
 
     Ok((input, body))
 }
+
+pub fn parse_author_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
+    let (input, status) = nom::number::complete::be_u8(input)?;
+    let (input, arg_count) = nom::number::complete::be_u8(input)?;
+    let (input, msg_len) = nom::number::complete::be_u16(input)?;
+    let (input, data_len) = nom::number::complete::be_u16(input)?;
+    let val: IResult<&[u8], Vec<u8>> = count(nom::number::complete::be_u8, arg_count.into())(input);
+    if val.is_err() {
+        return Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Fail,
+        )));
+    }
+    let mut args: Vec<Vec<u8>> = Vec::with_capacity(arg_count as usize);
+    let (input, server_msg) = nom::bytes::complete::take(msg_len)(val.as_ref().ok().unwrap().0)?;
+    let (input, data) = nom::bytes::complete::take(data_len)(input)?;
+    let mut start: u8 = 0;
+    let total: u8 = val.as_ref().ok().unwrap().1.iter().sum();
+    let (input, args_com) = nom::bytes::complete::take(total)(input)?;
+    for (_, num) in val.ok().unwrap().1.iter().enumerate() {
+        args.push(args_com[start as usize..(start + *num) as usize].to_vec());
+        start = start + *num;
+    }
+
+    let body = Body::AuthorizationReply {
+        status: num::FromPrimitive::from_u8(status).unwrap_or(AuthorizationStatus::AuthStatusError),
+        data: data.to_vec(),
+        server_msg: server_msg.to_vec(),
+        args: args.to_vec(),
+    };
+
+    Ok((input, body))
+}
+
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
         PacketType::Authentication => {
             alt((parse_authen_start, parse_authen_reply, parse_authen_cont))(input)
         }
 
-        PacketType::Authorization => {
-            parse_author_req(input)
-        }
+        PacketType::Authorization => alt((parse_author_req, parse_author_reply))(input),
         _ => Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::Fail,

@@ -54,7 +54,6 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(data);
         }
-
         _ => bail!("not implemented yet"),
     };
 
@@ -90,6 +89,27 @@ fn serialize_author(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(port);
             serialized.extend_from_slice(rem_address);
+            for i in 0..args.len() {
+                serialized.extend_from_slice(args.get(i).unwrap());
+            }
+        }
+
+        Body::AuthorizationReply {
+            status,
+            data,
+            server_msg,
+            args,
+        } => {
+            let status_res = num::ToPrimitive::to_u8(status).unwrap();
+            serialized.write_u8(status_res)?;
+            serialized.write_u8(args.len().try_into().unwrap())?;
+            serialized.write_u16::<BigEndian>(server_msg.len().try_into().unwrap())?;
+            serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
+            for i in 0..args.len() {
+                serialized.write_u8(args.get(i).unwrap().len().try_into().unwrap())?;
+            }
+            serialized.extend_from_slice(server_msg);
+            serialized.extend_from_slice(data);
             for i in 0..args.len() {
                 serialized.extend_from_slice(args.get(i).unwrap());
             }
