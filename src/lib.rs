@@ -31,6 +31,15 @@ pub enum AuthenticationStatus {
 }
 
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
+pub enum AuthorizationStatus {
+    AuthPassAdd = 0x01,
+    AuthPassRepl = 0x02,
+    AuthStatusFail = 0x10,
+    AuthStatusError = 0x11,
+    AuthStatusFollow = 0x21,
+}
+
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
 pub enum AuthenticationMethod {
     AuthNotSet = 0x00,
     AuthNone = 0x01,
@@ -98,6 +107,13 @@ pub enum Body {
         user: Vec<u8>,
         port: Vec<u8>,
         rem_address: Vec<u8>,
+        args: Vec<Vec<u8>>,
+    },
+
+    AuthorizationReply {
+        status: AuthorizationStatus,
+        data: Vec<u8>,
+        server_msg: Vec<u8>,
         args: Vec<Vec<u8>>,
     },
 }
