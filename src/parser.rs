@@ -7,7 +7,6 @@ use std::fmt::Debug;
 
 use nom::branch::alt;
 use nom::multi::count;
-use nom::IResult;
 
 pub struct ParserError<I, J: Default + Debug> {
     error: nom::error::Error<I>,
@@ -161,24 +160,16 @@ pub fn parse_author_req(input: &[u8]) -> nom::IResult<&[u8], Body> {
     let (input, user_len) = nom::number::complete::be_u8(input)?;
     let (input, port_len) = nom::number::complete::be_u8(input)?;
     let (input, remaddr_len) = nom::number::complete::be_u8(input)?;
-    let (input, arg_cnt) = nom::number::complete::be_u8(input)?;
-    let val: IResult<&[u8], Vec<u8>> = count(nom::number::complete::be_u8, arg_cnt.into())(input);
-    if val.is_err() {
-        return Err(nom::Err::Error(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Fail,
-        )));
-    }
-    let (input, user) = nom::bytes::complete::take(user_len)(val.as_ref().ok().unwrap().0)?;
+    let (input, arg_count) = nom::number::complete::be_u8(input)?;
+    let (input, arg_lengths) = count(nom::number::complete::be_u8, arg_count.into())(input)?;
+    let (input, user) = nom::bytes::complete::take(user_len)(input)?;
     let (input, port) = nom::bytes::complete::take(port_len)(input)?;
-    let (input, rem_address) = nom::bytes::complete::take(remaddr_len)(input)?;
-    let mut args: Vec<Vec<u8>> = Vec::with_capacity(arg_cnt as usize);
-    let total: u8 = val.as_ref().ok().unwrap().1.iter().sum();
-    let (input, args_com) = nom::bytes::complete::take(total)(input)?;
-    let mut start: u8 = 0;
-    for (_, num) in val.ok().unwrap().1.iter().enumerate() {
-        args.push(args_com[start as usize..(start + *num) as usize].to_vec());
-        start = start + *num;
+    let (mut input, rem_address) = nom::bytes::complete::take(remaddr_len)(input)?;
+    let mut args: Vec<Vec<u8>> = Vec::with_capacity(arg_count as usize);
+    for arg_length in arg_lengths {
+        let (i, arg) = nom::bytes::complete::take(arg_length)(input)?;
+        args.push(arg.to_vec());
+        input = i;
     }
 
     let body = Body::AuthorizationRequest {
@@ -201,22 +192,14 @@ pub fn parse_author_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
     let (input, arg_count) = nom::number::complete::be_u8(input)?;
     let (input, msg_len) = nom::number::complete::be_u16(input)?;
     let (input, data_len) = nom::number::complete::be_u16(input)?;
-    let val: IResult<&[u8], Vec<u8>> = count(nom::number::complete::be_u8, arg_count.into())(input);
-    if val.is_err() {
-        return Err(nom::Err::Error(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Fail,
-        )));
-    }
+    let (input, arg_lengths) = count(nom::number::complete::be_u8, arg_count.into())(input)?;
+    let (input, server_msg) = nom::bytes::complete::take(msg_len)(input)?;
+    let (mut input, data) = nom::bytes::complete::take(data_len)(input)?;
     let mut args: Vec<Vec<u8>> = Vec::with_capacity(arg_count as usize);
-    let (input, server_msg) = nom::bytes::complete::take(msg_len)(val.as_ref().ok().unwrap().0)?;
-    let (input, data) = nom::bytes::complete::take(data_len)(input)?;
-    let mut start: u8 = 0;
-    let total: u8 = val.as_ref().ok().unwrap().1.iter().sum();
-    let (input, args_com) = nom::bytes::complete::take(total)(input)?;
-    for (_, num) in val.ok().unwrap().1.iter().enumerate() {
-        args.push(args_com[start as usize..(start + *num) as usize].to_vec());
-        start = start + *num;
+    for arg_length in arg_lengths {
+        let (i, arg) = nom::bytes::complete::take(arg_length)(input)?;
+        args.push(arg.to_vec());
+        input = i;
     }
 
     let body = Body::AuthorizationReply {
