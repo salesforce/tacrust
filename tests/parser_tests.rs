@@ -59,7 +59,7 @@ pub fn test_bad_key() {
 #[test]
 pub fn test_packet_authen_continue() {
     let key = "tackey".as_bytes();
-    let reference_packet = include_bytes!("../packets/sample_packet_authen_reply_2");
+    let reference_packet = include_bytes!("../packets/sample_packet_authen_continue");
     println!("\n >> Reference Packet\n");
     println!("{}", pretty_hex(reference_packet));
 
