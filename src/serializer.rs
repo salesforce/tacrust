@@ -4,7 +4,32 @@ use crate::{
     TAC_PLUS_UNENCRYPTED_FLAG,
 };
 use byteorder::{BigEndian, WriteBytesExt};
-use std::error;
+use std::{error, fmt};
+
+#[derive(Debug, Clone)]
+struct SerializerError {
+    details: String,
+}
+
+impl SerializerError {
+    fn new(msg: &str) -> Self {
+        Self {
+            details: msg.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for SerializerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.details)
+    }
+}
+
+impl error::Error for SerializerError {
+    fn description(&self) -> &str {
+        &self.details
+    }
+}
 
 fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
     let mut serialized: Vec<u8> = Vec::new();
@@ -24,10 +49,10 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             serialized.write_u8(*priv_lvl)?;
             serialized.write_u8(*authen_type)?;
             serialized.write_u8(*authen_service)?;
-            serialized.write_u8(user.len().try_into().unwrap())?;
-            serialized.write_u8(port.len().try_into().unwrap())?;
-            serialized.write_u8(rem_addr.len().try_into().unwrap())?;
-            serialized.write_u8(data.len().try_into().unwrap())?;
+            serialized.write_u8(user.len().try_into()?)?;
+            serialized.write_u8(port.len().try_into()?)?;
+            serialized.write_u8(rem_addr.len().try_into()?)?;
+            serialized.write_u8(data.len().try_into()?)?;
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(port);
             serialized.extend_from_slice(rem_addr);
@@ -39,22 +64,23 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
             server_msg,
             data,
         } => {
-            let status_der = num::ToPrimitive::to_u8(status).unwrap();
+            let status_der =
+                num::ToPrimitive::to_u8(status).ok_or(SerializerError::new("invalid status"))?;
             serialized.write_u8(status_der)?;
             let mut f: u8 = 0;
             if flags.no_echo {
                 f |= TAC_PLUS_REPLY_FLAG_NOECHO;
             }
             serialized.write_u8(f)?;
-            serialized.write_u16::<BigEndian>(server_msg.len().try_into().unwrap())?;
-            serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
+            serialized.write_u16::<BigEndian>(server_msg.len().try_into()?)?;
+            serialized.write_u16::<BigEndian>(data.len().try_into()?)?;
             serialized.extend_from_slice(server_msg);
             serialized.extend_from_slice(data);
         }
 
         Body::AuthenticationContinue { flags, user, data } => {
-            serialized.write_u16::<BigEndian>(user.len().try_into().unwrap())?;
-            serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
+            serialized.write_u16::<BigEndian>(user.len().try_into()?)?;
+            serialized.write_u16::<BigEndian>(data.len().try_into()?)?;
             let mut f: u8 = 0;
             if flags.abort {
                 f |= TAC_PLUS_CONTINUE_FLAG_ABORT;
@@ -83,23 +109,30 @@ fn serialize_author(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
             rem_address,
             args,
         } => {
-            let auth = num::ToPrimitive::to_u8(auth_method).unwrap();
+            let auth = num::ToPrimitive::to_u8(auth_method)
+                .ok_or(SerializerError::new("invalid auth method"))?;
             serialized.write_u8(auth)?;
             serialized.write_u8(*priv_lvl)?;
             serialized.write_u8(*authen_type)?;
             serialized.write_u8(*authen_service)?;
-            serialized.write_u8(user.len().try_into().unwrap())?;
-            serialized.write_u8(port.len().try_into().unwrap())?;
-            serialized.write_u8(rem_address.len().try_into().unwrap())?;
-            serialized.write_u8(args.len().try_into().unwrap())?;
+            serialized.write_u8(user.len().try_into()?)?;
+            serialized.write_u8(port.len().try_into()?)?;
+            serialized.write_u8(rem_address.len().try_into()?)?;
+            serialized.write_u8(args.len().try_into()?)?;
             for i in 0..args.len() {
-                serialized.write_u8(args.get(i).unwrap().len().try_into().unwrap())?;
+                serialized.write_u8(
+                    args.get(i)
+                        .ok_or(SerializerError::new("invalid arg"))?
+                        .len()
+                        .try_into()?,
+                )?;
             }
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(port);
             serialized.extend_from_slice(rem_address);
             for i in 0..args.len() {
-                serialized.extend_from_slice(args.get(i).unwrap());
+                serialized
+                    .extend_from_slice(args.get(i).ok_or(SerializerError::new("invalid arg"))?);
             }
         }
 
@@ -109,18 +142,24 @@ fn serialize_author(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
             server_msg,
             args,
         } => {
-            let status_res = num::ToPrimitive::to_u8(status).unwrap();
+            let status_res =
+                num::ToPrimitive::to_u8(status).ok_or(SerializerError::new("invalid error"))?;
             serialized.write_u8(status_res)?;
-            serialized.write_u8(args.len().try_into().unwrap())?;
-            serialized.write_u16::<BigEndian>(server_msg.len().try_into().unwrap())?;
-            serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
+            serialized.write_u8(args.len().try_into()?)?;
+            serialized.write_u16::<BigEndian>(server_msg.len().try_into()?)?;
+            serialized.write_u16::<BigEndian>(data.len().try_into()?)?;
             for i in 0..args.len() {
-                serialized.write_u8(args.get(i).unwrap().len().try_into().unwrap())?;
+                serialized.write_u8(
+                    args.get(i)
+                        .ok_or(SerializerError::new("invalid arg"))?
+                        .len()
+                        .try_into()?,
+                )?;
             }
             serialized.extend_from_slice(server_msg);
             serialized.extend_from_slice(data);
             for i in 0..args.len() {
-                serialized.extend_from_slice(args.get(i).unwrap());
+                serialized.extend_from_slice(args.get(i).ok_or("invalid arg")?);
             }
         }
 
@@ -156,7 +195,8 @@ pub fn serialize_packet(packet: &Packet, key: &[u8]) -> Result<Vec<u8>, Box<dyn 
     let mut serialized: Vec<u8> = Vec::new();
 
     serialized.write_u8(packet.header.version)?;
-    let packet_type = num::ToPrimitive::to_u8(&(packet.header.r#type)).unwrap();
+    let packet_type = num::ToPrimitive::to_u8(&(packet.header.r#type))
+        .ok_or(SerializerError::new("invalid arg"))?;
     serialized.write_u8(packet_type)?;
     serialized.write_u8(packet.header.seq_no)?;
     let mut flags: u8 = 0;
@@ -168,7 +208,7 @@ pub fn serialize_packet(packet: &Packet, key: &[u8]) -> Result<Vec<u8>, Box<dyn 
     }
     serialized.write_u8(flags)?;
     serialized.write_u32::<BigEndian>(packet.header.session_id)?;
-    serialized.write_u32::<BigEndian>(encrypted.len().try_into().unwrap())?;
+    serialized.write_u32::<BigEndian>(encrypted.len().try_into()?)?;
     serialized.extend_from_slice(&encrypted);
 
     Ok(serialized)
