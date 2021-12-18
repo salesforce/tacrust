@@ -9,12 +9,12 @@ TACACS+ implementation in Rust ([RFC 8907](https://www.rfc-editor.org/rfc/rfc890
 - [x] Packet body decryption
 - [ ] Packet body parsing
   - [x] AuthenticationStart packet parsing
-  - [ ] AuthenticationContinue packet parsing
-  - [ ] AuthorizationRequest packet parsing
+  - [x] AuthenticationContinue packet parsing
+  - [x] AuthorizationRequest packet parsing
   - [ ] AccountingRequest packet parsing
 - [ ] Packet serialization
   - [x] AuthenticationReply serialization
-  - [ ] AuthorizationReply serialization
+  - [x] AuthorizationReply serialization
   - [ ] AccountingReply serialization
 - [ ] Networking
   - [ ] Packet routing
