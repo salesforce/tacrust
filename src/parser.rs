@@ -1,8 +1,10 @@
 use crate::{
-    pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, AuthenticationMethod,
-    AuthenticationStatus, AuthorizationStatus, Body, Header, Packet, PacketFlags, PacketType,
-    TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
+    pseudo_pad::{PseudoPad, MD5_DIGEST_LENGTH},
+    AuthenticationContinueFlags, AuthenticationMethod, AuthenticationReplyFlags,
+    AuthorizationStatus, Body, Header, Packet, PacketFlags, PacketType,
+    TAC_PLUS_CONTINUE_FLAG_ABORT, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
+use crate::{AuthenticationStatus, TAC_PLUS_REPLY_FLAG_NOECHO};
 use std::fmt::Debug;
 
 use nom::branch::alt;
@@ -119,6 +121,9 @@ pub fn parse_authen_start(input: &[u8]) -> nom::IResult<&[u8], Body> {
 pub fn parse_authen_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
     let (input, status) = nom::number::complete::be_u8(input)?;
     let (input, flags) = nom::number::complete::be_u8(input)?;
+    let flags = AuthenticationReplyFlags {
+        no_echo: flags & TAC_PLUS_REPLY_FLAG_NOECHO != 0,
+    };
     let (input, server_msg_len) = nom::number::complete::be_u16(input)?;
     let (input, data_len) = nom::number::complete::be_u16(input)?;
     let (input, server_msg) = nom::bytes::complete::take(server_msg_len)(input)?;
@@ -139,6 +144,9 @@ pub fn parse_authen_cont(input: &[u8]) -> nom::IResult<&[u8], Body> {
     let (input, user_len) = nom::number::complete::be_u16(input)?;
     let (input, data_len) = nom::number::complete::be_u16(input)?;
     let (input, flags) = nom::number::complete::be_u8(input)?;
+    let flags = AuthenticationContinueFlags {
+        abort: flags & TAC_PLUS_CONTINUE_FLAG_ABORT != 0,
+    };
     let (input, user) = nom::bytes::complete::take(user_len)(input)?;
     let (input, data) =
         nom::combinator::all_consuming(nom::bytes::complete::take(data_len))(input)?;

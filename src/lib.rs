@@ -10,6 +10,8 @@ extern crate simple_error;
 
 pub const TAC_PLUS_UNENCRYPTED_FLAG: u8 = 0b00000001;
 pub const TAC_PLUS_SINGLE_CONNECT_FLAG: u8 = 0b00000100;
+pub const TAC_PLUS_REPLY_FLAG_NOECHO: u8 = 0b00000001;
+pub const TAC_PLUS_CONTINUE_FLAG_ABORT: u8 = 0b00000001;
 
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
 pub enum PacketType {
@@ -61,6 +63,16 @@ pub struct PacketFlags {
 }
 
 #[derive(Copy, Clone, Debug)]
+pub struct AuthenticationReplyFlags {
+    no_echo: bool,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct AuthenticationContinueFlags {
+    abort: bool,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct Header {
     #[allow(dead_code)]
     major_version: u8,
@@ -88,13 +100,13 @@ pub enum Body {
 
     AuthenticationReply {
         status: AuthenticationStatus,
-        flags: u8,
+        flags: AuthenticationReplyFlags,
         server_msg: Vec<u8>,
         data: Vec<u8>,
     },
 
     AuthenticationContinue {
-        flags: u8,
+        flags: AuthenticationContinueFlags,
         user: Vec<u8>,
         data: Vec<u8>,
     },
