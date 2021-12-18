@@ -1,6 +1,7 @@
 use crate::{
     pseudo_pad::PseudoPad, pseudo_pad::MD5_DIGEST_LENGTH, Body, Packet, PacketType,
-    TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
+    TAC_PLUS_CONTINUE_FLAG_ABORT, TAC_PLUS_REPLY_FLAG_NOECHO, TAC_PLUS_SINGLE_CONNECT_FLAG,
+    TAC_PLUS_UNENCRYPTED_FLAG,
 };
 use byteorder::{BigEndian, WriteBytesExt};
 use std::error;
@@ -40,7 +41,11 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
         } => {
             let status_der = num::ToPrimitive::to_u8(status).unwrap();
             serialized.write_u8(status_der)?;
-            serialized.write_u8(*flags)?;
+            let mut f: u8 = 0;
+            if flags.no_echo {
+                f |= TAC_PLUS_REPLY_FLAG_NOECHO;
+            }
+            serialized.write_u8(f)?;
             serialized.write_u16::<BigEndian>(server_msg.len().try_into().unwrap())?;
             serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
             serialized.extend_from_slice(server_msg);
@@ -50,7 +55,11 @@ fn serialize_authen_start(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>>
         Body::AuthenticationContinue { flags, user, data } => {
             serialized.write_u16::<BigEndian>(user.len().try_into().unwrap())?;
             serialized.write_u16::<BigEndian>(data.len().try_into().unwrap())?;
-            serialized.write_u8(*flags)?;
+            let mut f: u8 = 0;
+            if flags.abort {
+                f |= TAC_PLUS_CONTINUE_FLAG_ABORT;
+            }
+            serialized.write_u8(f)?;
             serialized.extend_from_slice(user);
             serialized.extend_from_slice(data);
         }
