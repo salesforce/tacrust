@@ -1,3 +1,9 @@
+[workspace]
+
+members = [
+    "tacrustd",
+]
+
 [package]
 name = "tacrust"
 version = "0.1.0"
