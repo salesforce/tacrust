@@ -1,5 +1,8 @@
 #!/bin/bash -ex
 
+export HTTP_PROXY=http://${PROXY_SERVER}
+export HTTPS_PROXY=http://${PROXY_SERVER}
+
 PROJ_NAME="tacrust"
 VERSION=0.1
 ITERATION=$(date -u +'%Y%m%d%H%M%S')

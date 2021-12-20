@@ -1,5 +1,7 @@
 #!/bin/bash -ex
 
+export HTTP_PROXY=http://${PROXY_SERVER}
+export HTTPS_PROXY=http://${PROXY_SERVER}
 export TOKEN="66632e33-d018-4a35-afce-3cafcac256cc"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
