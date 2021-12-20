@@ -5,11 +5,10 @@ VERSION=0.1
 ITERATION=$(date -u +'%Y%m%d%H%M%S')
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
-cargo make strata
 cargo make build-release
 
-mkdir -p rpmbuild/usr/share/tacrust
-touch rpmbuild/usr/share/tacrust/todo
+mkdir -p rpmbuild/usr/bin
+cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
 
 mkdir rpm-generated || true
 cd rpmbuild && fpm -s dir -t rpm \
