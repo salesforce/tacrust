@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 tacrust = { path = ".." }
+clap = { version = "3.0.1", features = ["derive"] }
+
