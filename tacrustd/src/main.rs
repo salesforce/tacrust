@@ -1,7 +1,27 @@
 use clap::Parser;
 use color_eyre::Report;
+use figment::{
+    providers::{Env, Format, Serialized, Toml},
+    Figment,
+};
+use serde::{Deserialize, Serialize};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+
+#[derive(Deserialize, Serialize)]
+struct Config {
+    key: String,
+    another: u32,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        Config {
+            key: "default".into(),
+            another: 100,
+        }
+    }
+}
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -18,9 +38,10 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    setup()?;
-
+    let config = setup()?;
     let args = Args::parse();
+
+    info!("[Config] key={}, another={}", config.key, config.another);
 
     if args.count > 100 {
         panic!("Are you crazy?");
@@ -33,7 +54,7 @@ async fn main() -> Result<(), Report> {
     Ok(())
 }
 
-fn setup() -> Result<(), Report> {
+fn setup() -> Result<Config, Report> {
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         std::env::set_var("RUST_LIB_BACKTRACE", "1")
     }
@@ -46,5 +67,10 @@ fn setup() -> Result<(), Report> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    Ok(())
+    let figment = Figment::from(Serialized::defaults(Config::default()))
+        .merge(Toml::file("tacrust.toml"))
+        .merge(Env::prefixed("TACRUST_"));
+    let config = figment.extract()?;
+
+    Ok(config)
 }

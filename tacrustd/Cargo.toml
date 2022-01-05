@@ -12,4 +12,6 @@ color-eyre = { version = "0.5.11" }
 tokio = { version = "1.9.0", features = ["full"] }
 tracing = { version = "0.1.26" }
 tracing-subscriber = { version = "0.2.19" }
+figment = { version = "0.10.6", features = ["test", "env", "toml"] }
+serde = { version = "1.0.133", features = ["derive"] }
 
