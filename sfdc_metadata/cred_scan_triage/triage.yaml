@@ -1,0 +1,12 @@
+clean: false
+production_secret: []
+non_production_secret: []
+mock_secret: []
+false_positive:
+ -
+  id: tacrust://vendor/tokio/src/net/unix/ucred.rs_3a67987012f62b8c6ec1ec6b0ac7f3d9b29c2ed5
+  justification: Not a secret
+ -
+  id: tacrust://vendor/tokio/src/net/unix/ucred.rs_c87527f60f7517188bcfb3a8f766a5cbde3f45a7
+  justification: Not a Secret
+
