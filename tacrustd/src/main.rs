@@ -1,11 +1,13 @@
-use clap::App;
+use clap_rs as clap;
 use color_eyre::Report;
+use std::path::Path;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 use twelf::{config, Layer};
 
 /// Simple program to greet a person
 #[config]
+#[derive(Debug)]
 struct Conf {
     /// Name of the person to greet
     name: String,
@@ -16,8 +18,7 @@ struct Conf {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    let app = clap::App::new("tacrust").args(&Conf::clap_args());
-    let config = setup(&app)?;
+    let config = setup()?;
 
     if config.count > 100 {
         panic!("Are you crazy?");
@@ -30,7 +31,7 @@ async fn main() -> Result<(), Report> {
     Ok(())
 }
 
-fn setup(app: &App) -> Result<Conf, Report> {
+fn setup() -> Result<Conf, Report> {
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         std::env::set_var("RUST_LIB_BACKTRACE", "1")
     }
@@ -43,12 +44,21 @@ fn setup(app: &App) -> Result<Conf, Report> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let config = Conf::with_layers(&[
-        Layer::Toml("tacrust.toml".into()),
-        Layer::Env(Some("TACRUST_".to_string())),
-        Layer::Clap(app.get_matches().clone()),
-    ])
-    .unwrap();
+    let app = clap::App::new("tacrust").args(&Conf::clap_args());
+    let mut layers = vec![];
+    for path in &[
+        "tacrust.toml",
+        "tacrustd/tacrust.toml",
+        "/etc/tacrust.toml",
+        "/etc/tacrustd/tacrust.toml",
+    ] {
+        if Path::new(path).exists() {
+            layers.push(Layer::Toml(path.into()));
+        }
+    }
+    layers.push(Layer::Env(Some("TACRUST_".to_string())));
+    layers.push(Layer::Clap(app.get_matches().clone()));
+    let config = Conf::with_layers(&layers).unwrap();
 
     Ok(config)
 }
