@@ -5,7 +5,7 @@ export HTTPS_PROXY=http://${PROXY_SERVER}
 export TOKEN="66632e33-d018-4a35-afce-3cafcac256cc"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
-cargo make strata
+make
 grcov ./target/debug -t coveralls -s . --token $TOKEN --ignore 'vendor/*' --ignore '/rustc/*' > coveralls.json
 
 if [ "$STRATA" == "yes" ]; then
