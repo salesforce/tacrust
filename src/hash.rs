@@ -17,9 +17,7 @@ impl Salt {
             .take(16)
             .map(char::from)
             .collect::<String>();
-        Salt {
-            salt: String::from(val),
-        }
+        Salt { salt: val }
     }
 }
 
