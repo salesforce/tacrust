@@ -8,7 +8,7 @@ VERSION=0.1
 ITERATION=$(date -u +'%Y%m%d%H%M%S')
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
-cargo make build-release
+make build-release
 
 mkdir -p rpmbuild/usr/bin
 cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
