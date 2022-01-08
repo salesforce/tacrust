@@ -1,5 +1,5 @@
 clean: false
-production_secret: []
+production_secret:
 non_production_secret: []
 mock_secret: []
 false_positive:
@@ -8,5 +8,41 @@ false_positive:
   justification: Not a secret
  -
   id: tacrust://vendor/tokio/src/net/unix/ucred.rs_c87527f60f7517188bcfb3a8f766a5cbde3f45a7
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/native-tls/src/imp/schannel.rs_b94d88fcd81969d892f4e56ec86328938aac0630
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/native-tls/src/imp/schannel.rs_c55924fc12f91fb40ffc2780dca5aa190f60981e
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/schannel/src/crypt_prov.rs_bb9d3c081c3e9a34ec3cb4dea88b83c4b778f4a8
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/schannel/src/crypt_prov.rs_f6d64f4811a1eb32fbde9f0a63aad394d83f8e3e
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/schannel/src/schannel_cred.rs_2a0790feff4b28ecdfc7fab39d6e293b729c811d
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/schannel/src/schannel_cred.rs_bad260ba3abd19943c7fca5d124a8fa8b126cc39
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/schannel/src/cert_store.rs_faa50a0413db69eabf48b8c52f0c6a3a5c4bc4fd
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/schannel/src/cert_store.rs_9b92ea29b3b19cfd610c2f6bc221ef3466bd8c92
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/schannel/src/cert_store.rs_dac14712652ec16fc407b35fdf1288a69f6ef251
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/security-framework/src/os/macos/keychain.rs_4dcc36395526cd8c81b2de5cf44332fbee2645f6
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/reqwest/src/proxy.rs_307d03292447f3d1bba57af0b7b1524bd020d516
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/web-sys/src/features/gen_RtcIceCredentialType.rs_96acda9db1fc3ebe33af50ed94afa6014cba5247
   justification: Not a Secret
 
