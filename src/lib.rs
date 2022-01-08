@@ -1,3 +1,4 @@
+pub mod hash;
 pub mod parser;
 mod pseudo_pad;
 pub mod serializer;
@@ -69,7 +70,7 @@ pub struct AuthenticationReplyFlags {
 
 #[derive(Copy, Clone, Debug)]
 pub struct AuthenticationContinueFlags {
-    abort: bool,
+    pub abort: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
