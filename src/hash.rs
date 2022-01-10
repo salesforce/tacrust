@@ -35,7 +35,7 @@ impl PasswordHash for Body {
                 data: _,
                 ..
             } => {
-                let hash = hash_encoded(user, salt.salt.as_bytes(), &config).unwrap();
+                let hash = hash_encoded(user, salt.salt.as_bytes(), &config)?;
                 Ok(hash)
             }
             _ => bail!("not implemented yet"),

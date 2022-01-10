@@ -1671,6 +1671,7 @@ dependencies = [
  "rand",
  "rust-argon2",
  "simple-error",
+ "tempfile",
 ]
 
 [[package]]
