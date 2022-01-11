@@ -20,16 +20,16 @@ impl State {
         }
     }
 
-    async fn unicast(&mut self, sender: SocketAddr, message: Vec<u8>) {
+    pub async fn unicast(&mut self, dest: SocketAddr, message: Vec<u8>) {
         for client in self.clients.iter_mut() {
-            if *client.0 == sender {
+            if *client.0 == dest {
                 let _ = client.1.send(message.into());
                 break;
             }
         }
     }
 
-    async fn broadcast(&mut self, sender: SocketAddr, message: Vec<u8>) {
+    pub async fn broadcast(&mut self, sender: SocketAddr, message: Vec<u8>) {
         for client in self.clients.iter_mut() {
             if *client.0 != sender {
                 let _ = client.1.send(message.clone());

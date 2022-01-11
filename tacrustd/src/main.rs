@@ -1,12 +1,15 @@
+use crate::client::Client;
 use crate::state::State;
 use clap_rs as clap;
 use color_eyre::Report;
+use futures::{SinkExt, StreamExt};
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::Mutex,
 };
+use tokio_util::codec::{BytesCodec, Framed};
 use tracing_subscriber::EnvFilter;
 use twelf::{config, Layer};
 
@@ -84,6 +87,41 @@ async fn process(
     // 2. decrypt incoming packet(s) using the corresponding client's key
     // 3. generate reply packet based on the decrypted packet
     // 4. send back the response
+
+    let pipe = Framed::new(stream, BytesCodec::new());
+    let mut client = Client::new(state.clone(), pipe).await?;
+    tracing::info!("processing connection from {}", addr);
+
+    loop {
+        tokio::select! {
+            Some(msg) = client.rx.recv() => {
+                tracing::info!("sending bytes to {}: {:?}", addr, msg);
+                client.pipe.send(msg.into()).await?;
+            }
+            result = client.pipe.next() => match result {
+                Some(Ok(msg)) => {
+                    tracing::info!("received bytes from {}: {:?}", addr, msg);
+                    let mut state = state.lock().await;
+                    state.unicast(addr, msg.to_vec()).await;
+                }
+                Some(Err(e)) => {
+                    tracing::error!(
+                        "an error occurred while processing connection from {}; error = {:?}",
+                        addr,
+                        e
+                    );
+                }
+                None => break,
+            },
+        }
+    }
+
+    {
+        let mut state = state.lock().await;
+        state.clients.remove(&addr);
+    }
+
+    tracing::info!("connection from {} terminated", addr);
 
     Ok(())
 }

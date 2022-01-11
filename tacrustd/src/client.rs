@@ -8,13 +8,13 @@ use std::sync::Arc;
 use crate::state::Rx;
 use crate::state::State;
 
-struct Client {
-    pipe: Framed<TcpStream, BytesCodec>,
-    rx: Rx,
+pub struct Client {
+    pub pipe: Framed<TcpStream, BytesCodec>,
+    pub rx: Rx,
 }
 
 impl Client {
-    async fn new(
+    pub async fn new(
         state: Arc<Mutex<State>>,
         pipe: Framed<TcpStream, BytesCodec>,
     ) -> io::Result<Client> {
