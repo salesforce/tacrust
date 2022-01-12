@@ -95,12 +95,12 @@ async fn process(
     loop {
         tokio::select! {
             Some(msg) = client.rx.recv() => {
-                tracing::info!("sending bytes to {}: {:?}", addr, msg);
+                tracing::info!("sending {} bytes to {}: {:?}", msg.len(), addr, msg);
                 client.pipe.send(msg.into()).await?;
             }
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
-                    tracing::info!("received bytes from {}: {:?}", addr, msg);
+                    tracing::info!("received {} bytes from {}: {:?}", msg.len(), addr, msg);
                     let mut state = state.lock().await;
                     state.unicast(addr, msg.to_vec()).await;
                 }
