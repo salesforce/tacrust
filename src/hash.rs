@@ -1,5 +1,6 @@
 use crate::Body;
 use argon2::{self, hash_encoded, Config};
+use pwhash::sha512_crypt::verify;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::error::Error;
@@ -41,4 +42,14 @@ impl PasswordHash for Body {
             _ => bail!("not implemented yet"),
         }
     }
+}
+
+// receives password from daemon/user
+// also receives hash from daemon/tac_plus config for verification
+// returns a boolean
+pub fn verify_hash(password: &[u8], hash: &str) -> Result<bool, Box<dyn Error>> {
+    if password.is_empty() || hash.is_empty() {
+        bail!("Password or hash is empty")
+    }
+    Ok(verify(password, hash))
 }
