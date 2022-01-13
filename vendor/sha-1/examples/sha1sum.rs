@@ -1,6 +1,4 @@
-extern crate sha1;
-
-use sha1::{Sha1, Digest};
+use sha1::{Digest, Sha1};
 use std::env;
 use std::fs;
 use std::io::{self, Read};
@@ -25,12 +23,12 @@ fn process<D: Digest + Default, R: Read>(reader: &mut R, name: &str) {
             Ok(n) => n,
             Err(_) => return,
         };
-        sh.input(&buffer[..n]);
+        sh.update(&buffer[..n]);
         if n == 0 || n < BUFFER_SIZE {
             break;
         }
     }
-    print_result(&sh.result(), name);
+    print_result(&sh.finalize(), name);
 }
 
 fn main() {

@@ -1,5 +1,7 @@
 use argon2::{verify_encoded, Config};
+use pwhash::sha512_crypt;
 use std::io::{Read, Seek, SeekFrom, Write};
+use tacrust::hash::verify_hash;
 use tacrust::{hash::PasswordHash, AuthenticationContinueFlags, Body};
 use tempfile::tempfile;
 
@@ -30,4 +32,10 @@ pub fn test_pwd_hash_file() {
     hashfile.read_to_string(&mut hashread).unwrap();
     let result = verify_encoded(&hashread, &[b't', b'e', b's', b's']).unwrap();
     assert!(result);
+}
+
+#[test]
+pub fn verify_sha_des_hash_test() {
+    let val = sha512_crypt::hash("testpassword");
+    assert!(verify_hash(&"testpassword".as_bytes(), &val.unwrap()).unwrap());
 }
