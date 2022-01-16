@@ -1,1 +1,13 @@
 listen_address = "127.0.0.1:4949"
+key = "tackey"
+
+[[user]]
+name = "kamran"
+credentials.type = "Ascii"
+credentials.value = "helloworld"
+
+[[user]]
+name = "rahul"
+credentials.type = "Ascii"
+credentials.value = "hellouniverse"
+

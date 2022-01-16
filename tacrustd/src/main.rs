@@ -3,8 +3,11 @@ use crate::state::State;
 use clap_rs as clap;
 use color_eyre::Report;
 use futures::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
+use simple_error::bail;
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
+use tacrust::{parser, Body};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::Mutex,
@@ -16,30 +19,52 @@ use twelf::{config, Layer};
 mod client;
 mod state;
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+enum Credentials {
+    Pam,
+    Ascii(String),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct User {
+    name: String,
+    credentials: Credentials,
+}
+
 // TACACS+ server in Rust
 #[config]
 #[derive(Debug)]
 struct Config {
     // Address to bind on
     listen_address: String,
+
+    // Server key (for now we use a global one like tac_plus)
+    key: String,
+
+    // List of users
+    #[serde(rename = "user")]
+    users: Option<Vec<User>>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    let config = setup()?;
+    let config = Arc::new(setup()?);
     let state = Arc::new(Mutex::new(State::new()));
     let listener = TcpListener::bind(&config.listen_address).await?;
 
+    tracing::debug!("config: {:?}", config);
     tracing::info!("listening on {}", &config.listen_address);
 
     loop {
         let (stream, addr) = listener.accept().await?;
+        let config = Arc::clone(&config);
         let state = Arc::clone(&state);
 
         tokio::spawn(async move {
             tracing::debug!("accepted connection");
-            if let Err(e) = process(state, stream, addr).await {
-                tracing::info!("an error occurred; error = {:?}", e);
+            if let Err(e) = process(config, state, stream, addr).await {
+                tracing::info!("an error occurred; error = {}", e);
             }
         });
     }
@@ -78,16 +103,11 @@ fn setup() -> Result<Config, Report> {
 }
 
 async fn process(
+    config: Arc<Config>,
     state: Arc<Mutex<State>>,
     stream: TcpStream,
     addr: SocketAddr,
 ) -> Result<(), Report> {
-    // ref: https://github.com/tokio-rs/tokio/blob/master/examples/chat.rs
-    // 1. match incoming connection with a client defined in the config
-    // 2. decrypt incoming packet(s) using the corresponding client's key
-    // 3. generate reply packet based on the decrypted packet
-    // 4. send back the response
-
     let pipe = Framed::new(stream, BytesCodec::new());
     let mut client = Client::new(state.clone(), pipe).await?;
     tracing::info!("processing connection from {}", addr);
@@ -101,8 +121,12 @@ async fn process(
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
                     tracing::info!("received {} bytes from {}: {:?}", msg.len(), addr, msg);
-                    let mut state = state.lock().await;
-                    state.unicast(addr, msg.to_vec()).await;
+                    let response = process_tacacs_packet(config.clone(), &msg).await?;
+
+                    {
+                        let mut state = state.lock().await;
+                        state.unicast(addr, response).await;
+                    }
                 }
                 Some(Err(e)) => {
                     tracing::error!(
@@ -124,4 +148,28 @@ async fn process(
     tracing::info!("connection from {} terminated", addr);
 
     Ok(())
+}
+
+async fn process_tacacs_packet(config: Arc<Config>, request: &[u8]) -> Result<Vec<u8>, Report> {
+    let packet = match parser::parse_packet(request, &config.key.as_bytes()) {
+        Ok((_, p)) => p,
+        Err(e) => bail!("unable to parse packet: {:?}", e),
+    };
+
+    match packet.body {
+        Body::AuthenticationStart {
+            action,
+            priv_lvl,
+            authen_type,
+            authen_service,
+            user,
+            port,
+            rem_addr,
+            data,
+        } => {
+            let mut response = vec![];
+            Ok(response)
+        }
+        _ => Err(Report::msg("not supported yet")),
+    }
 }
