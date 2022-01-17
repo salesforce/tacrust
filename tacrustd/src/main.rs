@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::Mutex,
+    sync::RwLock,
 };
 use tokio_util::codec::{BytesCodec, Framed};
 use tracing_subscriber::EnvFilter;
@@ -18,15 +18,15 @@ mod client;
 mod state;
 mod tacacs;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 enum Credentials {
     Pam,
     Ascii(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct User {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct User {
     name: String,
     credentials: Credentials,
 }
@@ -49,20 +49,27 @@ pub struct Config {
 #[tokio::main]
 async fn main() -> Result<(), Report> {
     let config = Arc::new(setup()?);
-    let state = Arc::new(Mutex::new(State::new()));
+    let state = Arc::new(RwLock::new(State::new(config.key.as_bytes().to_vec())));
     let listener = TcpListener::bind(&config.listen_address).await?;
 
+    if config.users.is_some() {
+        let mut state = state.write().await;
+        for user in config.users.as_ref().unwrap() {
+            state.users.insert(user.name.clone(), user.clone());
+        }
+    }
+
     tracing::debug!("config: {:?}", config);
+    tracing::debug!("state: {:?}", state.read().await);
     tracing::info!("listening on {}", &config.listen_address);
 
     loop {
         let (stream, addr) = listener.accept().await?;
-        let config = Arc::clone(&config);
         let state = Arc::clone(&state);
 
         tokio::spawn(async move {
             tracing::debug!("accepted connection");
-            if let Err(e) = process(config, state, stream, addr).await {
+            if let Err(e) = process(state, stream, addr).await {
                 tracing::info!("an error occurred; error = {}", e);
             }
         });
@@ -102,8 +109,7 @@ fn setup() -> Result<Config, Report> {
 }
 
 async fn process(
-    config: Arc<Config>,
-    state: Arc<Mutex<State>>,
+    state: Arc<RwLock<State>>,
     stream: TcpStream,
     addr: SocketAddr,
 ) -> Result<(), Report> {
@@ -120,10 +126,10 @@ async fn process(
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
                     tracing::info!("received {} bytes from {}: {:?}", msg.len(), addr, msg);
-                    let response = tacacs::process_tacacs_packet(&mut client, config.clone(), &msg).await?;
+                    let response = tacacs::process_tacacs_packet(&mut client, &msg).await?;
 
                     {
-                        let mut state = state.lock().await;
+                        let state = state.read().await;
                         state.unicast(addr, response).await;
                     }
                 }
@@ -140,7 +146,7 @@ async fn process(
     }
 
     {
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
         state.clients.remove(&addr);
     }
 

@@ -1,5 +1,5 @@
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, RwLock};
 use tokio_util::codec::{BytesCodec, Framed};
 
 use std::collections::HashMap;
@@ -13,19 +13,25 @@ pub struct Client {
     pub pipe: Framed<TcpStream, BytesCodec>,
     pub rx: Rx,
     pub map: HashMap<String, String>,
+    pub shared_state: Arc<RwLock<State>>,
 }
 
 impl Client {
     pub async fn new(
-        state: Arc<Mutex<State>>,
+        shared_state: Arc<RwLock<State>>,
         pipe: Framed<TcpStream, BytesCodec>,
     ) -> io::Result<Client> {
         let addr = pipe.get_ref().peer_addr()?;
         let (tx, rx) = mpsc::unbounded_channel();
         let map = HashMap::new();
 
-        state.lock().await.clients.insert(addr, tx);
+        shared_state.write().await.clients.insert(addr, tx);
 
-        Ok(Client { pipe, rx, map })
+        Ok(Client {
+            pipe,
+            rx,
+            map,
+            shared_state,
+        })
     }
 }

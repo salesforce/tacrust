@@ -1,19 +1,19 @@
 use crate::client::Client;
-use crate::{Config, Credentials};
+use crate::{Credentials, User};
 
 use color_eyre::Report;
 use simple_error::bail;
-use std::sync::Arc;
+use std::collections::HashMap;
 use tacrust::{parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, Body, Packet};
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 
 pub async fn process_tacacs_packet(
     client: &mut Client,
-    config: Arc<Config>,
     request_bytes: &[u8],
 ) -> Result<Vec<u8>, Report> {
-    let request_packet = match parser::parse_packet(request_bytes, &config.key.as_bytes()) {
+    let state = client.shared_state.read().await;
+    let request_packet = match parser::parse_packet(request_bytes, &(state.key)) {
         Ok((_, p)) => p,
         Err(e) => bail!("unable to parse packet: {:?}", e),
     };
@@ -54,7 +54,7 @@ pub async fn process_tacacs_packet(
                 None => Err(Report::msg("username not found")),
             }?;
             let password = String::from_utf8_lossy(&user).to_string();
-            let authen_status = if verify_password_from_config(config.clone(), &username, &password)
+            let authen_status = if verify_password_from_config(&(state.users), &username, &password)
                 .await
                 .unwrap_or(false)
             {
@@ -81,31 +81,19 @@ pub async fn process_tacacs_packet(
         _ => Err(Report::msg("not supported yet")),
     }?;
 
-    let response_bytes =
-        match serializer::serialize_packet(&response_packet, &config.key.as_bytes()) {
-            Ok(b) => b,
-            Err(e) => bail!("unable to serialize packet: {:?}", e),
-        };
+    let response_bytes = match serializer::serialize_packet(&response_packet, &(state.key)) {
+        Ok(b) => b,
+        Err(e) => bail!("unable to serialize packet: {:?}", e),
+    };
     Ok(response_bytes)
 }
 
 pub async fn verify_password_from_config(
-    config: Arc<Config>,
+    users: &HashMap<String, User>,
     username: &str,
     password: &str,
 ) -> Result<bool, Report> {
-    if config.users.is_none() {
-        return Err(Report::msg("no users found in config"));
-    }
-
-    // for large number of users this would be highly inefficient
-    // should be fixed by building a hashmap of usernames when loading config
-    let user = config
-        .users
-        .as_ref()
-        .unwrap()
-        .into_iter()
-        .find(|u| u.name == username);
+    let user = users.get(username);
     if user.is_none() {
         return Err(Report::msg("user not found in config"));
     }
