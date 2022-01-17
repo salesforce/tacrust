@@ -13,3 +13,7 @@ credentials.type = "Ascii"
 # plaintext: "hellouniverse"
 credentials.value = "$6$nEANqKsnkVf$LZWrgMg3LiZpfv4k0igYKjYAwvBYb9b/7OGh6o40uNTNNkaQcxHIYzC5UpS0.K/9OX5vbNOrLWhQ8iwwgdNNd0"
 
+[[user]]
+name = "k.khan"
+credentials.type = "Pam"
+

@@ -54,7 +54,7 @@ pub async fn process_tacacs_packet(
                 None => Err(Report::msg("username not found")),
             }?;
             let password = String::from_utf8_lossy(&user).to_string();
-            let authen_status = if verify_password_from_config(&(state.users), &username, &password)
+            let authen_status = if verify_user_credentials(&(state.users), &username, &password)
                 .await
                 .unwrap_or(false)
             {
@@ -88,19 +88,27 @@ pub async fn process_tacacs_packet(
     Ok(response_bytes)
 }
 
-pub async fn verify_password_from_config(
+pub async fn verify_user_credentials(
     users: &HashMap<String, User>,
     username: &str,
     password: &str,
 ) -> Result<bool, Report> {
     let user = users.get(username);
+
     if user.is_none() {
-        return Err(Report::msg("user not found in config"));
+        return Ok(false);
     }
 
-    if let Credentials::Ascii(hash) = &user.unwrap().credentials {
-        if tacrust::hash::verify_hash(password.as_bytes(), hash).unwrap_or(false) {
-            return Ok(true);
+    match &user.unwrap().credentials {
+        Credentials::Ascii(hash) => {
+            if tacrust::hash::verify_hash(password.as_bytes(), hash).unwrap_or(false) {
+                return Ok(true);
+            }
+        }
+        Credentials::Pam => {
+            let mut pam_auth = pam::Authenticator::with_password("ssh")?;
+            pam_auth.get_handler().set_credentials(username, password);
+            return Ok(pam_auth.authenticate().is_ok());
         }
     }
 
