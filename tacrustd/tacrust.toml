@@ -2,12 +2,12 @@ listen_address = "127.0.0.1:4949"
 key = "tackey"
 
 [[user]]
-name = "kamran"
+name = "krkhan"
 credentials.type = "Ascii"
 credentials.value = "helloworld"
 
 [[user]]
-name = "rahul"
+name = "rahulyadav"
 credentials.type = "Ascii"
 credentials.value = "hellouniverse"
 
