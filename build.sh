@@ -7,8 +7,6 @@ PROJ_NAME="tacrust"
 VERSION=0.1
 ITERATION=$(date -u +'%Y%m%d%H%M%S')
 
-yum install -y pam-devel
-
 cd "$(dirname "${BASH_SOURCE[0]}")"
 make build-release
 
