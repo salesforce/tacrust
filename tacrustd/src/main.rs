@@ -256,8 +256,8 @@ async fn verify_password_from_config(
         return Err(Report::msg("user not found in config"));
     }
 
-    if let Credentials::Ascii(pw) = &user.unwrap().credentials {
-        if password == pw {
+    if let Credentials::Ascii(hash) = &user.unwrap().credentials {
+        if tacrust::hash::verify_hash(password.as_bytes(), hash).unwrap_or(false) {
             return Ok(true);
         }
     }

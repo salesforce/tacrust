@@ -4,10 +4,12 @@ key = "tackey"
 [[user]]
 name = "krkhan"
 credentials.type = "Ascii"
-credentials.value = "helloworld"
+# plaintext: "helloworld"
+credentials.value = "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
 
 [[user]]
 name = "rahulyadav"
 credentials.type = "Ascii"
-credentials.value = "hellouniverse"
+# plaintext: "hellouniverse"
+credentials.value = "$6$nEANqKsnkVf$LZWrgMg3LiZpfv4k0igYKjYAwvBYb9b/7OGh6o40uNTNNkaQcxHIYzC5UpS0.K/9OX5vbNOrLWhQ8iwwgdNNd0"
 
