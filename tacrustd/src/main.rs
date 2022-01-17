@@ -244,6 +244,8 @@ async fn verify_password_from_config(
         return Err(Report::msg("no users found in config"));
     }
 
+    // for large number of users this would be highly inefficient
+    // should be fixed by building a hashmap of usernames when loading config
     let user = config
         .users
         .as_ref()
