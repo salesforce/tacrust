@@ -20,4 +20,5 @@ tokio-stream = { version = "0.1.8" }
 tokio-util = { version = "0.6.9" }
 simple-error = { version = "0.2.3" }
 pam = { version = "0.7.0" }
+regex = { version = "1.5.4" }
 
