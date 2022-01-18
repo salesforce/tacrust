@@ -1,4 +1,4 @@
-FROM dva-registry.internal.salesforce.com/dva/kuleana-rust-builder:31 as builder
+FROM dva-registry.internal.salesforce.com/dva/kuleana-rust-builder:33 as builder
 
 USER root
 ADD . /tmp/src

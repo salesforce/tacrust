@@ -59,13 +59,13 @@ pub enum AuthenticationMethod {
 
 #[derive(Copy, Clone, Debug)]
 pub struct PacketFlags {
-    unencrypted: bool,
-    single_connect: bool,
+    pub unencrypted: bool,
+    pub single_connect: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct AuthenticationReplyFlags {
-    no_echo: bool,
+    pub no_echo: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -76,14 +76,14 @@ pub struct AuthenticationContinueFlags {
 #[derive(Copy, Clone, Debug)]
 pub struct Header {
     #[allow(dead_code)]
-    major_version: u8,
+    pub major_version: u8,
     #[allow(dead_code)]
-    minor_version: u8,
-    version: u8,
-    r#type: PacketType,
-    seq_no: u8,
-    flags: PacketFlags,
-    session_id: u32,
+    pub minor_version: u8,
+    pub version: u8,
+    pub r#type: PacketType,
+    pub seq_no: u8,
+    pub flags: PacketFlags,
+    pub session_id: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +133,6 @@ pub enum Body {
 
 #[derive(Clone, Debug)]
 pub struct Packet {
-    header: Header,
-    body: Body,
+    pub header: Header,
+    pub body: Body,
 }
