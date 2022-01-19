@@ -6,6 +6,7 @@ use futures::{SinkExt, StreamExt};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use simple_error::bail;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
 use tokio::{
@@ -25,6 +26,31 @@ mod tacacs;
 enum Credentials {
     Pam,
     Ascii(String),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Service {
+    name: String,
+    values: HashMap<String, String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Cmd {
+    name: String,
+    vals: HashMap<String, String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Group {
+    name: String,
+    defservice: Option<String>,
+    acl: Option<String>,
+    pap: Option<String>,
+    member: Option<String>,
+    #[serde(rename = "service")]
+    service: Option<Vec<Service>>,
+    #[serde(rename = "cmd")]
+    cmd: Option<Vec<Cmd>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -55,6 +81,9 @@ pub struct Config {
     // List of ACLs
     #[serde(rename = "acl")]
     acls: Option<Vec<Acl>>,
+
+    #[serde(rename = "group")]
+    group: Option<Vec<Group>>,
 }
 
 #[tokio::main]
@@ -197,4 +226,35 @@ async fn process(
     tracing::info!("connection from {} terminated", addr);
 
     Ok(())
+}
+
+#[test]
+pub fn parse_group_config_test() {
+    let map: HashMap<String, String> =
+        HashMap::from([(String::from("F5-LTM-User-Info-1"), String::from("remote"))]);
+    let service = Service {
+        name: "ppp protocol = ip".to_string(),
+        values: map,
+    };
+
+    let cmd_map: HashMap<String, String> =
+        HashMap::from([(String::from("permit"), String::from("power show"))]);
+    let cmd = Cmd {
+        name: "show".to_string(),
+        vals: cmd_map,
+    };
+
+    let group = Group {
+        name: String::from("testgroup"),
+        defservice: Some("testservice".to_string()),
+        acl: Some("testacl".to_string()),
+        pap: Some("PAM".to_string()),
+        member: Some("subgroup".to_string()),
+        service: Some(vec![service]),
+        cmd: Some(vec![cmd]),
+    };
+
+    let config = setup().unwrap();
+    let res_group = config.group.unwrap();
+    assert_eq!(group, res_group[0]);
 }
