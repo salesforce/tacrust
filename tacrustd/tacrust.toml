@@ -29,3 +29,33 @@ credentials.value = "$6$nEANqKsnkVf$LZWrgMg3LiZpfv4k0igYKjYAwvBYb9b/7OGh6o40uNTN
 name = "k.khan"
 credentials.type = "Pam"
 
+[[group]]
+  name = "testgroup"
+  defservice = "testservice"
+  acl = "testacl"
+  pap = "PAM"
+# sub-group name
+  member = "subgroup"
+  [[group.service]]
+    name = "ppp protocol = ip"
+    [group.service.values]
+      F5-LTM-User-Info-1 = "remote"
+  [[group.cmd]]
+    name = "show"
+    [group.cmd.vals]
+      permit = "power show"
+
+[[group]]
+  name = "testgroup1"
+  defservice = "testservice1"
+  acl = "1testacl"
+# sub-group name
+  member = "testsubgroup"
+  [[group.service]]
+    name = "ip"
+    [group.service.values]
+      F5-LTM-User-Info-1 = "test"
+  [[group.cmd]]
+    name = "clear"
+    [group.cmd.vals]
+      permit = "clear"
