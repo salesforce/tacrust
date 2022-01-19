@@ -47,9 +47,7 @@ pub struct Group {
     acl: Option<String>,
     pap: Option<String>,
     member: Option<String>,
-    #[serde(rename = "service")]
     service: Option<Vec<Service>>,
-    #[serde(rename = "cmd")]
     cmd: Option<Vec<Cmd>>,
 }
 
@@ -82,7 +80,6 @@ pub struct Config {
     #[serde(rename = "acl")]
     acls: Option<Vec<Acl>>,
 
-    #[serde(rename = "group")]
     group: Option<Vec<Group>>,
 }
 
