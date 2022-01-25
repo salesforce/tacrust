@@ -74,15 +74,13 @@ pub struct Config {
     key: String,
 
     // List of users
-    #[serde(rename = "users")]
     users: Option<Vec<User>>,
 
     // List of ACLs
-    #[serde(rename = "acls")]
     acls: Option<Vec<Acl>>,
 
-    #[serde(rename = "groups")]
-    group: Option<Vec<Group>>,
+    // List of groups
+    groups: Option<Vec<Group>>,
 }
 
 #[tokio::main]
@@ -122,9 +120,9 @@ async fn main() -> Result<(), Report> {
         state.acl_regex = Regex::new(&acl)?;
     }
 
-    if config.group.is_some() {
+    if config.groups.is_some() {
         let mut state = state.write().await;
-        for group in config.group.as_ref().unwrap() {
+        for group in config.groups.as_ref().unwrap() {
             state.groups.insert(group.name.clone(), group.clone());
         }
     }
