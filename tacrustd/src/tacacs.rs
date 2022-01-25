@@ -114,21 +114,3 @@ pub async fn verify_user_credentials(
 
     Ok(false)
 }
-
-#[tokio::test]
-pub async fn test_verify_user_credentials() {
-    let username = "rahul";
-    let password = "helloworld";
-    let mut users: HashMap<String, User> = HashMap::new();
-    let pwd = "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/";
-    let user = User {
-        name: "rahul".to_string(),
-        credentials: Credentials::Ascii(pwd.to_string()),
-    };
-    users.insert(user.name.clone(), user.clone());
-    let result = verify_user_credentials(&users, username, password)
-        .await
-        .unwrap_or(false);
-    assert!(result);
-}
-
