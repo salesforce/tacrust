@@ -1,5 +1,5 @@
 clean: false
-production_secret:
+production_secret: []
 non_production_secret: []
 mock_secret: []
 false_positive:
@@ -44,5 +44,23 @@ false_positive:
   justification: Not a Secret
  -
   id: tacrust://vendor/web-sys/src/features/gen_RtcIceCredentialType.rs_96acda9db1fc3ebe33af50ed94afa6014cba5247
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/pam/src/lib.rs_72fded77fca8925771c071d41a81c58a32ddb0d7
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/pam-sys/src/types.rs_2204a60516357c121ab68f498c68b25a0c4607c8
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/pam-sys/src/types.rs_3bfd76f2764f125bb51b051960277daf134f5942
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/pam-sys/src/types.rs_2d8c6c562887826f4ce006c2faa12b40cb7e2869
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/pam-sys/src/types.rs_8e17ab5f8592c035f07e756ec90d4457a30b3bb6
+  justification: Not a Secret
+ -
+  id: tacrust://vendor/users/src/base.rs_73119a21d432a157ffa4dc44d8e6c927ef7023d7
   justification: Not a Secret
 
