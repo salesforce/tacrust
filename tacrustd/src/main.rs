@@ -6,7 +6,6 @@ use futures::{SinkExt, StreamExt};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use simple_error::bail;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
 use tokio::{
@@ -31,13 +30,13 @@ enum Credentials {
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Service {
     name: String,
-    values: HashMap<String, String>,
+    args: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Cmd {
     name: String,
-    vals: HashMap<String, String>,
+    list: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -48,18 +47,20 @@ pub struct Group {
     pap: Option<String>,
     member: Option<String>,
     service: Option<Vec<Service>>,
-    cmd: Option<Vec<Cmd>>,
+    cmds: Option<Vec<Cmd>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     name: String,
     credentials: Credentials,
+    member: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Acl {
-    permit: Vec<String>,
+    name: String,
+    list: Vec<String>,
 }
 
 // TACACS+ server in Rust
@@ -73,14 +74,13 @@ pub struct Config {
     key: String,
 
     // List of users
-    #[serde(rename = "user")]
     users: Option<Vec<User>>,
 
     // List of ACLs
-    #[serde(rename = "acl")]
     acls: Option<Vec<Acl>>,
 
-    group: Option<Vec<Group>>,
+    // List of groups
+    groups: Option<Vec<Group>>,
 }
 
 #[tokio::main]
@@ -95,7 +95,8 @@ async fn main() -> Result<(), Report> {
             .as_ref()
             .unwrap()
             .into_iter()
-            .map(|acl| String::from(&(acl.permit.join(r"|"))))
+            .flat_map(|val| &val.list)
+            .map(|acl| String::from(&(acl.trim_start_matches("permit = ").to_owned() + r"|")))
             .fold(String::new(), |result, acl| {
                 if result.is_empty() {
                     acl
@@ -117,6 +118,13 @@ async fn main() -> Result<(), Report> {
     {
         let mut state = state.write().await;
         state.acl_regex = Regex::new(&acl)?;
+    }
+
+    if config.groups.is_some() {
+        let mut state = state.write().await;
+        for group in config.groups.as_ref().unwrap() {
+            state.groups.insert(group.name.clone(), group.clone());
+        }
     }
 
     tracing::debug!("config: {:?}", config);
@@ -153,13 +161,13 @@ fn setup() -> Result<Config, Report> {
     let app = clap::App::new("tacrust").args(&Config::clap_args());
     let mut layers = vec![];
     for path in &[
-        "tacrust.toml",
-        "tacrustd/tacrust.toml",
-        "/etc/tacrust.toml",
-        "/etc/tacrustd/tacrust.toml",
+        "tacrust.json",
+        "tacrustd/tacrust.json",
+        "/etc/tacrust.json",
+        "/etc/tacrustd/tacrust.json",
     ] {
         if Path::new(path).exists() {
-            layers.push(Layer::Toml(path.into()));
+            layers.push(Layer::Json(path.into()));
         }
     }
     layers.push(Layer::Env(Some("TACRUST_".to_string())));
@@ -225,7 +233,7 @@ async fn process(
     Ok(())
 }
 
-#[test]
+/*#[test]
 pub fn parse_group_config_test() {
     let map: HashMap<String, String> =
         HashMap::from([(String::from("F5-LTM-User-Info-1"), String::from("remote"))]);
@@ -254,4 +262,4 @@ pub fn parse_group_config_test() {
     let config = setup().unwrap();
     let res_group = config.group.unwrap();
     assert_eq!(group, res_group[0]);
-}
+} */

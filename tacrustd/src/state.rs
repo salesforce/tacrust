@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
 
-use crate::User;
+use crate::{Group, User};
 
 pub type Tx = mpsc::UnboundedSender<Vec<u8>>;
 pub type Rx = mpsc::UnboundedReceiver<Vec<u8>>;
@@ -14,6 +14,7 @@ pub struct State {
     pub clients: HashMap<SocketAddr, Tx>,
     pub users: HashMap<String, User>,
     pub acl_regex: Regex,
+    pub groups: HashMap<String, Group>,
 }
 
 impl State {
@@ -23,6 +24,7 @@ impl State {
             clients: HashMap::new(),
             users: HashMap::new(),
             acl_regex: Regex::new("").unwrap(),
+            groups: HashMap::new(),
         }
     }
 
