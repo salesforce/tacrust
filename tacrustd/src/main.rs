@@ -54,7 +54,7 @@ pub struct Group {
 pub struct User {
     name: String,
     credentials: Credentials,
-    member: String,
+    member: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -233,33 +233,27 @@ async fn process(
     Ok(())
 }
 
-/*#[test]
-pub fn parse_group_config_test() {
-    let map: HashMap<String, String> =
-        HashMap::from([(String::from("F5-LTM-User-Info-1"), String::from("remote"))]);
-    let service = Service {
-        name: "ppp protocol = ip".to_string(),
-        values: map,
-    };
+pub trait Compare {
+    fn name(&self) -> String;
+    fn compare(&self, args: &mut Vec<String>) -> Vec<String> {
+        let mut result_args: Vec<String> = Vec::new();
+        for values in args.iter() {
+            let target_val = self.name();
+            if values.contains(&target_val) {
+                result_args.push(values.clone());
+            }
+        }
+        result_args
+    }
+}
 
-    let cmd_map: HashMap<String, String> =
-        HashMap::from([(String::from("permit"), String::from("power show"))]);
-    let cmd = Cmd {
-        name: "show".to_string(),
-        vals: cmd_map,
-    };
-
-    let group = Group {
-        name: String::from("testgroup"),
-        defservice: Some("testservice".to_string()),
-        acl: Some("testacl".to_string()),
-        pap: Some("PAM".to_string()),
-        member: Some("subgroup".to_string()),
-        service: Some(vec![service]),
-        cmd: Some(vec![cmd]),
-    };
-
-    let config = setup().unwrap();
-    let res_group = config.group.unwrap();
-    assert_eq!(group, res_group[0]);
-} */
+impl Compare for Service {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+impl Compare for Cmd {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+}
