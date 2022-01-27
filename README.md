@@ -16,12 +16,14 @@ TACACS+ implementation in Rust ([RFC 8907](https://www.rfc-editor.org/rfc/rfc890
   - [x] AuthenticationReply serialization
   - [x] AuthorizationReply serialization
   - [ ] AccountingReply serialization
-- [ ] Networking
-  - [ ] Packet routing
-  - [ ] Single connect mode
-- [ ] Configuration support
-  - [ ] Client stanzas
-  - [ ] Client secret keys
+- [x] Networking
+  - [x] Packet routing
+  - [x] Regex-based ACLs
+  - [x] Single connect mode
+- [ ] Configuration
+  - [x] ACLs
+  - [x] Group membership
+  - [ ] Per client secret keys
 
 ## Testing
 
