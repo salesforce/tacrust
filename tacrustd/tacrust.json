@@ -39,7 +39,7 @@
       "member" : "subgroup",
       "service" : [
         {
-          "name" : "testservice",
+          "name" : "invalid",
           "args" : [
             "F5-LTM-User-Info-1 = remote",
             "F5-LTM-User-Console = tmsh"
@@ -48,7 +48,7 @@
       ],
       "cmds" : [
         {
-          "name" : "system",
+          "name" : "invalid",
           "list" : [
               "permit shell session set more off"
 
@@ -56,7 +56,34 @@
         }
       ]
 
-    }
-  ]
+    },
 
+    {
+      "name" : "subgroup",
+      "defservice" : "testservice",
+      "acl" : "testacl",
+      "pap" :  "PAM",
+      "member" : "subgroup",
+      "service" : [
+        {
+          "name" : "exec",
+          "args" : [
+            "F5-LTM-User-Info-1 = remote",
+            "F5-LTM-User-Console = tmsh"
+          ]
+        }
+      ],
+      "cmds" : [
+        {
+          "name" : "show",
+          "list" : [
+            "permit shell session set more off"
+
+          ]
+        }
+      ]
+
+    }
+
+  ]
 }
