@@ -1,9 +1,8 @@
-use regex::Regex;
 use std::net::{IpAddr, SocketAddr};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
 
-use crate::{Group, User};
+use crate::{Acl, Group, User};
 
 pub type Tx = mpsc::UnboundedSender<Vec<u8>>;
 pub type Rx = mpsc::UnboundedReceiver<Vec<u8>>;
@@ -13,8 +12,8 @@ pub struct State {
     pub key: Vec<u8>,
     pub clients: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
+    pub acls: HashMap<String, Acl>,
     pub users: HashMap<String, User>,
-    pub acl_regex: Regex,
     pub groups: HashMap<String, Group>,
 }
 
@@ -24,8 +23,8 @@ impl State {
             key,
             clients: HashMap::new(),
             maps: HashMap::new(),
+            acls: HashMap::new(),
             users: HashMap::new(),
-            acl_regex: Regex::new("").unwrap(),
             groups: HashMap::new(),
         }
     }
