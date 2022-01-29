@@ -204,7 +204,7 @@ async fn process(
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
                     tracing::info!("received {} bytes from {}: {:?}", msg.len(), addr, msg);
-                    let response = tacacs::process_tacacs_packet(&mut client, &msg).await?;
+                    let response = tacacs::process_tacacs_packet(state.clone(), &addr, &msg).await?;
 
                     {
                         let state = state.read().await;
