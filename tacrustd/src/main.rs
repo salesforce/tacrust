@@ -195,7 +195,7 @@ async fn process(
 
     {
         let mut state = state.write().await;
-        state.clients.remove(&addr);
+        state.sockets.remove(&addr);
     }
 
     tracing::info!("connection from {} terminated", addr);

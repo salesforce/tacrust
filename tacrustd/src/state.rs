@@ -10,7 +10,7 @@ pub type Rx = mpsc::UnboundedReceiver<Vec<u8>>;
 #[derive(Debug, Clone)]
 pub struct State {
     pub key: Vec<u8>,
-    pub clients: HashMap<SocketAddr, Tx>,
+    pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
     pub acls: HashMap<String, Acl>,
     pub users: HashMap<String, User>,
@@ -21,7 +21,7 @@ impl State {
     pub fn new(key: Vec<u8>) -> Self {
         State {
             key,
-            clients: HashMap::new(),
+            sockets: HashMap::new(),
             maps: HashMap::new(),
             acls: HashMap::new(),
             users: HashMap::new(),
@@ -30,7 +30,7 @@ impl State {
     }
 
     pub async fn unicast(&self, dest: SocketAddr, message: Vec<u8>) {
-        for client in self.clients.iter() {
+        for client in self.sockets.iter() {
             if *client.0 == dest {
                 let _ = client.1.send(message.into());
                 break;
@@ -40,7 +40,7 @@ impl State {
 
     #[allow(dead_code)]
     pub async fn broadcast(&self, sender: SocketAddr, message: Vec<u8>) {
-        for client in self.clients.iter() {
+        for client in self.sockets.iter() {
             if *client.0 != sender {
                 let _ = client.1.send(message.clone());
             }

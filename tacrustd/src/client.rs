@@ -21,7 +21,7 @@ impl Client {
         let addr = pipe.get_ref().peer_addr()?;
         let (tx, rx) = mpsc::unbounded_channel();
 
-        shared_state.write().await.clients.insert(addr, tx);
+        shared_state.write().await.sockets.insert(addr, tx);
 
         Ok(Client { pipe, rx })
     }
