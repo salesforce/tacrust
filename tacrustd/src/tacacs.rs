@@ -1,6 +1,8 @@
-use crate::client::Client;
+use crate::state::State;
 use crate::{Cmd, Compare, Credentials, Group, Service, User};
 use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
 use color_eyre::Report;
 use simple_error::bail;
@@ -8,14 +10,31 @@ use tacrust::{
     parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthorizationStatus, Body,
     Packet,
 };
+use tokio::sync::RwLock;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 
 pub async fn process_tacacs_packet(
-    client: &mut Client,
+    shared_state: Arc<RwLock<State>>,
+    addr: &SocketAddr,
     request_bytes: &[u8],
 ) -> Result<Vec<u8>, Report> {
-    let state = client.shared_state.read().await;
+    let mut state = shared_state.read().await;
+    let map = match state.maps.get(&addr.ip()) {
+        Some(existing_map) => existing_map.clone(),
+        None => {
+            let new_map = Arc::new(RwLock::new(HashMap::new()));
+            {
+                drop(state);
+                {
+                    let mut state = shared_state.write().await;
+                    state.maps.insert(addr.ip(), new_map.clone());
+                }
+                state = shared_state.read().await;
+            }
+            new_map
+        }
+    };
     let request_packet = match parser::parse_packet(request_bytes, &(state.key)) {
         Ok((_, p)) => p,
         Err(e) => bail!("unable to parse packet: {:?}", e),
@@ -32,54 +51,85 @@ pub async fn process_tacacs_packet(
             rem_addr: _,
             data: _,
         } => {
-            client.map.insert(
-                CLIENT_MAP_KEY_USERNAME.to_string(),
-                String::from_utf8_lossy(&user).to_string(),
-            );
+            if user.len() > 0 {
+                map.write().await.insert(
+                    CLIENT_MAP_KEY_USERNAME.to_string(),
+                    String::from_utf8_lossy(&user).to_string(),
+                );
 
-            Ok(Packet {
-                header: request_packet.header.clone(),
-                body: Body::AuthenticationReply {
-                    status: AuthenticationStatus::GetPass,
-                    flags: AuthenticationReplyFlags { no_echo: true },
-                    server_msg: b"Password: ".to_vec(),
-                    data: b"".to_vec(),
-                },
-            })
+                Ok(Packet {
+                    header: request_packet.header.clone(),
+                    body: Body::AuthenticationReply {
+                        status: AuthenticationStatus::GetPass,
+                        flags: AuthenticationReplyFlags { no_echo: true },
+                        server_msg: b"Password: ".to_vec(),
+                        data: b"".to_vec(),
+                    },
+                })
+            } else {
+                Ok(Packet {
+                    header: request_packet.header.clone(),
+                    body: Body::AuthenticationReply {
+                        status: AuthenticationStatus::GetUser,
+                        flags: AuthenticationReplyFlags { no_echo: false },
+                        server_msg: b"User: ".to_vec(),
+                        data: b"".to_vec(),
+                    },
+                })
+            }
         }
         Body::AuthenticationContinue {
             flags: _,
             user,
             data: _,
         } => {
-            let username = match client.map.get(CLIENT_MAP_KEY_USERNAME) {
-                Some(u) => Ok(u.clone()),
-                None => Err(Report::msg("username not found")),
-            }?;
-            let password = String::from_utf8_lossy(&user).to_string();
-            let authen_status = if verify_user_credentials(&(state.users), &username, &password)
-                .await
-                .unwrap_or(false)
-            {
-                AuthenticationStatus::Pass
-            } else {
-                AuthenticationStatus::Fail
+            let username = {
+                let map = map.read().await;
+                map.get(CLIENT_MAP_KEY_USERNAME)
+                    .unwrap_or(&String::new())
+                    .clone()
             };
-            tracing::debug!(
-                "verifying credentials: username={}, password={} | result={:?}",
-                username,
-                password,
-                authen_status
-            );
-            Ok(Packet {
-                header: request_packet.header.clone(),
-                body: Body::AuthenticationReply {
-                    status: authen_status,
-                    flags: AuthenticationReplyFlags { no_echo: false },
-                    server_msg: b"".to_vec(),
-                    data: b"".to_vec(),
-                },
-            })
+            if username.len() > 0 {
+                let password = String::from_utf8_lossy(&user).to_string();
+                let authen_status = if verify_user_credentials(&(state.users), &username, &password)
+                    .await
+                    .unwrap_or(false)
+                {
+                    AuthenticationStatus::Pass
+                } else {
+                    AuthenticationStatus::Fail
+                };
+                tracing::debug!(
+                    "verifying credentials: username={}, password={} | result={:?}",
+                    username,
+                    password,
+                    authen_status
+                );
+                Ok(Packet {
+                    header: request_packet.header.clone(),
+                    body: Body::AuthenticationReply {
+                        status: authen_status,
+                        flags: AuthenticationReplyFlags { no_echo: false },
+                        server_msg: b"".to_vec(),
+                        data: b"".to_vec(),
+                    },
+                })
+            } else {
+                map.write().await.insert(
+                    CLIENT_MAP_KEY_USERNAME.to_string(),
+                    String::from_utf8_lossy(&user).to_string(),
+                );
+
+                Ok(Packet {
+                    header: request_packet.header.clone(),
+                    body: Body::AuthenticationReply {
+                        status: AuthenticationStatus::GetPass,
+                        flags: AuthenticationReplyFlags { no_echo: true },
+                        server_msg: b"Password: ".to_vec(),
+                        data: b"".to_vec(),
+                    },
+                })
+            }
         }
 
         Body::AuthorizationRequest {

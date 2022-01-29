@@ -3,9 +3,7 @@ use crate::state::State;
 use clap_rs as clap;
 use color_eyre::Report;
 use futures::{SinkExt, StreamExt};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use simple_error::bail;
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
 use tokio::{
@@ -89,35 +87,18 @@ async fn main() -> Result<(), Report> {
     let state = Arc::new(RwLock::new(State::new(config.key.as_bytes().to_vec())));
     let listener = TcpListener::bind(&config.listen_address).await?;
 
-    let acl = if config.acls.is_some() {
-        config
-            .acls
-            .as_ref()
-            .unwrap()
-            .into_iter()
-            .flat_map(|val| &val.list)
-            .map(|acl| String::from(&(acl.trim_start_matches("permit = ").to_owned() + r"|")))
-            .fold(String::new(), |result, acl| {
-                if result.is_empty() {
-                    acl
-                } else {
-                    format!("{}|{}", result, acl)
-                }
-            })
-    } else {
-        String::new()
-    };
+    if config.acls.is_some() {
+        let mut state = state.write().await;
+        for acl in config.acls.as_ref().unwrap() {
+            state.acls.insert(acl.name.clone(), acl.clone());
+        }
+    }
 
     if config.users.is_some() {
         let mut state = state.write().await;
         for user in config.users.as_ref().unwrap() {
             state.users.insert(user.name.clone(), user.clone());
         }
-    }
-
-    {
-        let mut state = state.write().await;
-        state.acl_regex = Regex::new(&acl)?;
     }
 
     if config.groups.is_some() {
@@ -129,7 +110,6 @@ async fn main() -> Result<(), Report> {
 
     tracing::debug!("config: {:?}", config);
     tracing::debug!("state: {:?}", state.read().await);
-    tracing::debug!("acl: {:?}", acl);
     tracing::info!("listening on {}", &config.listen_address);
 
     loop {
@@ -184,16 +164,6 @@ async fn process(
 ) -> Result<(), Report> {
     let pipe = Framed::new(stream, BytesCodec::new());
     let mut client = Client::new(state.clone(), pipe).await?;
-    let ip = addr.ip();
-
-    {
-        let state = state.read().await;
-        if state.acl_regex.is_match(&(ip.to_string())) {
-            tracing::info!("processing connection from {}", ip);
-        } else {
-            bail!("rejecting connection attempt from {}", ip);
-        }
-    }
 
     loop {
         tokio::select! {
@@ -203,8 +173,8 @@ async fn process(
             }
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
-                    tracing::info!("received {} bytes from {}: {:?}", msg.len(), addr, msg);
-                    let response = tacacs::process_tacacs_packet(&mut client, &msg).await?;
+                    tracing::info!("received {} bytes from {}: {:?}", msg.len(), addr, msg.to_vec());
+                    let response = tacacs::process_tacacs_packet(state.clone(), &addr, &msg).await?;
 
                     {
                         let state = state.read().await;
@@ -225,7 +195,7 @@ async fn process(
 
     {
         let mut state = state.write().await;
-        state.clients.remove(&addr);
+        state.sockets.remove(&addr);
     }
 
     tracing::info!("connection from {} terminated", addr);
