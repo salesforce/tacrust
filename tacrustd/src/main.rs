@@ -113,16 +113,26 @@ async fn main() -> Result<(), Report> {
     tracing::info!("listening on {}", &config.listen_address);
 
     loop {
-        let (stream, addr) = listener.accept().await?;
-        let state = Arc::clone(&state);
+        tokio::select! {
+            result = listener.accept() => {
+                let (stream, addr) = result?;
+                let state = Arc::clone(&state);
 
-        tokio::spawn(async move {
-            tracing::debug!("accepted connection");
-            if let Err(e) = process(state, stream, addr).await {
-                tracing::info!("an error occurred; error = {}", e);
+                tokio::spawn(async move {
+                    tracing::debug!("accepted connection");
+                    if let Err(e) = process(state, stream, addr).await {
+                        tracing::info!("an error occurred; error = {}", e);
+                    }
+                });
             }
-        });
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("received ctrl-c, exiting");
+                break;
+            }
+        }
     }
+
+    Ok(())
 }
 
 fn setup() -> Result<Config, Report> {
