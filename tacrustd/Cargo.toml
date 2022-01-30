@@ -23,4 +23,5 @@ pam = { version = "0.7.0" }
 regex = { version = "1.5.4" }
 rand = { version = "0.8.4" }
 lazy_static = { version = "1.4.0" }
+serial_test = { version = "0.5.1" }
 
