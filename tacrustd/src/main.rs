@@ -20,6 +20,9 @@ mod client;
 mod state;
 mod tacacs;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 enum Credentials {
@@ -85,6 +88,18 @@ pub struct Config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    if std::env::var("RUST_LIB_BACKTRACE").is_err() {
+        std::env::set_var("RUST_LIB_BACKTRACE", "1")
+    }
+
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info")
+    }
+    tracing_subscriber::fmt::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+    color_eyre::install()?;
+
     let (join_handle, _cancel_tx) = start_server().await?;
     join_handle.await?;
 
@@ -157,18 +172,6 @@ async fn start_server() -> Result<(JoinHandle<()>, UnboundedSender<()>), Report>
 }
 
 fn setup() -> Result<Config, Report> {
-    if std::env::var("RUST_LIB_BACKTRACE").is_err() {
-        std::env::set_var("RUST_LIB_BACKTRACE", "1")
-    }
-    color_eyre::install()?;
-
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "info")
-    }
-    tracing_subscriber::fmt::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
-
     let app = clap::App::new("tacrust").args(&Config::clap_args());
     let mut layers = vec![];
     for path in &[

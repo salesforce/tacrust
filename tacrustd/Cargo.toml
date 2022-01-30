@@ -21,4 +21,6 @@ tokio-util = { version = "0.6.9" }
 simple-error = { version = "0.2.3" }
 pam = { version = "0.7.0" }
 regex = { version = "1.5.4" }
+rand = { version = "0.8.4" }
+lazy_static = { version = "1.4.0" }
 
