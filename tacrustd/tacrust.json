@@ -63,7 +63,7 @@
       "defservice" : "testservice",
       "acl" : "testacl",
       "pap" :  "PAM",
-      "member" : "subgroup",
+      "member" : "",
       "service" : [
         {
           "name" : "exec",
