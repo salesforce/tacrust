@@ -6,6 +6,7 @@ use std::io::prelude::*;
 use std::net::{SocketAddr, TcpStream};
 use std::thread;
 use std::time::Duration;
+use tacrust::{AuthenticationStatus, Body};
 use tokio::runtime::Runtime;
 use tracing_subscriber::EnvFilter;
 
@@ -90,5 +91,63 @@ fn test_java_author() {
         tracing::info!("receiving response");
         let len = client.read(&mut response).unwrap();
         tracing::info!("received response: {:?}", &response[0..len]);
+    });
+}
+
+#[test]
+#[serial]
+fn test_golang_authen() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(1), || {
+        {
+            let mut client = get_tcp_client_for_tacrust();
+            let packet = include_bytes!("../packets/golang-authen-1.tacacs");
+            tracing::info!("sending packet: {:?}", packet);
+            client.write(packet).unwrap();
+            let mut response = [0; 4096];
+            tracing::info!("receiving response");
+            let len = client.read(&mut response).unwrap();
+            tracing::info!("received response: {:?}", &response[0..len]);
+            let (_, parsed_response) =
+                tacrust::parser::parse_packet(&response[0..len], key).unwrap();
+            tracing::info!("parsed: {:?}", parsed_response);
+            match parsed_response.body {
+                Body::AuthenticationReply {
+                    status,
+                    flags: _,
+                    server_msg: _,
+                    data: _,
+                } => {
+                    assert_eq!(status, AuthenticationStatus::GetPass);
+                }
+                _ => tracing::info!("invalid response"),
+            }
+        }
+
+        {
+            let mut client = get_tcp_client_for_tacrust();
+            let packet = include_bytes!("../packets/golang-authen-2.tacacs");
+            tracing::info!("sending packet: {:?}", packet);
+            client.write(packet).unwrap();
+            let mut response = [0; 4096];
+            tracing::info!("receiving response");
+            let len = client.read(&mut response).unwrap();
+            tracing::info!("received response: {:?}", &response[0..len]);
+            let (_, parsed_response) =
+                tacrust::parser::parse_packet(&response[0..len], key).unwrap();
+            tracing::info!("parsed: {:?}", parsed_response);
+            match parsed_response.body {
+                Body::AuthenticationReply {
+                    status,
+                    flags: _,
+                    server_msg: _,
+                    data: _,
+                } => {
+                    assert_eq!(status, AuthenticationStatus::Pass);
+                }
+                _ => tracing::info!("invalid response"),
+            }
+        }
     });
 }
