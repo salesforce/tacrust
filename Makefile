@@ -29,3 +29,7 @@ test:
 test-server:
 	cargo test -p tacrustd
 
+.PHONY: run-server
+run-server:
+	cargo run -p tacrustd
+
