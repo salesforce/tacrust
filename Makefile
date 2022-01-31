@@ -25,3 +25,11 @@ build-release:
 test:
 	cargo test -- --nocapture --test-threads=1
 
+.PHONY: test-server
+test-server:
+	cargo test -p tacrustd
+
+.PHONY: run-server
+run-server:
+	cargo run -p tacrustd
+

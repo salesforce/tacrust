@@ -21,7 +21,7 @@ pub enum PacketType {
     Accounting = 0x03,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
 pub enum AuthenticationStatus {
     Pass = 0x01,
     Fail = 0x02,

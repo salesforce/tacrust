@@ -148,6 +148,7 @@ pub async fn process_tacacs_packet(
             if let Some(user) = state.users.get(&username) {
                 let args_map = process_args(&args).await?;
                 let result = verify_authorization(user, args_map, &state.groups).await;
+                tracing::info!("authorization result: {:?}", result);
                 if result
                     .iter()
                     .map(|val| arg_result.push(val.as_bytes().to_vec()))
@@ -218,6 +219,7 @@ pub async fn verify_authorization(
     args: (Vec<String>, Vec<String>),
     groups: &HashMap<String, Group>,
 ) -> Vec<String> {
+    tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
     let args_local = &mut args.clone();
     match &user.member {
@@ -232,6 +234,9 @@ pub async fn verify_authorization(
                     return auth_result;
                 }
                 if let Some(member) = &group.member {
+                    if member == group_name {
+                        return auth_result;
+                    }
                     group_name = member.as_str();
                 } else {
                     return auth_result;

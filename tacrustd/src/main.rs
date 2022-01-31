@@ -6,6 +6,8 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::task::JoinHandle;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
@@ -17,6 +19,9 @@ use twelf::{config, Layer};
 mod client;
 mod state;
 mod tacacs;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
@@ -83,9 +88,27 @@ pub struct Config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    if std::env::var("RUST_LIB_BACKTRACE").is_err() {
+        std::env::set_var("RUST_LIB_BACKTRACE", "1")
+    }
+
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info")
+    }
+    tracing_subscriber::fmt::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+    color_eyre::install()?;
+
+    let (join_handle, _cancel_tx) = start_server().await?;
+    join_handle.await?;
+
+    Ok(())
+}
+
+async fn start_server() -> Result<(JoinHandle<()>, UnboundedSender<()>), Report> {
     let config = Arc::new(setup()?);
     let state = Arc::new(RwLock::new(State::new(config.key.as_bytes().to_vec())));
-    let listener = TcpListener::bind(&config.listen_address).await?;
 
     if config.acls.is_some() {
         let mut state = state.write().await;
@@ -112,32 +135,43 @@ async fn main() -> Result<(), Report> {
     tracing::debug!("state: {:?}", state.read().await);
     tracing::info!("listening on {}", &config.listen_address);
 
-    loop {
-        let (stream, addr) = listener.accept().await?;
-        let state = Arc::clone(&state);
+    let listener = TcpListener::bind(&config.listen_address).await?;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let join_handle = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                result = listener.accept() => {
+                    let (stream, addr) = match result {
+                        Ok(v) => v,
+                        Err(e) => {
+                            tracing::info!("error accepting connection; error = {}", e);
+                            continue
+                        },
+                    };
+                    let state = Arc::clone(&state);
 
-        tokio::spawn(async move {
-            tracing::debug!("accepted connection");
-            if let Err(e) = process(state, stream, addr).await {
-                tracing::info!("an error occurred; error = {}", e);
+                    tokio::spawn(async move {
+                        tracing::debug!("accepted connection");
+                        if let Err(e) = process(state, stream, addr).await {
+                            tracing::info!("an error occurred; error = {}", e);
+                        }
+                    });
+                }
+                _ = rx.recv() => {
+                    tracing::info!("received channel req to shutdown, exiting");
+                    break;
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    tracing::info!("received ctrl-c, exiting");
+                    break;
+                }
             }
-        });
-    }
+        }
+    });
+    Ok((join_handle, tx))
 }
 
 fn setup() -> Result<Config, Report> {
-    if std::env::var("RUST_LIB_BACKTRACE").is_err() {
-        std::env::set_var("RUST_LIB_BACKTRACE", "1")
-    }
-    color_eyre::install()?;
-
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "info")
-    }
-    tracing_subscriber::fmt::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
-
     let app = clap::App::new("tacrust").args(&Config::clap_args());
     let mut layers = vec![];
     for path in &[
