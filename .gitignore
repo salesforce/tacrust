@@ -3,3 +3,4 @@ rpmbuild/
 rpm-generated/
 coveralls.json
 .idea
+*.profraw
