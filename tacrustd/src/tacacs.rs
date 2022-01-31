@@ -234,6 +234,9 @@ pub async fn verify_authorization(
                     return auth_result;
                 }
                 if let Some(member) = &group.member {
+                    if member == group_name {
+                        return auth_result;
+                    }
                     group_name = member.as_str();
                 } else {
                     return auth_result;
