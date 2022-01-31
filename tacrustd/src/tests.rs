@@ -70,7 +70,7 @@ fn get_tcp_client_for_tacrust() -> TcpStream {
 #[test]
 #[serial]
 fn server_startup_and_shutdown() {
-    let port: u16 = rand::thread_rng().gen();
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
     test_server(port, Duration::from_secs(1), || {
         let server_address = std::env::var("TACRUST_LISTEN_ADDRESS").unwrap();
         tracing::info!("server is running on {}", server_address);
@@ -80,8 +80,8 @@ fn server_startup_and_shutdown() {
 #[test]
 #[serial]
 fn test_java_author() {
-    let port: u16 = rand::thread_rng().gen();
-    test_server(port, Duration::from_secs(5), || {
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(1), || {
         let packet = include_bytes!("../packets/java-author-1.tacacs");
         let mut client = get_tcp_client_for_tacrust();
         tracing::info!("sending packet: {:?}", packet);
