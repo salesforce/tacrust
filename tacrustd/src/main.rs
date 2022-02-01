@@ -257,11 +257,15 @@ impl Compare for Service {
     fn name(&self) -> String {
         self.name.clone()
     }
-    fn get_args(&self) -> Vec<String> {self.args.clone()}
+    fn get_args(&self) -> Vec<String> {
+        self.args.clone()
+    }
 }
 impl Compare for Cmd {
     fn name(&self) -> String {
         self.name.clone()
     }
-    fn get_args(&self) -> Vec<String> {self.list.clone()}
+    fn get_args(&self) -> Vec<String> {
+        self.list.clone()
+    }
 }
