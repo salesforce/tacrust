@@ -239,12 +239,14 @@ async fn process(
 
 pub trait Compare {
     fn name(&self) -> String;
+    fn get_args(&self) -> Vec<String>;
     fn compare(&self, args: &mut Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
         for values in args.iter() {
             let target_val = self.name();
+            let args = &mut self.get_args();
             if values.contains(&target_val) {
-                result_args.push(values.clone());
+                result_args.append(args);
             }
         }
         result_args
@@ -255,9 +257,11 @@ impl Compare for Service {
     fn name(&self) -> String {
         self.name.clone()
     }
+    fn get_args(&self) -> Vec<String> {self.args.clone()}
 }
 impl Compare for Cmd {
     fn name(&self) -> String {
         self.name.clone()
     }
+    fn get_args(&self) -> Vec<String> {self.list.clone()}
 }
