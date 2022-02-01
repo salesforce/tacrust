@@ -8,11 +8,18 @@ use color_eyre::Report;
 use simple_error::bail;
 use tacrust::{
     parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthorizationStatus, Body,
-    Packet,
+    Header, Packet,
 };
 use tokio::sync::RwLock;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
+
+fn generate_response_header(request_header: &Header) -> Header {
+    Header {
+        seq_no: request_header.seq_no + 1,
+        ..*request_header
+    }
+}
 
 pub async fn process_tacacs_packet(
     shared_state: Arc<RwLock<State>>,
@@ -58,7 +65,7 @@ pub async fn process_tacacs_packet(
                 );
 
                 Ok(Packet {
-                    header: request_packet.header.clone(),
+                    header: generate_response_header(&request_packet.header),
                     body: Body::AuthenticationReply {
                         status: AuthenticationStatus::GetPass,
                         flags: AuthenticationReplyFlags { no_echo: true },
@@ -68,7 +75,7 @@ pub async fn process_tacacs_packet(
                 })
             } else {
                 Ok(Packet {
-                    header: request_packet.header.clone(),
+                    header: generate_response_header(&request_packet.header),
                     body: Body::AuthenticationReply {
                         status: AuthenticationStatus::GetUser,
                         flags: AuthenticationReplyFlags { no_echo: false },
@@ -106,7 +113,7 @@ pub async fn process_tacacs_packet(
                     authen_status
                 );
                 Ok(Packet {
-                    header: request_packet.header.clone(),
+                    header: generate_response_header(&request_packet.header),
                     body: Body::AuthenticationReply {
                         status: authen_status,
                         flags: AuthenticationReplyFlags { no_echo: false },
@@ -121,7 +128,7 @@ pub async fn process_tacacs_packet(
                 );
 
                 Ok(Packet {
-                    header: request_packet.header.clone(),
+                    header: generate_response_header(&request_packet.header),
                     body: Body::AuthenticationReply {
                         status: AuthenticationStatus::GetPass,
                         flags: AuthenticationReplyFlags { no_echo: true },
@@ -156,7 +163,7 @@ pub async fn process_tacacs_packet(
                     > 0
                 {
                     Ok(Packet {
-                        header: request_packet.header.clone(),
+                        header: generate_response_header(&request_packet.header),
                         body: Body::AuthorizationReply {
                             status: AuthorizationStatus::AuthPassAdd,
                             data: vec![],
@@ -166,7 +173,7 @@ pub async fn process_tacacs_packet(
                     })
                 } else {
                     Ok(Packet {
-                        header: request_packet.header.clone(),
+                        header: generate_response_header(&request_packet.header),
                         body: Body::AuthorizationReply {
                             status: AuthorizationStatus::AuthStatusFail,
                             data: vec![],
@@ -177,7 +184,7 @@ pub async fn process_tacacs_packet(
                 }
             } else {
                 Ok(Packet {
-                    header: request_packet.header.clone(),
+                    header: generate_response_header(&request_packet.header),
                     body: Body::AuthorizationReply {
                         status: AuthorizationStatus::AuthStatusFail,
                         data: vec![],
