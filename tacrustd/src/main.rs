@@ -238,15 +238,42 @@ async fn process(
 }
 
 pub trait Compare {
+    fn tactype(&self) -> &'static str;
     fn name(&self) -> String;
     fn get_args(&self) -> Vec<String>;
     fn compare(&self, args: &mut Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
-        for values in args.iter() {
-            let target_val = self.name();
-            let args = &mut self.get_args();
-            if values.contains(&target_val) {
+        tracing::debug!(
+            "comparing tactype={:?} name={:?} config={:?} packet={:?} ",
+            self.tactype(),
+            self.name(),
+            self.get_args(),
+            args
+        );
+        for avpairs in args.iter() {
+            let target_value = self.name();
+            let split_avpairs: Vec<&str> = (&avpairs).split(&"=").collect();
+            if split_avpairs.len() != 2 {
+                tracing::debug!("\tinvalid values for config_args [{:?}]", avpairs);
+                continue;
+            }
+            let (tactype, tacvalue) = (split_avpairs[0], split_avpairs[1]);
+            if tactype == self.tactype() && tacvalue == (&target_value) {
+                tracing::debug!(
+                    "\tpacket [{}] == config [{}={}] ✓",
+                    avpairs,
+                    self.tactype(),
+                    &target_value
+                );
+                let args = &mut self.get_args();
                 result_args.append(args);
+            } else {
+                tracing::debug!(
+                    "\tpacket [{}] != config [{}={}]",
+                    avpairs,
+                    self.tactype(),
+                    &target_value
+                );
             }
         }
         result_args
@@ -260,6 +287,10 @@ impl Compare for Service {
     fn get_args(&self) -> Vec<String> {
         self.args.clone()
     }
+
+    fn tactype(&self) -> &'static str {
+        "service"
+    }
 }
 impl Compare for Cmd {
     fn name(&self) -> String {
@@ -267,5 +298,9 @@ impl Compare for Cmd {
     }
     fn get_args(&self) -> Vec<String> {
         self.list.clone()
+    }
+
+    fn tactype(&self) -> &'static str {
+        "cmd"
     }
 }
