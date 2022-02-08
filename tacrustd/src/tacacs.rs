@@ -153,6 +153,7 @@ pub async fn process_tacacs_packet(
             // process auth args
             let mut arg_result: Vec<Vec<u8>> = Vec::new();
             if let Some(user) = state.users.get(&username) {
+                tracing::debug!("args: {:?}", &args);
                 let args_map = process_args(&args).await?;
                 let result = verify_authorization(user, args_map, &state.groups).await;
                 tracing::info!("authorization result: {:?}", result);
@@ -210,9 +211,9 @@ pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<(Vec<String>, Vec<Strin
 
     for args in args.iter() {
         let val = String::from_utf8_lossy(args.clone().as_slice()).to_string();
-        if val.contains(&"service".to_string()) {
+        if val.starts_with(&"service=".to_string()) {
             service.push(val);
-        } else if val.contains(&"cmd".to_string()) {
+        } else if val.starts_with(&"cmd=".to_string()) || val.starts_with(&"cmdarg=".to_string()) {
             cmd.push(val);
         } else {
             return Err(Report::msg("the current arguement is not processed"));
