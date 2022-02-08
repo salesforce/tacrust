@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::net::{IpAddr, SocketAddr};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
@@ -12,6 +13,7 @@ pub struct State {
     pub key: Vec<u8>,
     pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
+    pub regexes: HashMap<String, Regex>,
     pub acls: HashMap<String, Acl>,
     pub users: HashMap<String, User>,
     pub groups: HashMap<String, Group>,
@@ -23,6 +25,7 @@ impl State {
             key,
             sockets: HashMap::new(),
             maps: HashMap::new(),
+            regexes: HashMap::new(),
             acls: HashMap::new(),
             users: HashMap::new(),
             groups: HashMap::new(),
