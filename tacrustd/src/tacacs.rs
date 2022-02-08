@@ -1,10 +1,11 @@
 use crate::state::State;
-use crate::{Cmd, Compare, Credentials, Group, Service, User};
+use crate::{Cmd, Compare, Credentials, Service, User};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use color_eyre::Report;
+use regex::Regex;
 use simple_error::bail;
 use tacrust::{
     parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthorizationStatus, Body,
@@ -26,23 +27,20 @@ pub async fn process_tacacs_packet(
     addr: &SocketAddr,
     request_bytes: &[u8],
 ) -> Result<Vec<u8>, Report> {
-    let mut state = shared_state.read().await;
-    let map = match state.maps.get(&addr.ip()) {
-        Some(existing_map) => existing_map.clone(),
-        None => {
-            let new_map = Arc::new(RwLock::new(HashMap::new()));
-            {
-                drop(state);
-                {
-                    let mut state = shared_state.write().await;
-                    state.maps.insert(addr.ip(), new_map.clone());
-                }
-                state = shared_state.read().await;
-            }
-            new_map
-        }
-    };
-    let request_packet = match parser::parse_packet(request_bytes, &(state.key)) {
+    let map = shared_state
+        .write()
+        .await
+        .maps
+        .remove(&addr.ip())
+        .unwrap_or_else(|| Arc::new(RwLock::new(HashMap::new())))
+        .clone();
+    shared_state
+        .write()
+        .await
+        .maps
+        .insert(addr.ip(), map.clone());
+    let request_packet = match parser::parse_packet(request_bytes, &(shared_state.read().await.key))
+    {
         Ok((_, p)) => p,
         Err(e) => bail!("unable to parse packet: {:?}", e),
     };
@@ -98,9 +96,13 @@ pub async fn process_tacacs_packet(
             };
             if username.len() > 0 {
                 let password = String::from_utf8_lossy(&user).to_string();
-                let authen_status = if verify_user_credentials(&(state.users), &username, &password)
-                    .await
-                    .unwrap_or(false)
+                let authen_status = if verify_user_credentials(
+                    &(shared_state.read().await.users),
+                    &username,
+                    &password,
+                )
+                .await
+                .unwrap_or(false)
                 {
                     AuthenticationStatus::Pass
                 } else {
@@ -146,16 +148,17 @@ pub async fn process_tacacs_packet(
             authen_service: _,
             user,
             port: _,
-            rem_address: _,
+            rem_address,
             args,
         } => {
             let username = String::from_utf8_lossy(&user).to_string();
             // process auth args
             let mut arg_result: Vec<Vec<u8>> = Vec::new();
-            if let Some(user) = state.users.get(&username) {
+            if let Some(user) = shared_state.read().await.users.get(&username) {
                 tracing::debug!("args: {:?}", &args);
                 let args_map = process_args(&args).await?;
-                let result = verify_authorization(user, args_map, &state.groups).await;
+                let result =
+                    verify_authorization(shared_state.clone(), user, &rem_address, args_map).await;
                 tracing::info!("authorization result: {:?}", result);
                 if result
                     .iter()
@@ -198,10 +201,11 @@ pub async fn process_tacacs_packet(
         _ => Err(Report::msg("not supported yet")),
     }?;
 
-    let response_bytes = match serializer::serialize_packet(&response_packet, &(state.key)) {
-        Ok(b) => b,
-        Err(e) => bail!("unable to serialize packet: {:?}", e),
-    };
+    let response_bytes =
+        match serializer::serialize_packet(&response_packet, &(shared_state.read().await.key)) {
+            Ok(b) => b,
+            Err(e) => bail!("unable to serialize packet: {:?}", e),
+        };
     Ok(response_bytes)
 }
 
@@ -223,29 +227,33 @@ pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<(Vec<String>, Vec<Strin
 }
 
 pub async fn verify_authorization(
+    shared_state: Arc<RwLock<State>>,
     user: &User,
+    rem_address: &[u8],
     args: (Vec<String>, Vec<String>),
-    groups: &HashMap<String, Group>,
 ) -> Vec<String> {
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
     let args_local = &mut args.clone();
     match &user.member {
         Some(name) => {
-            let mut group_name = name.as_str();
-            while let Some(group) = groups.get(group_name) {
+            let mut group_name = name.to_string();
+            while let Some(group) = shared_state.read().await.groups.get(&group_name) {
                 let list_service = &mut verify_service(&group.service, &mut args_local.0).await;
                 let list_cmd = &mut verify_cmd(&group.cmds, &mut args_local.1).await;
-                if list_service.len() != 0 || list_cmd.len() != 0 {
+                let (acl_result, matching_acl) =
+                    &mut verify_acl(shared_state.clone(), &group.acl, rem_address).await;
+                if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
                     auth_result.append(list_service);
                     auth_result.append(list_cmd);
+                    auth_result.push(matching_acl.to_string());
                     return auth_result;
                 }
                 if let Some(member) = &group.member {
-                    if member == group_name {
+                    if member == &group_name {
                         return auth_result;
                     }
-                    group_name = member.as_str();
+                    group_name = member.to_string();
                 } else {
                     return auth_result;
                 }
@@ -261,48 +269,71 @@ pub async fn verify_authorization(
 
 pub async fn verify_service(service: &Option<Vec<Service>>, args: &mut Vec<String>) -> Vec<String> {
     let mut service_result: Vec<String> = Vec::new();
-    let service_local = &mut service.clone();
-    match service_local {
-        Some(services) => {
-            let mut iter = services.iter();
-            while let Some(service) = iter.next() {
-                let result = &mut service.compare(args);
-                if result.len() == 0 {
-                    continue;
-                } else {
-                    service_result.append(result)
-                }
+    if let Some(services) = service {
+        for service in services {
+            let result = &mut service.compare(args);
+            if result.len() != 0 {
+                service_result.append(result)
             }
-            service_result
-        }
-
-        None => {
-            return service_result;
         }
     }
+    service_result
 }
 
 pub async fn verify_cmd(cmd: &Option<Vec<Cmd>>, args: &mut Vec<String>) -> Vec<String> {
     let mut cmd_result: Vec<String> = Vec::new();
-    let cmd_local = &mut cmd.clone();
-    match cmd_local {
-        Some(cmds) => {
-            let mut iter = cmds.iter();
-            while let Some(cmd) = iter.next() {
-                let result = &mut cmd.compare(args);
-                if result.len() == 0 {
-                    continue;
-                } else {
-                    cmd_result.append(result)
-                }
+    if let Some(cmds) = cmd {
+        for cmd in cmds {
+            let result = &mut cmd.compare(args);
+            if result.len() != 0 {
+                cmd_result.append(result)
             }
-            cmd_result
-        }
-
-        None => {
-            return cmd_result;
         }
     }
+    cmd_result
+}
+
+pub async fn verify_acl(
+    shared_state: Arc<RwLock<State>>,
+    acl: &Option<String>,
+    rem_address: &[u8],
+) -> (bool, String) {
+    if acl.is_none() {
+        return (false, String::new());
+    }
+    let acl = {
+        match shared_state.read().await.acls.get(acl.as_ref().unwrap()) {
+            Some(acl) => acl.clone(),
+            None => return (false, String::new()),
+        }
+    };
+    let rem_address = String::from_utf8_lossy(rem_address);
+    tracing::debug!(
+        "verifying rem_address {} against acl {:?}",
+        rem_address,
+        acl
+    );
+    for acl_expr in &(acl.list) {
+        let acl_expr_split: Vec<&str> = acl_expr.split("=").collect();
+        if acl_expr_split.len() != 2 {
+            continue;
+        }
+        let (acl_action, acl_regex) = (
+            acl_expr_split[0].clone().trim(),
+            acl_expr_split[1].clone().trim(),
+        );
+        // Todo: Store compiled regex in shared_state.regexes
+        let acl_regex_compiled = Regex::new(acl_regex).unwrap();
+        if !acl_regex_compiled.is_match(&rem_address) {
+            continue;
+        }
+        match acl_action {
+            "permit" => return (true, acl_expr.to_string()),
+            "deny" => return (false, acl_expr.to_string()),
+            _ => continue,
+        }
+    }
+    (false, String::new())
 }
 
 pub async fn verify_user_credentials(
