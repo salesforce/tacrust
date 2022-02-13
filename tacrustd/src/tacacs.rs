@@ -1,5 +1,5 @@
 use crate::state::State;
-use crate::{Cmd, Compare, Credentials, Service, User};
+use crate::{Cmd, Compare, Credentials, Group, Service, User};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -152,13 +152,17 @@ pub async fn process_tacacs_packet(
             args,
         } => {
             let username = String::from_utf8_lossy(&user).to_string();
+            let user = match shared_state.read().await.users.get(&username) {
+                Some(u) => u.clone(),
+                None => User::default(),
+            };
             // process auth args
             let mut arg_result: Vec<Vec<u8>> = Vec::new();
-            if let Some(user) = shared_state.read().await.users.get(&username) {
+            if user.name.len() > 0 {
                 tracing::debug!("args: {:?}", &args);
                 let args_map = process_args(&args).await?;
                 let result =
-                    verify_authorization(shared_state.clone(), user, &rem_address, args_map).await;
+                    verify_authorization(shared_state.clone(), &user, &rem_address, args_map).await;
                 tracing::info!("authorization result: {:?}", result);
                 if result
                     .iter()
@@ -237,23 +241,32 @@ pub async fn verify_authorization(
     let args_local = &mut args.clone();
     match &user.member {
         Some(name) => {
-            let mut group_name = name.to_string();
-            while let Some(group) = shared_state.read().await.groups.get(&group_name) {
-                let list_service = &mut verify_service(&group.service, &mut args_local.0).await;
-                let list_cmd = &mut verify_cmd(&group.cmds, &mut args_local.1).await;
+            let mut next_group_name = name.to_string();
+            let mut next_group = match shared_state.read().await.groups.get(&next_group_name) {
+                Some(g) => g.clone(),
+                None => Group::default(),
+            };
+            while next_group.name.len() > 0 {
+                let list_service =
+                    &mut verify_service(&next_group.service, &mut args_local.0).await;
+                let list_cmd = &mut verify_cmd(&next_group.cmds, &mut args_local.1).await;
                 let (acl_result, matching_acl) =
-                    &mut verify_acl(shared_state.clone(), &group.acl, rem_address).await;
+                    &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
                 if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
                     auth_result.append(list_service);
                     auth_result.append(list_cmd);
                     auth_result.push(matching_acl.to_string());
                     return auth_result;
                 }
-                if let Some(member) = &group.member {
-                    if member == &group_name {
+                if let Some(member) = &next_group.member {
+                    if member == &next_group_name {
                         return auth_result;
                     }
-                    group_name = member.to_string();
+                    next_group_name = member.to_string();
+                    next_group = match shared_state.read().await.groups.get(&next_group_name) {
+                        Some(g) => g.clone(),
+                        None => Group::default(),
+                    };
                 } else {
                     return auth_result;
                 }
@@ -322,8 +335,17 @@ pub async fn verify_acl(
             acl_expr_split[0].clone().trim(),
             acl_expr_split[1].clone().trim(),
         );
-        // Todo: Store compiled regex in shared_state.regexes
-        let acl_regex_compiled = Regex::new(acl_regex).unwrap();
+        let acl_regex_compiled = shared_state
+            .write()
+            .await
+            .regexes
+            .remove(acl_regex)
+            .unwrap_or_else(|| Regex::new(acl_regex).unwrap());
+        shared_state
+            .write()
+            .await
+            .regexes
+            .insert(acl_regex.to_string(), acl_regex_compiled.clone());
         if !acl_regex_compiled.is_match(&rem_address) {
             continue;
         }

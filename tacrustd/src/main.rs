@@ -30,19 +30,25 @@ enum Credentials {
     Ascii(String),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+impl Default for Credentials {
+    fn default() -> Self {
+        Credentials::Pam
+    }
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Service {
     name: String,
     args: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Cmd {
     name: String,
     list: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Group {
     name: String,
     defservice: Option<String>,
@@ -53,14 +59,14 @@ pub struct Group {
     cmds: Option<Vec<Cmd>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct User {
     name: String,
     credentials: Credentials,
     member: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Acl {
     name: String,
     list: Vec<String>,
