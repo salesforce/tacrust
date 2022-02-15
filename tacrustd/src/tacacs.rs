@@ -32,8 +32,7 @@ pub async fn process_tacacs_packet(
         .await
         .maps
         .remove(&addr.ip())
-        .unwrap_or_else(|| Arc::new(RwLock::new(HashMap::new())))
-        .clone();
+        .unwrap_or_else(|| Arc::new(RwLock::new(HashMap::new())));
     shared_state
         .write()
         .await
