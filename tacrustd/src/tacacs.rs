@@ -332,10 +332,7 @@ pub async fn verify_acl(
         if acl_expr_split.len() != 2 {
             continue;
         }
-        let (acl_action, acl_regex) = (
-            acl_expr_split[0].clone().trim(),
-            acl_expr_split[1].clone().trim(),
-        );
+        let (acl_action, acl_regex) = (acl_expr_split[0].trim(), acl_expr_split[1].trim());
         let acl_regex_compiled = shared_state
             .write()
             .await
