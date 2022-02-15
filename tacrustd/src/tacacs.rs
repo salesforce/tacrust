@@ -31,13 +31,9 @@ pub async fn process_tacacs_packet(
         .write()
         .await
         .maps
-        .remove(&addr.ip())
-        .unwrap_or_else(|| Arc::new(RwLock::new(HashMap::new())));
-    shared_state
-        .write()
-        .await
-        .maps
-        .insert(addr.ip(), map.clone());
+        .entry(addr.ip())
+        .or_insert_with(|| Arc::new(RwLock::new(HashMap::new())))
+        .clone();
     let request_packet = match parser::parse_packet(request_bytes, &(shared_state.read().await.key))
     {
         Ok((_, p)) => p,
@@ -151,13 +147,16 @@ pub async fn process_tacacs_packet(
             args,
         } => {
             let username = String::from_utf8_lossy(&user).to_string();
-            let user = match shared_state.read().await.users.get(&username) {
-                Some(u) => u.clone(),
-                None => User::default(),
-            };
-            // process auth args
+            let user_found = shared_state.read().await.users.contains_key(&username);
             let mut arg_result: Vec<Vec<u8>> = Vec::new();
-            if user.name.len() > 0 {
+            if user_found {
+                let user = shared_state
+                    .read()
+                    .await
+                    .users
+                    .get(&username)
+                    .unwrap()
+                    .clone();
                 tracing::debug!("args: {:?}", &args);
                 let args_map = process_args(&args).await?;
                 let result =
@@ -241,11 +240,19 @@ pub async fn verify_authorization(
     match &user.member {
         Some(name) => {
             let mut next_group_name = name.to_string();
-            let mut next_group = match shared_state.read().await.groups.get(&next_group_name) {
-                Some(g) => g.clone(),
-                None => Group::default(),
-            };
-            while next_group.name.len() > 0 {
+            let mut next_group_found = shared_state
+                .read()
+                .await
+                .groups
+                .contains_key(&next_group_name);
+            while next_group_found {
+                let next_group = shared_state
+                    .read()
+                    .await
+                    .groups
+                    .get(&next_group_name)
+                    .unwrap()
+                    .clone();
                 let list_service =
                     &mut verify_service(&next_group.service, &mut args_local.0).await;
                 let list_cmd = &mut verify_cmd(&next_group.cmds, &mut args_local.1).await;
@@ -262,10 +269,11 @@ pub async fn verify_authorization(
                         return auth_result;
                     }
                     next_group_name = member.to_string();
-                    next_group = match shared_state.read().await.groups.get(&next_group_name) {
-                        Some(g) => g.clone(),
-                        None => Group::default(),
-                    };
+                    next_group_found = shared_state
+                        .read()
+                        .await
+                        .groups
+                        .contains_key(&next_group_name);
                 } else {
                     return auth_result;
                 }
@@ -338,13 +346,11 @@ pub async fn verify_acl(
             .write()
             .await
             .regexes
-            .remove(acl_regex)
-            .unwrap_or_else(|| Regex::new(acl_regex).unwrap());
-        shared_state
-            .write()
-            .await
-            .regexes
-            .insert(acl_regex.to_string(), acl_regex_compiled.clone());
+            .entry(acl_regex.to_string())
+            .or_insert_with(|| {
+                Arc::new(Regex::new(acl_regex).unwrap_or_else(|_| Regex::new("$.").unwrap()))
+            })
+            .clone();
         if !acl_regex_compiled.is_match(&rem_address) {
             continue;
         }
@@ -358,7 +364,7 @@ pub async fn verify_acl(
 }
 
 pub async fn verify_user_credentials(
-    users: &HashMap<String, User>,
+    users: &HashMap<String, Arc<User>>,
     username: &str,
     password: &str,
 ) -> Result<bool, Report> {

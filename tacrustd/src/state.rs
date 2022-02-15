@@ -13,10 +13,10 @@ pub struct State {
     pub key: Vec<u8>,
     pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
-    pub regexes: HashMap<String, Regex>,
-    pub acls: HashMap<String, Acl>,
-    pub users: HashMap<String, User>,
-    pub groups: HashMap<String, Group>,
+    pub regexes: HashMap<String, Arc<Regex>>,
+    pub acls: HashMap<String, Arc<Acl>>,
+    pub users: HashMap<String, Arc<User>>,
+    pub groups: HashMap<String, Arc<Group>>,
 }
 
 impl State {
