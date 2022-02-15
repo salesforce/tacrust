@@ -33,12 +33,10 @@ impl State {
     }
 
     pub async fn unicast(&self, dest: SocketAddr, message: Vec<u8>) {
-        for client in self.sockets.iter() {
-            if *client.0 == dest {
-                let _ = client.1.send(message.into());
-                break;
-            }
+        if !self.sockets.contains_key(&dest) {
+            return;
         }
+        let _ = self.sockets.get(&dest).unwrap().send(message.into());
     }
 
     #[allow(dead_code)]
