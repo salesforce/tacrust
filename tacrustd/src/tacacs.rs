@@ -106,7 +106,7 @@ pub async fn process_tacacs_packet(
                 tracing::debug!(
                     "verifying credentials: username={}, password={} | result={:?}",
                     username,
-                    password,
+                    password.len(),
                     authen_status
                 );
                 Ok(Packet {
