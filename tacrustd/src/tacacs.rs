@@ -1,5 +1,5 @@
 use crate::state::State;
-use crate::{Cmd, Compare, Credentials, Group, Service, User};
+use crate::{Cmd, Compare, Credentials, Service, User};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
