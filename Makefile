@@ -1,5 +1,5 @@
 .PHONY: all
-all: format build lint test
+all: format build lint test test-server
 
 .PHONY: format
 format:
