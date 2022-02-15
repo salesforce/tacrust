@@ -119,21 +119,27 @@ async fn start_server() -> Result<(JoinHandle<()>, UnboundedSender<()>), Report>
     if config.acls.is_some() {
         let mut state = state.write().await;
         for acl in config.acls.as_ref().unwrap() {
-            state.acls.insert(acl.name.clone(), acl.clone());
+            state
+                .acls
+                .insert(acl.name.to_string(), Arc::new(acl.clone()));
         }
     }
 
     if config.users.is_some() {
         let mut state = state.write().await;
         for user in config.users.as_ref().unwrap() {
-            state.users.insert(user.name.clone(), user.clone());
+            state
+                .users
+                .insert(user.name.to_string(), Arc::new(user.clone()));
         }
     }
 
     if config.groups.is_some() {
         let mut state = state.write().await;
         for group in config.groups.as_ref().unwrap() {
-            state.groups.insert(group.name.clone(), group.clone());
+            state
+                .groups
+                .insert(group.name.to_string(), Arc::new(group.clone()));
         }
     }
 
