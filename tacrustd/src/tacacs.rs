@@ -237,54 +237,48 @@ pub async fn verify_authorization(
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
     let args_local = &mut args.clone();
-    match &user.member {
-        Some(name) => {
-            let mut next_group_name = name.to_string();
-            let mut next_group_found = shared_state
+    if user.member.is_none() {
+        return auth_result;
+    }
+    let mut next_group_name = user.member.as_ref().unwrap().to_string();
+    let mut next_group_found = shared_state
+        .read()
+        .await
+        .groups
+        .contains_key(&next_group_name);
+    while next_group_found {
+        let next_group = shared_state
+            .read()
+            .await
+            .groups
+            .get(&next_group_name)
+            .unwrap()
+            .clone();
+        let list_service = &mut verify_service(&next_group.service, &mut args_local.0).await;
+        let list_cmd = &mut verify_cmd(&next_group.cmds, &mut args_local.1).await;
+        let (acl_result, matching_acl) =
+            &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
+        if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
+            auth_result.append(list_service);
+            auth_result.append(list_cmd);
+            auth_result.push(matching_acl.to_string());
+            return auth_result;
+        }
+        if let Some(member) = &next_group.member {
+            if member == &next_group_name {
+                return auth_result;
+            }
+            next_group_name = member.to_string();
+            next_group_found = shared_state
                 .read()
                 .await
                 .groups
                 .contains_key(&next_group_name);
-            while next_group_found {
-                let next_group = shared_state
-                    .read()
-                    .await
-                    .groups
-                    .get(&next_group_name)
-                    .unwrap()
-                    .clone();
-                let list_service =
-                    &mut verify_service(&next_group.service, &mut args_local.0).await;
-                let list_cmd = &mut verify_cmd(&next_group.cmds, &mut args_local.1).await;
-                let (acl_result, matching_acl) =
-                    &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
-                if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
-                    auth_result.append(list_service);
-                    auth_result.append(list_cmd);
-                    auth_result.push(matching_acl.to_string());
-                    return auth_result;
-                }
-                if let Some(member) = &next_group.member {
-                    if member == &next_group_name {
-                        return auth_result;
-                    }
-                    next_group_name = member.to_string();
-                    next_group_found = shared_state
-                        .read()
-                        .await
-                        .groups
-                        .contains_key(&next_group_name);
-                } else {
-                    return auth_result;
-                }
-            }
-            return auth_result;
-        }
-
-        None => {
-            return auth_result;
+        } else {
+            break;
         }
     }
+    return auth_result;
 }
 
 pub async fn verify_service(service: &Option<Vec<Service>>, args: &mut Vec<String>) -> Vec<String> {
