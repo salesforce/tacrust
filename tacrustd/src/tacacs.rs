@@ -1,12 +1,11 @@
 use crate::state::State;
-use crate::{Cmd, Compare, Credentials, Service, User};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-
+use crate::{Cmd, Credentials, Service, User};
 use color_eyre::Report;
 use regex::Regex;
 use simple_error::bail;
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tacrust::{
     parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthorizationStatus, Body,
     Header, Packet,
@@ -14,6 +13,82 @@ use tacrust::{
 use tokio::sync::RwLock;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
+
+fn normalized_match(s1: &str, s2: &str) -> bool {
+    if s1.len() == 0 || s2.len() == 0 {
+        return true;
+    }
+    let s1_match = s1 == "shell" || s1 == "exec";
+    let s2_match = s2 == "shell" || s2 == "exec";
+    return (s1_match && s2_match) || (s1 == s2);
+}
+
+pub trait Compare {
+    fn avtype(&self) -> &'static str;
+    fn name(&self) -> String;
+    fn get_args(&self) -> Vec<String>;
+    fn compare(&self, args: &mut Vec<String>) -> Vec<String> {
+        let mut result_args: Vec<String> = Vec::new();
+        tracing::debug!(
+            "comparing packet=<{:?}> with config=<{:?}={:?}>",
+            args,
+            self.avtype(),
+            self.name()
+        );
+        for avpairs in args.iter() {
+            let target_value = self.name();
+            let split_avpairs: Vec<&str> = (&avpairs).split(&"=").collect();
+            if split_avpairs.len() != 2 {
+                tracing::debug!("\tinvalid values for config_args [{:?}]", avpairs);
+                continue;
+            }
+            let (tactype, tacvalue) = (split_avpairs[0], split_avpairs[1]);
+            if tactype == self.avtype() && normalized_match(tacvalue, &target_value) {
+                tracing::debug!(
+                    "\tpacket <{}> == config <{}={}> ✓",
+                    avpairs,
+                    self.avtype(),
+                    &target_value
+                );
+                let args = &mut self.get_args();
+                result_args.append(args);
+            } else {
+                tracing::debug!(
+                    "\tpacket <{}> != config <{}={}> ✘",
+                    avpairs,
+                    self.avtype(),
+                    &target_value
+                );
+            }
+        }
+        result_args
+    }
+}
+
+impl Compare for Service {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+    fn get_args(&self) -> Vec<String> {
+        self.args.clone()
+    }
+
+    fn avtype(&self) -> &'static str {
+        "service"
+    }
+}
+impl Compare for Cmd {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+    fn get_args(&self) -> Vec<String> {
+        self.list.clone()
+    }
+
+    fn avtype(&self) -> &'static str {
+        "cmd"
+    }
+}
 
 fn generate_response_header(request_header: &Header) -> Header {
     Header {
@@ -104,7 +179,7 @@ pub async fn process_tacacs_packet(
                     AuthenticationStatus::Fail
                 };
                 tracing::debug!(
-                    "verifying credentials: username={}, password={} | result={:?}",
+                    "verifying credentials: username={}, password=({} bytes) | result={:?}",
                     username,
                     password.len(),
                     authen_status
@@ -157,7 +232,9 @@ pub async fn process_tacacs_packet(
                     .get(&username)
                     .unwrap()
                     .clone();
-                tracing::debug!("args: {:?}", &args);
+                for arg in &args {
+                    tracing::debug!("arg: {}", String::from_utf8_lossy(&arg));
+                }
                 let args_map = process_args(&args).await?;
                 let result =
                     verify_authorization(shared_state.clone(), &user, &rem_address, args_map).await;
@@ -222,7 +299,7 @@ pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<(Vec<String>, Vec<Strin
         } else if val.starts_with(&"cmd=".to_string()) || val.starts_with(&"cmdarg=".to_string()) {
             cmd.push(val);
         } else {
-            return Err(Report::msg("the current arguement is not processed"));
+            continue;
         }
     }
     Ok((service, cmd))
@@ -247,6 +324,7 @@ pub async fn verify_authorization(
         .groups
         .contains_key(&next_group_name);
     while next_group_found {
+        tracing::debug!("verifying authorization against group {}", &next_group_name);
         let next_group = shared_state
             .read()
             .await
@@ -255,9 +333,12 @@ pub async fn verify_authorization(
             .unwrap()
             .clone();
         let list_service = &mut verify_service(&next_group.service, &mut args_local.0).await;
+        tracing::debug!("service authorization results: {:?}", &list_service);
         let list_cmd = &mut verify_cmd(&next_group.cmds, &mut args_local.1).await;
+        tracing::debug!("cmd authorization results: {:?}", &list_cmd);
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
+        tracing::debug!("acl results: ({}, {})", &acl_result, &matching_acl);
         if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
             auth_result.append(list_service);
             auth_result.append(list_cmd);
@@ -300,7 +381,9 @@ pub async fn verify_cmd(cmd: &Option<Vec<Cmd>>, args: &mut Vec<String>) -> Vec<S
         for cmd in cmds {
             let result = &mut cmd.compare(args);
             if result.len() != 0 {
-                cmd_result.append(result)
+                let mut formatted: Vec<String> =
+                    result.iter().map(|r| format!("cmd-arg = {}", r)).collect();
+                cmd_result.append(&mut formatted);
             }
         }
     }
