@@ -34,15 +34,15 @@ pub trait Compare {
     fn avtype(&self) -> &'static str;
     fn name(&self) -> String;
     fn get_args(&self) -> Vec<String>;
-    fn compare(&self, args: &Vec<String>) -> Vec<String> {
+    fn compare(&self, packet_args: &Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
         tracing::debug!(
             "comparing packet=<{:?}> with config=<{:?}={:?}>",
-            args,
+            packet_args,
             self.avtype(),
             self.name()
         );
-        for avpairs in args.iter() {
+        for avpairs in packet_args.iter() {
             let target_value = self.name();
             let split_avpairs: Vec<&str> = (&avpairs).split(&"=").collect();
             if split_avpairs.len() != 2 {
@@ -356,7 +356,7 @@ pub async fn verify_authorization(
         if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
             auth_result.append(list_service);
             auth_result.append(list_cmd);
-            auth_result.push(matching_acl.to_string());
+            auth_result.push(format!("acl = {}", matching_acl));
             return auth_result;
         }
         if let Some(member) = &next_group.member {
@@ -383,26 +383,49 @@ pub async fn verify_service(
     let mut service_result: Vec<String> = Vec::new();
     if let Some(services) = service {
         for service in services {
-            let result = &mut service.compare(&packet_args.service);
-            if result.len() != 0 {
-                service_result.append(result)
-            }
+            let config_service_args = &mut service.compare(&packet_args.service);
+            service_result.append(config_service_args);
         }
     }
     service_result
+}
+
+pub async fn verify_cmd_args(
+    config_cmd_args: &Vec<String>,
+    packet_args: &PacketArgs,
+) -> Vec<String> {
+    let mut matching_args: Vec<String> = Vec::new();
+    let mut packet_cmd_args_joined = String::new();
+    for packet_cmd_arg in &packet_args.cmd_args {
+        let split_args: Vec<&str> = packet_cmd_arg.split("=").collect();
+        if split_args.len() != 2 {
+            continue;
+        }
+        packet_cmd_args_joined.push_str(split_args[1]);
+        packet_cmd_args_joined.push_str(" ");
+    }
+    tracing::debug!("packet_cmd_args_joined: {}", packet_cmd_args_joined);
+    for config_cmd_arg in config_cmd_args {
+        // Todo: cache regexes in shared state
+        let re = Regex::new(config_cmd_arg).unwrap_or_else(|_| Regex::new("$.").unwrap());
+        tracing::debug!("config_cmd_arg: {}", config_cmd_arg);
+        if re.is_match(&packet_cmd_args_joined) {
+            matching_args.append(&mut packet_args.cmd_args.clone());
+        }
+    }
+    matching_args
 }
 
 pub async fn verify_cmd(cmd: &Option<Vec<Cmd>>, packet_args: &PacketArgs) -> Vec<String> {
     let mut cmd_result: Vec<String> = Vec::new();
     if let Some(cmds) = cmd {
         for cmd in cmds {
-            let result = &mut cmd.compare(&packet_args.cmd);
-            if result.len() == 0 {
-                continue;
+            let config_cmd_args = &mut cmd.compare(&packet_args.cmd);
+            if packet_args.cmd_args.len() > 0 {
+                cmd_result.append(&mut verify_cmd_args(config_cmd_args, packet_args).await);
+            } else {
+                cmd_result.append(config_cmd_args);
             }
-            let mut formatted: Vec<String> =
-                result.iter().map(|r| format!("cmd-arg = {}", r)).collect();
-            cmd_result.append(&mut formatted);
         }
     }
     cmd_result
