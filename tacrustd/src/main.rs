@@ -259,17 +259,16 @@ fn normalized_match(s1: &str, s2: &str) -> bool {
 }
 
 pub trait Compare {
-    fn tactype(&self) -> &'static str;
+    fn avtype(&self) -> &'static str;
     fn name(&self) -> String;
     fn get_args(&self) -> Vec<String>;
     fn compare(&self, args: &mut Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
         tracing::debug!(
-            "comparing tactype={:?} name={:?} config={:?} packet={:?} ",
-            self.tactype(),
-            self.name(),
-            self.get_args(),
-            args
+            "comparing packet=<{:?}> with config=<{:?}={:?}>",
+            args,
+            self.avtype(),
+            self.name()
         );
         for avpairs in args.iter() {
             let target_value = self.name();
@@ -279,20 +278,20 @@ pub trait Compare {
                 continue;
             }
             let (tactype, tacvalue) = (split_avpairs[0], split_avpairs[1]);
-            if tactype == self.tactype() && normalized_match(tacvalue, &target_value) {
+            if tactype == self.avtype() && normalized_match(tacvalue, &target_value) {
                 tracing::debug!(
-                    "\tpacket [{}] == config [{}={}] ✓",
+                    "\tpacket <{}> == config <{}={}> ✓",
                     avpairs,
-                    self.tactype(),
+                    self.avtype(),
                     &target_value
                 );
                 let args = &mut self.get_args();
                 result_args.append(args);
             } else {
                 tracing::debug!(
-                    "\tpacket [{}] != config [{}={}] ✘",
+                    "\tpacket <{}> != config <{}={}> ✘",
                     avpairs,
-                    self.tactype(),
+                    self.avtype(),
                     &target_value
                 );
             }
@@ -309,7 +308,7 @@ impl Compare for Service {
         self.args.clone()
     }
 
-    fn tactype(&self) -> &'static str {
+    fn avtype(&self) -> &'static str {
         "service"
     }
 }
@@ -321,7 +320,7 @@ impl Compare for Cmd {
         self.list.clone()
     }
 
-    fn tactype(&self) -> &'static str {
+    fn avtype(&self) -> &'static str {
         "cmd"
     }
 }
