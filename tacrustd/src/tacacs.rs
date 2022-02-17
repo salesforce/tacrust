@@ -14,6 +14,13 @@ use tokio::sync::RwLock;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 
+#[derive(Clone, Debug)]
+pub struct PacketArgs {
+    service: Vec<String>,
+    cmd: Vec<String>,
+    cmd_args: Vec<String>,
+}
+
 fn normalized_match(s1: &str, s2: &str) -> bool {
     if s1.len() == 0 || s2.len() == 0 {
         return true;
@@ -27,7 +34,7 @@ pub trait Compare {
     fn avtype(&self) -> &'static str;
     fn name(&self) -> String;
     fn get_args(&self) -> Vec<String>;
-    fn compare(&self, args: &mut Vec<String>) -> Vec<String> {
+    fn compare(&self, args: &Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
         tracing::debug!(
             "comparing packet=<{:?}> with config=<{:?}={:?}>",
@@ -288,32 +295,39 @@ pub async fn process_tacacs_packet(
     Ok(response_bytes)
 }
 
-pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<(Vec<String>, Vec<String>), Report> {
-    let mut service: Vec<String> = Vec::new();
-    let mut cmd: Vec<String> = Vec::new();
+pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<PacketArgs, Report> {
+    let mut packet_args = PacketArgs {
+        service: vec![],
+        cmd: vec![],
+        cmd_args: vec![],
+    };
 
     for args in args.iter() {
         let val = String::from_utf8_lossy(args.clone().as_slice()).to_string();
         if val.starts_with(&"service=".to_string()) {
-            service.push(val);
-        } else if val.starts_with(&"cmd=".to_string()) || val.starts_with(&"cmdarg=".to_string()) {
-            cmd.push(val);
+            packet_args.service.push(val);
+        } else if val.starts_with(&"cmd=".to_string()) {
+            packet_args.cmd.push(val);
+        } else if val.starts_with(&"cmdarg=".to_string())
+            || val.starts_with(&"cmd-arg=".to_string())
+        {
+            packet_args.cmd_args.push(val);
         } else {
             continue;
         }
     }
-    Ok((service, cmd))
+    Ok(packet_args)
 }
 
 pub async fn verify_authorization(
     shared_state: Arc<RwLock<State>>,
     user: &User,
     rem_address: &[u8],
-    args: (Vec<String>, Vec<String>),
+    args: PacketArgs,
 ) -> Vec<String> {
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
-    let args_local = &mut args.clone();
+    let packet_args = &mut args.clone();
     if user.member.is_none() {
         return auth_result;
     }
@@ -332,9 +346,9 @@ pub async fn verify_authorization(
             .get(&next_group_name)
             .unwrap()
             .clone();
-        let list_service = &mut verify_service(&next_group.service, &mut args_local.0).await;
+        let list_service = &mut verify_service(&next_group.service, &packet_args).await;
         tracing::debug!("service authorization results: {:?}", &list_service);
-        let list_cmd = &mut verify_cmd(&next_group.cmds, &mut args_local.1).await;
+        let list_cmd = &mut verify_cmd(&next_group.cmds, &packet_args).await;
         tracing::debug!("cmd authorization results: {:?}", &list_cmd);
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
@@ -362,11 +376,14 @@ pub async fn verify_authorization(
     return auth_result;
 }
 
-pub async fn verify_service(service: &Option<Vec<Service>>, args: &mut Vec<String>) -> Vec<String> {
+pub async fn verify_service(
+    service: &Option<Vec<Service>>,
+    packet_args: &PacketArgs,
+) -> Vec<String> {
     let mut service_result: Vec<String> = Vec::new();
     if let Some(services) = service {
         for service in services {
-            let result = &mut service.compare(args);
+            let result = &mut service.compare(&packet_args.service);
             if result.len() != 0 {
                 service_result.append(result)
             }
@@ -375,16 +392,17 @@ pub async fn verify_service(service: &Option<Vec<Service>>, args: &mut Vec<Strin
     service_result
 }
 
-pub async fn verify_cmd(cmd: &Option<Vec<Cmd>>, args: &mut Vec<String>) -> Vec<String> {
+pub async fn verify_cmd(cmd: &Option<Vec<Cmd>>, packet_args: &PacketArgs) -> Vec<String> {
     let mut cmd_result: Vec<String> = Vec::new();
     if let Some(cmds) = cmd {
         for cmd in cmds {
-            let result = &mut cmd.compare(args);
-            if result.len() != 0 {
-                let mut formatted: Vec<String> =
-                    result.iter().map(|r| format!("cmd-arg = {}", r)).collect();
-                cmd_result.append(&mut formatted);
+            let result = &mut cmd.compare(&packet_args.cmd);
+            if result.len() == 0 {
+                continue;
             }
+            let mut formatted: Vec<String> =
+                result.iter().map(|r| format!("cmd-arg = {}", r)).collect();
+            cmd_result.append(&mut formatted);
         }
     }
     cmd_result
