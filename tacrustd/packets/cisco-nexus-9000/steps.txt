@@ -1,0 +1,40 @@
+User commands:
+    - show run
+    - show version
+
+Admin commands:
+    - show clock
+    - dir /home
+
+User: aditya
+Member of group-superuser, should be able to run:
+    - show run
+    - show version
+should ALSO be able to run:
+    - show clock
+    - dir /home
+
+01. login with bad password from aditya [should fail]
+02. login with good password from aditya [should succeed]
+03. show run [should succeed] (this also implicitly fetches an authorization for just the shell)
+04. show version [should succeed]
+05. show interface [should fail]
+06. show clock [this actually fails because shrubbery daemon stops at first match for the "show" command]
+07. dir / [should fail]
+08. dir /home [should succeed]
+
+User: kamran
+Member of group-user, should able to run:
+    - show run
+    - show version
+should NOT be able to run:
+    - show clock
+    - dir /home
+
+01. login with good password from kamran [should succeed]
+02. show run [should fail] (this also implicitly fetches an authorization just for the shell -- which succeeds)
+03. show version [should fail]
+04. show interface [should fail]
+05. show clock [should succeed]
+06. dir / [should fail]
+07. dir /home [should succeed]

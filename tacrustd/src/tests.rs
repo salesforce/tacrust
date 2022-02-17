@@ -49,7 +49,9 @@ where
         thread::sleep(timeout);
         cancel_tx.send(()).unwrap();
     });
+    tracing::info!("-------------------------[START SERVER]-------------------------------");
     test();
+    tracing::info!("--------------------------[END SERVER]--------------------------------");
     RUNTIME.block_on(join_handle).unwrap();
 }
 
@@ -133,16 +135,6 @@ fn test_author_packet(packet: &[u8], key: &[u8], expected_status: AuthorizationS
 
 #[test]
 #[serial]
-fn server_startup_and_shutdown() {
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), || {
-        let server_address = std::env::var("TACRUST_LISTEN_ADDRESS").unwrap();
-        tracing::info!("server is running on {}", server_address);
-    });
-}
-
-#[test]
-#[serial]
 fn test_java_author() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -167,5 +159,50 @@ fn test_golang_authen() {
             let packet = include_bytes!("../packets/golang-authen-2.tacacs");
             test_authen_packet(packet, key, AuthenticationStatus::Pass);
         }
+    });
+}
+
+#[test]
+#[serial]
+fn test_cisco_nexus_9000() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/aditya/01.a-authen-start-bad.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::GetPass);
+
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/aditya/01.b-authen-cont-bad.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::Fail);
+
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/aditya/02.a-authen-start-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::GetPass);
+
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/aditya/02.b-authen-cont-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::Pass);
+
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/aditya/03.a-author-shell-good.tacacs");
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/aditya/03.b-author-shell-show-run-good.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/aditya/04-author-shell-show-version-good.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+
+        /* This test fails because cmd-arg comparison is not implemented yet
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/aditya/05-author-shell-show-interface-bad.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        */
     });
 }

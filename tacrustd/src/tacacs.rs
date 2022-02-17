@@ -1,12 +1,11 @@
 use crate::state::State;
 use crate::{Cmd, Compare, Credentials, Service, User};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-
 use color_eyre::Report;
 use regex::Regex;
 use simple_error::bail;
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tacrust::{
     parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthorizationStatus, Body,
     Header, Packet,
@@ -157,7 +156,9 @@ pub async fn process_tacacs_packet(
                     .get(&username)
                     .unwrap()
                     .clone();
-                tracing::debug!("args: {:?}", &args);
+                for arg in &args {
+                    tracing::debug!("arg: {}", String::from_utf8_lossy(&arg));
+                }
                 let args_map = process_args(&args).await?;
                 let result =
                     verify_authorization(shared_state.clone(), &user, &rem_address, args_map).await;
@@ -222,7 +223,7 @@ pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<(Vec<String>, Vec<Strin
         } else if val.starts_with(&"cmd=".to_string()) || val.starts_with(&"cmdarg=".to_string()) {
             cmd.push(val);
         } else {
-            return Err(Report::msg("the current arguement is not processed"));
+            continue;
         }
     }
     Ok((service, cmd))
@@ -247,6 +248,7 @@ pub async fn verify_authorization(
         .groups
         .contains_key(&next_group_name);
     while next_group_found {
+        tracing::debug!("verifying authorization against group {}", &next_group_name);
         let next_group = shared_state
             .read()
             .await
@@ -255,9 +257,12 @@ pub async fn verify_authorization(
             .unwrap()
             .clone();
         let list_service = &mut verify_service(&next_group.service, &mut args_local.0).await;
+        tracing::debug!("service authorization results: {:?}", &list_service);
         let list_cmd = &mut verify_cmd(&next_group.cmds, &mut args_local.1).await;
+        tracing::debug!("cmd authorization results: {:?}", &list_cmd);
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
+        tracing::debug!("acl results: ({}, {})", &acl_result, &matching_acl);
         if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
             auth_result.append(list_service);
             auth_result.append(list_cmd);
@@ -300,7 +305,9 @@ pub async fn verify_cmd(cmd: &Option<Vec<Cmd>>, args: &mut Vec<String>) -> Vec<S
         for cmd in cmds {
             let result = &mut cmd.compare(args);
             if result.len() != 0 {
-                cmd_result.append(result)
+                let mut formatted: Vec<String> =
+                    result.iter().map(|r| format!("cmd-arg = {}", r)).collect();
+                cmd_result.append(&mut formatted);
             }
         }
     }

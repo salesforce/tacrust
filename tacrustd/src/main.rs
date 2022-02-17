@@ -249,6 +249,15 @@ async fn process(
     Ok(())
 }
 
+fn normalized_match(s1: &str, s2: &str) -> bool {
+    if s1.len() == 0 || s2.len() == 0 {
+        return true;
+    }
+    let s1_match = s1 == "shell" || s1 == "exec";
+    let s2_match = s2 == "shell" || s2 == "exec";
+    return (s1_match && s2_match) || (s1 == s2);
+}
+
 pub trait Compare {
     fn tactype(&self) -> &'static str;
     fn name(&self) -> String;
@@ -270,7 +279,7 @@ pub trait Compare {
                 continue;
             }
             let (tactype, tacvalue) = (split_avpairs[0], split_avpairs[1]);
-            if tactype == self.tactype() && tacvalue == (&target_value) {
+            if tactype == self.tactype() && normalized_match(tacvalue, &target_value) {
                 tracing::debug!(
                     "\tpacket [{}] == config [{}={}] ✓",
                     avpairs,
@@ -281,7 +290,7 @@ pub trait Compare {
                 result_args.append(args);
             } else {
                 tracing::debug!(
-                    "\tpacket [{}] != config [{}={}]",
+                    "\tpacket [{}] != config [{}={}] ✘",
                     avpairs,
                     self.tactype(),
                     &target_value
