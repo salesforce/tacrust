@@ -1,4 +1,5 @@
 use crate::start_server;
+use base64::display::Base64Display;
 use lazy_static::lazy_static;
 use rand::Rng;
 use serial_test::serial;
@@ -6,7 +7,7 @@ use std::io::prelude::*;
 use std::net::{SocketAddr, TcpStream};
 use std::thread;
 use std::time::Duration;
-use tacrust::{AuthenticationStatus, Body};
+use tacrust::{AuthenticationStatus, AuthorizationStatus, Body};
 use tokio::runtime::Runtime;
 use tracing_subscriber::EnvFilter;
 
@@ -81,16 +82,36 @@ fn server_startup_and_shutdown() {
 #[test]
 #[serial]
 fn test_java_author() {
+    let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
     test_server(port, Duration::from_secs(1), || {
         let packet = include_bytes!("../packets/java-author-1.tacacs");
         let mut client = get_tcp_client_for_tacrust();
-        tracing::info!("sending packet: {:?}", packet);
+        tracing::info!(
+            "sending packet: {}",
+            Base64Display::with_config(packet, base64::STANDARD)
+        );
         client.write(packet).unwrap();
         let mut response = [0; 4096];
         tracing::info!("receiving response");
         let len = client.read(&mut response).unwrap();
-        tracing::info!("received response: {:?}", &response[0..len]);
+        tracing::info!(
+            "received response: {}",
+            Base64Display::with_config(&response[0..len], base64::STANDARD)
+        );
+        let (_, parsed_response) = tacrust::parser::parse_packet(&response[0..len], key).unwrap();
+        tracing::info!("parsed: {:?}", parsed_response);
+        match parsed_response.body {
+            Body::AuthorizationReply {
+                status,
+                data: _,
+                server_msg: _,
+                args: _,
+            } => {
+                assert_eq!(status, AuthorizationStatus::AuthStatusFail);
+            }
+            _ => tracing::info!("invalid response"),
+        }
     });
 }
 
@@ -103,12 +124,18 @@ fn test_golang_authen() {
         {
             let mut client = get_tcp_client_for_tacrust();
             let packet = include_bytes!("../packets/golang-authen-1.tacacs");
-            tracing::info!("sending packet: {:?}", packet);
+            tracing::info!(
+                "sending packet: {}",
+                Base64Display::with_config(packet, base64::STANDARD)
+            );
             client.write(packet).unwrap();
             let mut response = [0; 4096];
             tracing::info!("receiving response");
             let len = client.read(&mut response).unwrap();
-            tracing::info!("received response: {:?}", &response[0..len]);
+            tracing::info!(
+                "received response: {}",
+                Base64Display::with_config(&response[0..len], base64::STANDARD)
+            );
             let (_, parsed_response) =
                 tacrust::parser::parse_packet(&response[0..len], key).unwrap();
             tracing::info!("parsed: {:?}", parsed_response);
@@ -128,12 +155,18 @@ fn test_golang_authen() {
         {
             let mut client = get_tcp_client_for_tacrust();
             let packet = include_bytes!("../packets/golang-authen-2.tacacs");
-            tracing::info!("sending packet: {:?}", packet);
+            tracing::info!(
+                "sending packet: {}",
+                Base64Display::with_config(packet, base64::STANDARD)
+            );
             client.write(packet).unwrap();
             let mut response = [0; 4096];
             tracing::info!("receiving response");
             let len = client.read(&mut response).unwrap();
-            tracing::info!("received response: {:?}", &response[0..len]);
+            tracing::info!(
+                "received response: {}",
+                Base64Display::with_config(&response[0..len], base64::STANDARD)
+            );
             let (_, parsed_response) =
                 tacrust::parser::parse_packet(&response[0..len], key).unwrap();
             tracing::info!("parsed: {:?}", parsed_response);

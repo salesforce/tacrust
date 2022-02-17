@@ -214,12 +214,12 @@ async fn process(
     loop {
         tokio::select! {
             Some(msg) = client.rx.recv() => {
-                tracing::info!("sending {} bytes to {}: {:?}", msg.len(), addr, msg);
+                tracing::info!("sending {} bytes to {}", msg.len(), addr);
                 client.pipe.send(msg.into()).await?;
             }
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
-                    tracing::info!("received {} bytes from {}: {:?}", msg.len(), addr, msg.to_vec());
+                    tracing::info!("received {} bytes from {}", msg.len(), addr);
                     let response = tacacs::process_tacacs_packet(state.clone(), &addr, &msg).await?;
 
                     {

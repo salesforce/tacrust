@@ -33,7 +33,7 @@ pub enum AuthenticationStatus {
     Follow = 0x21,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
 pub enum AuthorizationStatus {
     AuthPassAdd = 0x01,
     AuthPassRepl = 0x02,
@@ -42,7 +42,7 @@ pub enum AuthorizationStatus {
     AuthStatusFollow = 0x21,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
 pub enum AuthenticationMethod {
     AuthNotSet = 0x00,
     AuthNone = 0x01,
