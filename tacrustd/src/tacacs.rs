@@ -348,7 +348,7 @@ pub async fn verify_authorization(
             .clone();
         let list_service = &mut verify_service(&next_group.service, &packet_args).await;
         tracing::debug!("service authorization results: {:?}", &list_service);
-        let list_cmd = &mut verify_cmd(&next_group.cmds, &packet_args).await;
+        let list_cmd = &mut verify_cmd(shared_state.clone(), &next_group.cmds, &packet_args).await;
         tracing::debug!("cmd authorization results: {:?}", &list_cmd);
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
@@ -391,6 +391,7 @@ pub async fn verify_service(
 }
 
 pub async fn verify_cmd_args(
+    shared_state: Arc<RwLock<State>>,
     config_cmd_args: &Vec<String>,
     packet_args: &PacketArgs,
 ) -> Vec<String> {
@@ -406,23 +407,36 @@ pub async fn verify_cmd_args(
     }
     tracing::debug!("packet_cmd_args_joined: {}", packet_cmd_args_joined);
     for config_cmd_arg in config_cmd_args {
-        // Todo: cache regexes in shared state
-        let re = Regex::new(config_cmd_arg).unwrap_or_else(|_| Regex::new("$.").unwrap());
         tracing::debug!("config_cmd_arg: {}", config_cmd_arg);
-        if re.is_match(&packet_cmd_args_joined) {
+        let regex_compiled = shared_state
+            .write()
+            .await
+            .regexes
+            .entry(config_cmd_arg.to_string())
+            .or_insert_with(|| {
+                Arc::new(Regex::new(config_cmd_arg).unwrap_or_else(|_| Regex::new("$.").unwrap()))
+            })
+            .clone();
+        if regex_compiled.is_match(&packet_cmd_args_joined) {
             matching_args.append(&mut packet_args.cmd_args.clone());
         }
     }
     matching_args
 }
 
-pub async fn verify_cmd(cmd: &Option<Vec<Cmd>>, packet_args: &PacketArgs) -> Vec<String> {
+pub async fn verify_cmd(
+    shared_state: Arc<RwLock<State>>,
+    cmd: &Option<Vec<Cmd>>,
+    packet_args: &PacketArgs,
+) -> Vec<String> {
     let mut cmd_result: Vec<String> = Vec::new();
     if let Some(cmds) = cmd {
         for cmd in cmds {
             let config_cmd_args = &mut cmd.compare(&packet_args.cmd);
             if packet_args.cmd_args.len() > 0 {
-                cmd_result.append(&mut verify_cmd_args(config_cmd_args, packet_args).await);
+                cmd_result.append(
+                    &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await,
+                );
             } else {
                 cmd_result.append(config_cmd_args);
             }
