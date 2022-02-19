@@ -198,11 +198,68 @@ fn test_cisco_nexus_9000() {
         );
         test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
 
-        /* This test fails because cmd-arg comparison is not implemented yet
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/05-author-shell-show-interface-bad.tacacs"
         );
         test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
-        */
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/aditya/06-author-shell-show-clock-bad.tacacs"
+        );
+        // Todo: This actually fails in Shrubbery daemon which stops recursing through parent
+        // groups when it hits a match. Need to decide whether we should do the same
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/aditya/07-author-shell-dir-root-bad.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/aditya/08-author-shell-dir-home-good.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/kamran/01.a-authen-start-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::GetPass);
+
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/kamran/01.b-authen-cont-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::Pass);
+
+        let packet =
+            include_bytes!("../packets/cisco-nexus-9000/kamran/02.a-author-shell-good.tacacs");
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/kamran/02.b-author-shell-show-run-bad.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/kamran/03-author-shell-show-version-bad.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/kamran/04-author-shell-show-interface-bad.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/kamran/05-author-shell-show-clock-good.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/kamran/06-author-shell-dir-root-bad.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+
+        let packet = include_bytes!(
+            "../packets/cisco-nexus-9000/kamran/07-author-shell-dir-home-good.tacacs"
+        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
     });
 }
