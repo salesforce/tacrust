@@ -49,9 +49,7 @@ where
         thread::sleep(timeout);
         cancel_tx.send(()).unwrap();
     });
-    tracing::info!("-------------------------[START SERVER]-------------------------------");
     test();
-    tracing::info!("--------------------------[END SERVER]--------------------------------");
     RUNTIME.block_on(join_handle).unwrap();
 }
 
