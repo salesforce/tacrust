@@ -30,41 +30,43 @@ fn normalized_match(s1: &str, s2: &str) -> bool {
     return (s1_match && s2_match) || (s1 == s2);
 }
 
-pub trait Compare {
-    fn avtype(&self) -> &'static str;
-    fn name(&self) -> String;
-    fn get_args(&self) -> Vec<String>;
-    fn compare(&self, packet_args: &Vec<String>) -> Vec<String> {
+pub trait ConfigAvPair {
+    fn key(&self) -> &'static str;
+    fn value(&self) -> String;
+    fn subargs(&self) -> Vec<String>;
+    fn compare(&self, packet_avpairs: &Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
         tracing::debug!(
-            "comparing packet=<{:?}> with config=<{:?}={:?}>",
-            packet_args,
-            self.avtype(),
-            self.name()
+            "comparing config=<{}={}> with packet=<{:?}>",
+            self.key(),
+            self.value(),
+            packet_avpairs
         );
-        for avpairs in packet_args.iter() {
-            let target_value = self.name();
-            let split_avpairs: Vec<&str> = (&avpairs).split(&"=").collect();
-            if split_avpairs.len() != 2 {
-                tracing::debug!("\tinvalid values for config_args [{:?}]", avpairs);
+        for packet_avpair in packet_avpairs.iter() {
+            let self_value = self.value();
+            let packet_avpair_split: Vec<&str> = (&packet_avpair).split(&"=").collect();
+            if packet_avpair_split.len() != 2 {
+                tracing::debug!("\tinvalid arguments in packet [{:?}]", packet_avpair);
                 continue;
             }
-            let (tactype, tacvalue) = (split_avpairs[0], split_avpairs[1]);
-            if tactype == self.avtype() && normalized_match(tacvalue, &target_value) {
+            let (packet_avpair_key, packet_avpair_value) =
+                (packet_avpair_split[0], packet_avpair_split[1]);
+            if packet_avpair_key == self.key() && normalized_match(packet_avpair_value, &self_value)
+            {
                 tracing::debug!(
-                    "\tpacket <{}> == config <{}={}> ✓",
-                    avpairs,
-                    self.avtype(),
-                    &target_value
+                    "\tconfig <{}={}> == packet<{}> ✓",
+                    self.key(),
+                    &self_value,
+                    packet_avpair
                 );
-                let args = &mut self.get_args();
+                let args = &mut self.subargs();
                 result_args.append(args);
             } else {
                 tracing::debug!(
-                    "\tpacket <{}> != config <{}={}> ✘",
-                    avpairs,
-                    self.avtype(),
-                    &target_value
+                    "\tconfig <{}={}> != packet<{}> ✘",
+                    self.key(),
+                    &self_value,
+                    packet_avpair
                 );
             }
         }
@@ -72,27 +74,27 @@ pub trait Compare {
     }
 }
 
-impl Compare for Service {
-    fn name(&self) -> String {
+impl ConfigAvPair for Service {
+    fn value(&self) -> String {
         self.name.clone()
     }
-    fn get_args(&self) -> Vec<String> {
+    fn subargs(&self) -> Vec<String> {
         self.args.clone()
     }
 
-    fn avtype(&self) -> &'static str {
+    fn key(&self) -> &'static str {
         "service"
     }
 }
-impl Compare for Cmd {
-    fn name(&self) -> String {
+impl ConfigAvPair for Cmd {
+    fn value(&self) -> String {
         self.name.clone()
     }
-    fn get_args(&self) -> Vec<String> {
+    fn subargs(&self) -> Vec<String> {
         self.list.clone()
     }
 
-    fn avtype(&self) -> &'static str {
+    fn key(&self) -> &'static str {
         "cmd"
     }
 }
