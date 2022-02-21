@@ -42,7 +42,7 @@ pub trait ConfigAvPair {
             self.value(),
             packet_avpairs
         );
-        for packet_avpair in packet_avpairs.iter() {
+        for packet_avpair in packet_avpairs {
             let self_value = self.value();
             let packet_avpair_split: Vec<&str> = (&packet_avpair).split(&"=").collect();
             if packet_avpair_split.len() != 2 {
