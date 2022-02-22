@@ -204,12 +204,12 @@ fn setup() -> Result<Config, Report> {
 }
 
 async fn process(
-    state: Arc<RwLock<State>>,
+    shared_state: Arc<RwLock<State>>,
     stream: TcpStream,
     addr: SocketAddr,
 ) -> Result<(), Report> {
     let pipe = Framed::new(stream, BytesCodec::new());
-    let mut client = Client::new(state.clone(), pipe).await?;
+    let mut client = Client::new(shared_state.clone(), pipe).await?;
 
     loop {
         tokio::select! {
@@ -220,8 +220,8 @@ async fn process(
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
                     tracing::info!("received {} bytes from {}", msg.len(), addr);
-                    let response = tacacs::process_tacacs_packet(state.clone(), &addr, &msg).await?;
-                    state.read().await.unicast(addr, response).await;
+                    let response = tacacs::process_tacacs_packet(shared_state.clone(), &addr, &msg).await?;
+                    shared_state.read().await.unicast(addr, response).await;
                 }
                 Some(Err(e)) => {
                     tracing::error!(
@@ -235,12 +235,7 @@ async fn process(
         }
     }
 
-    {
-        let mut state = state.write().await;
-        state.sockets.remove(&addr);
-    }
-
+    shared_state.write().await.sockets.remove(&addr);
     tracing::info!("connection from {} terminated", addr);
-
     Ok(())
 }
