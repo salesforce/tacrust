@@ -261,3 +261,14 @@ fn test_cisco_nexus_9000() {
         test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
     });
 }
+
+#[test]
+#[serial]
+fn test_f5_lb() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(1), || {
+        let packet = include_bytes!("../packets/f5-lb/01-authen-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::Pass);
+    });
+}
