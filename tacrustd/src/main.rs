@@ -221,11 +221,7 @@ async fn process(
                 Some(Ok(msg)) => {
                     tracing::info!("received {} bytes from {}", msg.len(), addr);
                     let response = tacacs::process_tacacs_packet(state.clone(), &addr, &msg).await?;
-
-                    {
-                        let state = state.read().await;
-                        state.unicast(addr, response).await;
-                    }
+                    state.read().await.unicast(addr, response).await;
                 }
                 Some(Err(e)) => {
                     tracing::error!(
