@@ -27,7 +27,7 @@ pub enum AuthenticationType {
     Pap = 0x02,
     Chap = 0x03,
     Mschap = 0x05,
-    Mschapv2 = 0x06
+    Mschapv2 = 0x06,
 }
 
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
