@@ -22,6 +22,15 @@ pub enum PacketType {
 }
 
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
+pub enum AuthenticationType {
+    Ascii = 0x01,
+    Pap = 0x02,
+    Chap = 0x03,
+    Mschap = 0x05,
+    Mschapv2 = 0x06
+}
+
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
 pub enum AuthenticationStatus {
     Pass = 0x01,
     Fail = 0x02,
