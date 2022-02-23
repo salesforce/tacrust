@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tacrust::{
-    parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthorizationStatus, Body,
-    Header, Packet,
+    parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthenticationType,
+    AuthorizationStatus, Body, Header, Packet,
 };
 use tokio::sync::RwLock;
 
@@ -141,13 +141,13 @@ pub async fn process_tacacs_packet(
                     String::from_utf8_lossy(&user).to_string(),
                 );
 
-                if authen_type == 2 {
-                    let username = {
-                        let map = map.read().await;
-                        map.get(CLIENT_MAP_KEY_USERNAME)
-                            .unwrap_or(&String::new())
-                            .clone()
-                    };
+                if authen_type == AuthenticationType::Pap as u8 {
+                    let username = map
+                        .read()
+                        .await
+                        .get(CLIENT_MAP_KEY_USERNAME)
+                        .unwrap_or(&String::new())
+                        .clone();
                     let password = String::from_utf8_lossy(&data).to_string();
                     let authen_status = if verify_user_credentials(
                         &(shared_state.read().await.users),
