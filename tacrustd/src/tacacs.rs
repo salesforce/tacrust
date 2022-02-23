@@ -128,12 +128,12 @@ pub async fn process_tacacs_packet(
         Body::AuthenticationStart {
             action: _,
             priv_lvl: _,
-            authen_type: _,
+            authen_type,
             authen_service: _,
             user,
             port: _,
             rem_addr: _,
-            data: _,
+            data,
         } => {
             if user.len() > 0 {
                 map.write().await.insert(
@@ -141,15 +141,53 @@ pub async fn process_tacacs_packet(
                     String::from_utf8_lossy(&user).to_string(),
                 );
 
-                Ok(Packet {
-                    header: generate_response_header(&request_packet.header),
-                    body: Body::AuthenticationReply {
-                        status: AuthenticationStatus::GetPass,
-                        flags: AuthenticationReplyFlags { no_echo: true },
-                        server_msg: b"Password: ".to_vec(),
-                        data: b"".to_vec(),
-                    },
-                })
+                if authen_type == 2 {
+                    let username = {
+                        let map = map.read().await;
+                        map.get(CLIENT_MAP_KEY_USERNAME)
+                            .unwrap_or(&String::new())
+                            .clone()
+                    };
+                    let password = String::from_utf8_lossy(&data).to_string();
+                    let authen_status = if verify_user_credentials(
+                        &(shared_state.read().await.users),
+                        &username,
+                        &password,
+                    )
+                    .await
+                    .unwrap_or(false)
+                    {
+                        AuthenticationStatus::Pass
+                    } else {
+                        AuthenticationStatus::Fail
+                    };
+                    tracing::debug!(
+                        "verifying credentials: username={}, password=({} bytes) | result={:?}",
+                        username,
+                        password.len(),
+                        authen_status
+                    );
+
+                    Ok(Packet {
+                        header: generate_response_header(&request_packet.header),
+                        body: Body::AuthenticationReply {
+                            status: authen_status,
+                            flags: AuthenticationReplyFlags { no_echo: true },
+                            server_msg: b"".to_vec(),
+                            data: b"".to_vec(),
+                        },
+                    })
+                } else {
+                    Ok(Packet {
+                        header: generate_response_header(&request_packet.header),
+                        body: Body::AuthenticationReply {
+                            status: AuthenticationStatus::GetPass,
+                            flags: AuthenticationReplyFlags { no_echo: true },
+                            server_msg: b"Password: ".to_vec(),
+                            data: b"".to_vec(),
+                        },
+                    })
+                }
             } else {
                 Ok(Packet {
                     header: generate_response_header(&request_packet.header),
