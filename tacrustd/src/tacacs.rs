@@ -149,18 +149,15 @@ pub async fn process_tacacs_packet(
                         .unwrap_or(&String::new())
                         .clone();
                     let password = String::from_utf8_lossy(&data).to_string();
-                    let authen_status = if verify_user_credentials(
-                        &(shared_state.read().await.users),
-                        &username,
-                        &password,
-                    )
-                    .await
-                    .unwrap_or(false)
-                    {
-                        AuthenticationStatus::Pass
-                    } else {
-                        AuthenticationStatus::Fail
-                    };
+                    let authen_status =
+                        if verify_user_credentials(shared_state.clone(), &username, &password)
+                            .await
+                            .unwrap_or(false)
+                        {
+                            AuthenticationStatus::Pass
+                        } else {
+                            AuthenticationStatus::Fail
+                        };
                     tracing::debug!(
                         "verifying credentials: username={}, password=({} bytes) | result={:?}",
                         username,
@@ -213,18 +210,15 @@ pub async fn process_tacacs_packet(
             };
             if username.len() > 0 {
                 let password = String::from_utf8_lossy(&user).to_string();
-                let authen_status = if verify_user_credentials(
-                    &(shared_state.read().await.users),
-                    &username,
-                    &password,
-                )
-                .await
-                .unwrap_or(false)
-                {
-                    AuthenticationStatus::Pass
-                } else {
-                    AuthenticationStatus::Fail
-                };
+                let authen_status =
+                    if verify_user_credentials(shared_state.clone(), &username, &password)
+                        .await
+                        .unwrap_or(false)
+                    {
+                        AuthenticationStatus::Pass
+                    } else {
+                        AuthenticationStatus::Fail
+                    };
                 tracing::debug!(
                     "verifying credentials: username={}, password=({} bytes) | result={:?}",
                     username,
@@ -533,19 +527,18 @@ pub async fn verify_acl(
 }
 
 pub async fn verify_user_credentials(
-    users: &HashMap<String, Arc<User>>,
+    shared_state: Arc<RwLock<State>>,
     username: &str,
     password: &str,
 ) -> Result<bool, Report> {
-    let user = users.get(username);
+    let user = match shared_state.read().await.users.get(username) {
+        Some(u) => u.clone(),
+        None => return Ok(false),
+    };
 
-    if user.is_none() {
-        return Ok(false);
-    }
-
-    match &user.unwrap().credentials {
+    match &user.credentials {
         Credentials::Ascii(hash) => {
-            if tacrust::hash::verify_hash(password.as_bytes(), hash).unwrap_or(false) {
+            if tacrust::hash::verify_hash(password.as_bytes(), &hash).unwrap_or(false) {
                 return Ok(true);
             }
         }
