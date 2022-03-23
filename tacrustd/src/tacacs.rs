@@ -390,10 +390,12 @@ pub async fn verify_authorization(
         if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
             auth_result.append(list_service);
             auth_result.append(list_cmd);
+            auth_result.dedup();
             return auth_result;
         }
         if let Some(member) = &next_group.member {
             if member == &next_group_name {
+                auth_result.dedup();
                 return auth_result;
             }
             next_group_name = member.to_string();
@@ -406,6 +408,7 @@ pub async fn verify_authorization(
             break;
         }
     }
+    auth_result.dedup();
     return auth_result;
 }
 
