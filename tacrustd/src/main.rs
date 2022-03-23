@@ -4,8 +4,10 @@ use clap_rs as clap;
 use color_eyre::Report;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
+use tempfile::NamedTempFile;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 use tokio::{
@@ -106,14 +108,16 @@ async fn main() -> Result<(), Report> {
         .init();
     color_eyre::install()?;
 
-    let (join_handle, _cancel_tx) = start_server().await?;
+    let (join_handle, _cancel_tx) = start_server(None).await?;
     join_handle.await?;
 
     Ok(())
 }
 
-async fn start_server() -> Result<(JoinHandle<()>, UnboundedSender<()>), Report> {
-    let config = Arc::new(setup()?);
+async fn start_server(
+    config_override: Option<&[u8]>,
+) -> Result<(JoinHandle<()>, UnboundedSender<()>), Report> {
+    let config = Arc::new(setup(config_override)?);
     let state = Arc::new(RwLock::new(State::new(config.key.as_bytes().to_vec())));
 
     if config.acls.is_some() {
@@ -183,9 +187,11 @@ async fn start_server() -> Result<(JoinHandle<()>, UnboundedSender<()>), Report>
     Ok((join_handle, tx))
 }
 
-fn setup() -> Result<Config, Report> {
-    let app = clap::App::new("tacrust").args(&Config::clap_args());
+fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
     let mut layers = vec![];
+    let mut tempconfig = NamedTempFile::new()?;
+
+    let app = clap::App::new("tacrust").args(&Config::clap_args());
     for path in &[
         "tacrust.json",
         "tacrustd/tacrust.json",
@@ -196,8 +202,15 @@ fn setup() -> Result<Config, Report> {
             layers.push(Layer::Json(path.into()));
         }
     }
+
+    if config_override.is_some() {
+        tempconfig.write_all(config_override.unwrap())?;
+        layers.push(Layer::Json(tempconfig.path().into()));
+    }
+
     layers.push(Layer::Env(Some("TACRUST_".to_string())));
     layers.push(Layer::Clap(app.get_matches().clone()));
+
     let config = Config::with_layers(&layers)?;
 
     Ok(config)
