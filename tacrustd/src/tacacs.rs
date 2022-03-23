@@ -390,7 +390,6 @@ pub async fn verify_authorization(
         if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
             auth_result.append(list_service);
             auth_result.append(list_cmd);
-            auth_result.push(format!("acl = {}", matching_acl));
             return auth_result;
         }
         if let Some(member) = &next_group.member {
@@ -452,7 +451,9 @@ pub async fn verify_cmd_args(
             })
             .clone();
         if regex_compiled.is_match(&packet_cmd_args_joined) {
-            matching_args.append(&mut packet_args.cmd_args.clone());
+            for arg in packet_args.cmd_args.clone() {
+                matching_args.push(arg);
+            }
         }
     }
     matching_args
@@ -472,7 +473,7 @@ pub async fn verify_cmd(
                     &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await,
                 );
             } else {
-                cmd_result.append(config_cmd_args);
+                cmd_result.push("service=shell".to_string());
             }
         }
     }

@@ -101,7 +101,12 @@ fn test_authen_packet(packet: &[u8], key: &[u8], expected_status: Authentication
     }
 }
 
-fn test_author_packet(packet: &[u8], key: &[u8], expected_status: AuthorizationStatus) {
+fn test_author_packet(
+    packet: &[u8],
+    key: &[u8],
+    expected_status: AuthorizationStatus,
+    expected_avpairs: Vec<Vec<u8>>,
+) {
     let mut client = get_tcp_client_for_tacrust();
     tracing::info!(
         "sending packet: {}",
@@ -125,10 +130,11 @@ fn test_author_packet(packet: &[u8], key: &[u8], expected_status: AuthorizationS
         status,
         data: _,
         server_msg: _,
-        args: _,
+        args,
     } = parsed_response.body
     {
         assert_eq!(status, expected_status);
+        assert_eq!(args, expected_avpairs);
     }
 }
 
@@ -139,7 +145,12 @@ fn test_java_author() {
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
     test_server(port, Duration::from_secs(1), || {
         let packet = include_bytes!("../packets/java-author-1.tacacs");
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthStatusFail,
+            vec![b"service=trapstation".to_vec()],
+        );
     });
 }
 
@@ -185,39 +196,100 @@ fn test_cisco_nexus_9000() {
 
         let packet =
             include_bytes!("../packets/cisco-nexus-9000/aditya/03.a-author-shell-good.tacacs");
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec(), b"service=shell".to_vec()],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/03.b-author-shell-show-run-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"cmd-arg=running-config".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/04-author-shell-show-version-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"cmd-arg=version".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/05-author-shell-show-interface-bad.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthStatusFail,
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=interface".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/06-author-shell-show-clock-bad.tacacs"
         );
         // Todo: This actually fails in Shrubbery daemon which stops recursing through parent
         // groups when it hits a match. Need to decide whether we should do the same
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"cmd-arg=clock".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/07-author-shell-dir-root-bad.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthStatusFail,
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=dir".to_vec(),
+                b"cmd-arg=bootflash:/".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/08-author-shell-dir-home-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"cmd-arg=bootflash:/home".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet =
             include_bytes!("../packets/cisco-nexus-9000/kamran/01.a-authen-start-good.tacacs");
@@ -229,37 +301,105 @@ fn test_cisco_nexus_9000() {
 
         let packet =
             include_bytes!("../packets/cisco-nexus-9000/kamran/02.a-author-shell-good.tacacs");
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"service=shell".to_vec(),
+                // Todo: De-duplicate response avpairs
+                b"service=shell".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/02.b-author-shell-show-run-bad.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthStatusFail,
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=running-config".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/03-author-shell-show-version-bad.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthStatusFail,
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=version".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/04-author-shell-show-interface-bad.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthStatusFail,
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=interface".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/05-author-shell-show-clock-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"cmd-arg=clock".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/06-author-shell-dir-root-bad.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthStatusFail,
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=dir".to_vec(),
+                b"cmd-arg=bootflash:/".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/07-author-shell-dir-home-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"cmd-arg=bootflash:/home".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+        );
     });
 }
 

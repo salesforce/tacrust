@@ -37,7 +37,7 @@
         {
           "name": "exec",
           "args": [
-            "priv-lvl = 15"
+            "priv-lvl=15"
           ]
         }
       ],
@@ -58,7 +58,7 @@
         {
           "name": "exec",
           "args": [
-            "priv-lvl = 15"
+            "priv-lvl=15"
           ]
         }
       ],
