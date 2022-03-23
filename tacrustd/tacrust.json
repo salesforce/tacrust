@@ -39,6 +39,12 @@
           "args": [
             "priv-lvl=15"
           ]
+        },
+        {
+          "name": "ppp",
+          "args": [
+            "F5-LTM-User-Info-1=admin"
+          ]
         }
       ],
       "cmds": [

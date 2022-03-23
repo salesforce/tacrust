@@ -406,5 +406,13 @@ fn test_f5_lb() {
     test_server(port, Duration::from_secs(1), || {
         let packet = include_bytes!("../packets/f5-lb/01-authen-good.tacacs");
         test_authen_packet(packet, key, AuthenticationStatus::Pass);
+
+        let packet = include_bytes!("../packets/f5-lb/01-author-good.tacacs");
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"F5-LTM-User-Info-1=admin".to_vec()],
+        );
     });
 }
