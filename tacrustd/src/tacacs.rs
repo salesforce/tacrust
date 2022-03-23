@@ -387,7 +387,23 @@ pub async fn verify_authorization(
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
         tracing::debug!("acl results: ({}, {})", &acl_result, &matching_acl);
-        if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
+        let matches_found = if args.service.contains(&"service=shell".to_string())
+            || args.service.contains(&"service=exec".to_string())
+        {
+            tracing::debug!(
+                "service was shell/exec, so need authorization for both service and cmd"
+            );
+            list_service.len() != 0 && list_cmd.len() != 0
+        } else {
+            tracing::debug!("service was not shell/exec, so successful authorization for either shell or command will generate AuthPassAdd status");
+            list_service.len() != 0 || list_cmd.len() != 0
+        };
+        if matches_found && *acl_result {
+            tracing::debug!(
+                "{} matches found for service, {} matches found for cmd",
+                list_service.len(),
+                list_cmd.len()
+            );
             auth_result.append(list_service);
             auth_result.append(list_cmd);
             auth_result.dedup();
@@ -475,7 +491,7 @@ pub async fn verify_cmd(
                 cmd_result.append(
                     &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await,
                 );
-            } else {
+            } else if packet_args.cmd.len() > 0 {
                 cmd_result.push("service=shell".to_string());
             }
         }
