@@ -387,14 +387,31 @@ pub async fn verify_authorization(
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
         tracing::debug!("acl results: ({}, {})", &acl_result, &matching_acl);
-        if list_service.len() != 0 && list_cmd.len() != 0 && *acl_result {
+        let matches_found = if args.service.contains(&"service=shell".to_string())
+            || args.service.contains(&"service=exec".to_string())
+        {
+            tracing::debug!(
+                "service was shell/exec, so need authorization for both service and cmd"
+            );
+            list_service.len() != 0 && list_cmd.len() != 0
+        } else {
+            tracing::debug!("service was not shell/exec, so successful authorization for either shell or command will generate AuthPassAdd status");
+            list_service.len() != 0 || list_cmd.len() != 0
+        };
+        if matches_found && *acl_result {
+            tracing::debug!(
+                "{} matches found for service, {} matches found for cmd",
+                list_service.len(),
+                list_cmd.len()
+            );
             auth_result.append(list_service);
             auth_result.append(list_cmd);
-            auth_result.push(format!("acl = {}", matching_acl));
+            auth_result.dedup();
             return auth_result;
         }
         if let Some(member) = &next_group.member {
             if member == &next_group_name {
+                auth_result.dedup();
                 return auth_result;
             }
             next_group_name = member.to_string();
@@ -407,6 +424,7 @@ pub async fn verify_authorization(
             break;
         }
     }
+    auth_result.dedup();
     return auth_result;
 }
 
@@ -452,7 +470,9 @@ pub async fn verify_cmd_args(
             })
             .clone();
         if regex_compiled.is_match(&packet_cmd_args_joined) {
-            matching_args.append(&mut packet_args.cmd_args.clone());
+            for arg in packet_args.cmd_args.clone() {
+                matching_args.push(arg);
+            }
         }
     }
     matching_args
@@ -471,8 +491,8 @@ pub async fn verify_cmd(
                 cmd_result.append(
                     &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await,
                 );
-            } else {
-                cmd_result.append(config_cmd_args);
+            } else if packet_args.cmd.len() > 0 {
+                cmd_result.push("service=shell".to_string());
             }
         }
     }
