@@ -66,6 +66,13 @@
           "args": [
             "F5-LTM-User-Info-1=admin"
           ]
+        },
+        {
+          "name": "junos-exec",
+          "args": [
+            "allow-commands=\"^.*\"",
+            "allow-configuration=\"^.*\""
+          ]
         }
       ],
       "cmds": [
