@@ -407,12 +407,31 @@ fn test_f5_lb() {
         let packet = include_bytes!("../packets/f5-lb/01-authen-good.tacacs");
         test_authen_packet(packet, key, AuthenticationStatus::Pass);
 
-        let packet = include_bytes!("../packets/f5-lb/01-author-good.tacacs");
+        let packet = include_bytes!("../packets/f5-lb/02-author-good.tacacs");
         test_author_packet(
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
             vec![b"F5-LTM-User-Info-1=admin".to_vec()],
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_juniper_firewall() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(1), || {
+        let packet = include_bytes!("../packets/juniper-firwall/01-author-good.tacacs");
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"allow-commands=\"^.*\"".to_vec(),
+                b"allow-configuration=\"^.*\"".to_vec(),
+            ],
         );
     });
 }
