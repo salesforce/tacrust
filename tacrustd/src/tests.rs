@@ -435,3 +435,25 @@ fn test_juniper_firewall() {
         );
     });
 }
+
+#[test]
+#[serial]
+fn test_mrv_lx() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/mrv-lx/01.a-authen-start-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::GetPass);
+
+        let packet = include_bytes!("../packets/mrv-lx/01.b-authen-cont-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::Pass);
+
+        let packet = include_bytes!("../packets/mrv-lx/02-author-good.tacacs");
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec(), b"service=shell".to_vec()],
+        );
+    });
+}
