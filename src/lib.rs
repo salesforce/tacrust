@@ -2,6 +2,7 @@ pub mod hash;
 pub mod parser;
 mod pseudo_pad;
 pub mod serializer;
+pub mod tacacs_codec;
 
 #[macro_use]
 extern crate num_derive;

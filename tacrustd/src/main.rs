@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
+use tacrust::tacacs_codec::TacacsCodec;
 use tempfile::NamedTempFile;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
@@ -14,7 +15,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
 };
-use tokio_util::codec::{BytesCodec, Framed};
+use tokio_util::codec::Framed;
 use tracing_subscriber::EnvFilter;
 use twelf::{config, Layer};
 
@@ -221,7 +222,7 @@ async fn process(
     stream: TcpStream,
     addr: SocketAddr,
 ) -> Result<(), Report> {
-    let pipe = Framed::new(stream, BytesCodec::new());
+    let pipe = Framed::new(stream, TacacsCodec::new());
     let mut client = Client::new(shared_state.clone(), pipe).await?;
 
     loop {
