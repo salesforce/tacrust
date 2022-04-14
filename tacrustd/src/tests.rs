@@ -488,3 +488,25 @@ fn test_ciena_waveserver() {
         );
     });
 }
+
+#[test]
+#[serial]
+fn test_opengear_console() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/opengear-console/01.a-authen-start-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::GetPass);
+
+        let packet = include_bytes!("../packets/opengear-console/01.b-authen-cont-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::Pass);
+
+        let packet = include_bytes!("../packets/opengear-console/02-author-good.tacacs");
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"groupname=admin".to_vec()],
+        );
+    });
+}
