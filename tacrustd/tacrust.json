@@ -68,6 +68,12 @@
           ]
         },
         {
+          "name": "raccess",
+          "args": [
+            "groupname=admin"
+          ]
+        },
+        {
           "name": "junos-exec",
           "args": [
             "allow-commands=\"^.*\"",

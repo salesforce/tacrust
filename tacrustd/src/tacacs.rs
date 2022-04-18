@@ -395,8 +395,8 @@ pub async fn verify_authorization(
             );
             list_service.len() != 0 && list_cmd.len() != 0
         } else {
-            tracing::debug!("service was not shell/exec, so successful authorization for either shell or command will generate AuthPassAdd status");
-            list_service.len() != 0 || list_cmd.len() != 0
+            tracing::debug!("service was not shell/exec, does not need authorization for cmd");
+            list_service.len() != 0
         };
         if matches_found && *acl_result {
             tracing::debug!(

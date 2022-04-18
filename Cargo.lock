@@ -1841,6 +1841,7 @@ name = "tacrust"
 version = "0.1.0"
 dependencies = [
  "byteorder",
+ "bytes",
  "md5",
  "nom 7.1.0",
  "num",
@@ -1852,6 +1853,7 @@ dependencies = [
  "rust-argon2",
  "simple-error",
  "tempfile",
+ "tokio-util",
 ]
 
 [[package]]
@@ -2006,9 +2008,11 @@ checksum = "9e99e1983e5d376cd8eb4b66604d2e99e79f5bd988c3055891dcd8c9e2604cc0"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "log",
  "pin-project-lite",
+ "slab",
  "tokio",
 ]
 

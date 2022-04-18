@@ -17,7 +17,7 @@ serde = { version = "1.0.133", features = ["derive"] }
 twelf = { version = "0.1.7" }
 futures = { version = "0.3.19" }
 tokio-stream = { version = "0.1.8" }
-tokio-util = { version = "0.6.9" }
+tokio-util = { version = "0.6.9", features = ["full"] }
 simple-error = { version = "0.2.3" }
 pam = { version = "0.7.0" }
 regex = { version = "1.5.4" }
