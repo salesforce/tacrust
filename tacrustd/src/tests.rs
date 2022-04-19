@@ -510,3 +510,28 @@ fn test_opengear_console() {
         );
     });
 }
+
+#[test]
+#[serial]
+fn test_fortigate_firewall() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/fortigate-firewall/01.a-authen-start-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::GetPass);
+
+        let packet = include_bytes!("../packets/fortigate-firewall/01.b-authen-cont-good.tacacs");
+        test_authen_packet(packet, key, AuthenticationStatus::Pass);
+
+        let packet = include_bytes!("../packets/fortigate-firewall/02-author-good.tacacs");
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![
+                b"memberof=FGT_admin".to_vec(),
+                b"admin_prof=super_admin".to_vec(),
+            ],
+        );
+    });
+}
