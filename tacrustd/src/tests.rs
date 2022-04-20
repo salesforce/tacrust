@@ -423,7 +423,7 @@ fn test_juniper_firewall() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
     test_server(port, Duration::from_secs(1), || {
-        let packet = include_bytes!("../packets/juniper-firwall/01-author-good.tacacs");
+        let packet = include_bytes!("../packets/juniper-firewall/01-author-good.tacacs");
         test_author_packet(
             packet,
             key,
