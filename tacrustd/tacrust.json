@@ -79,6 +79,13 @@
             "allow-commands=\"^.*\"",
             "allow-configuration=\"^.*\""
           ]
+        },
+        {
+          "name": "fortigate",
+          "args": [
+            "memberof=FGT_admin",
+            "admin_prof=super_admin"
+          ]
         }
       ],
       "cmds": [
