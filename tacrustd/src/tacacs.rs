@@ -380,10 +380,14 @@ pub async fn verify_authorization(
             .get(&next_group_name)
             .unwrap()
             .clone();
-        let list_service = &mut verify_service(&next_group.service, &packet_args).await;
-        tracing::debug!("service authorization results: {:?}", &list_service);
-        let list_cmd = &mut verify_cmd(shared_state.clone(), &next_group.cmds, &packet_args).await;
-        tracing::debug!("cmd authorization results: {:?}", &list_cmd);
+        let service_match_results = &mut verify_service(&next_group.service, &packet_args).await;
+        tracing::debug!(
+            "service authorization results: {:?}",
+            &service_match_results
+        );
+        let cmd_match_results =
+            &mut verify_cmd(shared_state.clone(), &next_group.cmds, &packet_args).await;
+        tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
         tracing::debug!("acl results: ({}, {})", &acl_result, &matching_acl);
@@ -393,19 +397,19 @@ pub async fn verify_authorization(
             tracing::debug!(
                 "service was shell/exec, so need authorization for both service and cmd"
             );
-            list_service.len() != 0 && list_cmd.len() != 0
+            service_match_results.len() != 0 && cmd_match_results.len() != 0
         } else {
             tracing::debug!("service was not shell/exec, does not need authorization for cmd");
-            list_service.len() != 0
+            service_match_results.len() != 0
         };
         if matches_found && *acl_result {
             tracing::debug!(
                 "{} matches found for service, {} matches found for cmd",
-                list_service.len(),
-                list_cmd.len()
+                service_match_results.len(),
+                cmd_match_results.len()
             );
-            auth_result.append(list_service);
-            auth_result.append(list_cmd);
+            auth_result.append(service_match_results);
+            auth_result.append(cmd_match_results);
             auth_result.dedup();
             return auth_result;
         }
