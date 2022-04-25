@@ -77,10 +77,14 @@ pub struct Acl {
 
 // TACACS+ server in Rust
 #[config]
-#[derive(Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct Config {
     // Address to bind on
     listen_address: String,
+
+    // Immediately exit the server (useful for config validation)
+    #[serde(default)]
+    immediately_exit: bool,
 
     // Server key (for now we use a global one like tac_plus)
     key: String,
@@ -150,6 +154,12 @@ async fn start_server(
 
     tracing::debug!("config: {:?}", config);
     tracing::debug!("state: {:?}", state.read().await);
+
+    if config.immediately_exit {
+        tracing::info!("no errors found in config, exiting immediately");
+        std::process::exit(0);
+    }
+
     tracing::info!("listening on {}", &config.listen_address);
 
     let listener = TcpListener::bind(&config.listen_address).await?;
