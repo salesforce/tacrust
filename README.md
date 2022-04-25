@@ -26,3 +26,4 @@ Hardware test matrix and instructions at: [sfdc.co/tacrust-testing](https://sfdc
   - [x] ACLs
   - [x] Group membership
   - [ ] Per client secret keys
+  - [ ] Command and service definitions at user level (instead of requiring groups)
