@@ -1,5 +1,6 @@
 use crate::client::Client;
 use crate::state::State;
+use clap::Arg;
 use clap_rs as clap;
 use color_eyre::Report;
 use futures::{SinkExt, StreamExt};
@@ -202,7 +203,6 @@ fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
     let mut layers = vec![];
     let mut tempconfig = NamedTempFile::new()?;
 
-    let app = clap::App::new("tacrust").args(&Config::clap_args());
     for path in &[
         "tacrust.json",
         "tacrustd/tacrust.json",
@@ -219,8 +219,17 @@ fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
         layers.push(Layer::Json(tempconfig.path().into()));
     }
 
+    let app = clap::App::new("tacrust")
+        .args(&Config::clap_args())
+        .arg(Arg::with_name("config").long("config").takes_value(true));
+    let arg_matches = app.get_matches();
+
+    if let Some(c) = arg_matches.value_of("config") {
+        layers.push(Layer::Json(c.into()));
+    }
+
     layers.push(Layer::Env(Some("TACRUST_".to_string())));
-    layers.push(Layer::Clap(app.get_matches().clone()));
+    layers.push(Layer::Clap(arg_matches.clone()));
 
     let config = Config::with_layers(&layers)?;
 
