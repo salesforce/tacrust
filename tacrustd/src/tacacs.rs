@@ -79,7 +79,10 @@ impl ConfigAvPair for Service {
         self.name.clone()
     }
     fn subargs(&self) -> Vec<String> {
-        self.args.clone()
+        if self.args.is_none() {
+            return vec![];
+        }
+        self.args.as_ref().unwrap().clone()
     }
 
     fn key(&self) -> &'static str {
