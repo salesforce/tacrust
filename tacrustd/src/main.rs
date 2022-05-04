@@ -43,7 +43,7 @@ impl Default for Credentials {
 #[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Service {
     name: String,
-    args: Vec<String>,
+    args: Option<Vec<String>>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
