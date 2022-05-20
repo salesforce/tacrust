@@ -11,8 +11,9 @@
 
 [package]
 edition = "2018"
+rust-version = "1.42.0"
 name = "tracing-subscriber"
-version = "0.2.25"
+version = "0.3.6"
 authors = ["Eliza Weisman <eliza@buoyant.io>", "David Barsky <me@davidbarsky.com>", "Tokio Contributors <team@tokio.rs>"]
 description = "Utilities for implementing and composing `tracing` subscribers.\n"
 homepage = "https://tokio.rs"
@@ -44,18 +45,12 @@ harness = false
 version = "0.12"
 optional = true
 
-[dependencies.chrono]
-version = "0.4.16"
-features = ["clock", "std"]
-optional = true
-default-features = false
-
 [dependencies.lazy_static]
 version = "1"
 optional = true
 
 [dependencies.matchers]
-version = "0.0.1"
+version = "0.1.0"
 optional = true
 
 [dependencies.parking_lot]
@@ -88,9 +83,13 @@ optional = true
 version = "1.0.1"
 optional = true
 
+[dependencies.time]
+version = "0.3"
+features = ["formatting"]
+optional = true
+
 [dependencies.tracing]
 version = "0.1"
-features = ["std"]
 optional = true
 default-features = false
 
@@ -118,6 +117,10 @@ version = "1"
 features = ["std"]
 default-features = false
 
+[dev-dependencies.time]
+version = "0.3"
+features = ["formatting", "macros"]
+
 [dev-dependencies.tokio]
 version = "0.2"
 features = ["rt-core", "macros"]
@@ -134,11 +137,14 @@ default-features = false
 version = "0.1.2"
 
 [features]
+alloc = []
 ansi = ["fmt", "ansi_term"]
-default = ["env-filter", "smallvec", "fmt", "ansi", "chrono", "tracing-log", "json"]
-env-filter = ["matchers", "regex", "lazy_static", "tracing"]
-fmt = ["registry"]
+default = ["smallvec", "fmt", "ansi", "tracing-log", "std"]
+env-filter = ["matchers", "regex", "lazy_static", "tracing", "std"]
+fmt = ["registry", "std"]
 json = ["tracing-serde", "serde", "serde_json"]
-registry = ["sharded-slab", "thread_local"]
+local-time = ["time/local-offset"]
+registry = ["sharded-slab", "thread_local", "std"]
+std = ["alloc", "tracing-core/std"]
 [badges.maintenance]
 status = "experimental"
