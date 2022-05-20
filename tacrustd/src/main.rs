@@ -17,6 +17,8 @@ use tokio::{
     sync::RwLock,
 };
 use tokio_util::codec::Framed;
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 use twelf::{config, Layer};
 
@@ -98,6 +100,9 @@ pub struct Config {
 
     // List of groups
     groups: Option<Vec<Group>>,
+
+    // Directory to log the files to
+    log_dir: Option<String>,
 }
 
 #[tokio::main]
@@ -109,20 +114,21 @@ async fn main() -> Result<(), Report> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info")
     }
-    tracing_subscriber::fmt::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
     color_eyre::install()?;
 
-    let (join_handle, _cancel_tx) = start_server(None).await?;
+    let (join_handle, _cancel_tx, logging_guard) = start_server(true, None).await?;
+
     join_handle.await?;
+
+    drop(logging_guard);
 
     Ok(())
 }
 
 async fn start_server(
+    setup_logging: bool,
     config_override: Option<&[u8]>,
-) -> Result<(JoinHandle<()>, UnboundedSender<()>), Report> {
+) -> Result<(JoinHandle<()>, UnboundedSender<()>, Option<WorkerGuard>), Report> {
     let config = Arc::new(setup(config_override)?);
     let state = Arc::new(RwLock::new(State::new(config.key.as_bytes().to_vec())));
 
@@ -161,6 +167,29 @@ async fn start_server(
         std::process::exit(0);
     }
 
+    let guard = if setup_logging {
+        if let Some(dir) = &config.log_dir {
+            println!("Setting up logging in {}", dir);
+            let file_appender = tracing_appender::rolling::never(dir, "tacrustd.log");
+            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+            tracing_subscriber::fmt()
+                .with_env_filter(EnvFilter::from_default_env())
+                .finish()
+                .with(tracing_subscriber::fmt::Layer::default().with_writer(non_blocking))
+                .init();
+            Some(guard)
+        } else {
+            println!("Setting up logging for stdout");
+            tracing_subscriber::fmt()
+                .with_env_filter(EnvFilter::from_default_env())
+                .finish()
+                .init();
+            None
+        }
+    } else {
+        None
+    };
+
     tracing::info!("listening on {}", &config.listen_address);
 
     let listener = TcpListener::bind(&config.listen_address).await?;
@@ -196,7 +225,7 @@ async fn start_server(
             }
         }
     });
-    Ok((join_handle, tx))
+    Ok((join_handle, tx, guard))
 }
 
 fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {

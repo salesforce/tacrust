@@ -70,7 +70,7 @@ pub struct Layer<
     fmt_event: E,
     fmt_span: format::FmtSpanConfig,
     is_ansi: bool,
-    _inner: PhantomData<S>,
+    _inner: PhantomData<fn(S)>,
 }
 
 impl<S> Layer<S> {
@@ -87,8 +87,8 @@ where
     N: for<'writer> FormatFields<'writer> + 'static,
     W: for<'writer> MakeWriter<'writer> + 'static,
 {
-    /// Sets the [event formatter][`FormatEvent`] that the layer will use to
-    /// format events.
+    /// Sets the [event formatter][`FormatEvent`] that the layer being built will
+    /// use to format events.
     ///
     /// The event formatter may be any type implementing the [`FormatEvent`]
     /// trait, which is implemented for all functions taking a [`FmtContext`], a
@@ -122,11 +122,40 @@ where
             _inner: self._inner,
         }
     }
+
+    /// Updates the event formatter by applying a function to the existing event formatter.
+    ///
+    /// This sets the event formatter that the layer being built will use to record fields.
+    ///
+    /// # Examples
+    ///
+    /// Updating an event formatter:
+    ///
+    /// ```rust
+    /// let layer = tracing_subscriber::fmt::layer()
+    ///     .map_event_format(|e| e.compact());
+    /// # // this is necessary for type inference.
+    /// # use tracing_subscriber::Layer as _;
+    /// # let _ = layer.with_subscriber(tracing_subscriber::registry::Registry::default());
+    /// ```
+    pub fn map_event_format<E2>(self, f: impl FnOnce(E) -> E2) -> Layer<S, N, E2, W>
+    where
+        E2: FormatEvent<S, N> + 'static,
+    {
+        Layer {
+            fmt_fields: self.fmt_fields,
+            fmt_event: f(self.fmt_event),
+            fmt_span: self.fmt_span,
+            make_writer: self.make_writer,
+            is_ansi: self.is_ansi,
+            _inner: self._inner,
+        }
+    }
 }
 
 // This needs to be a seperate impl block because they place different bounds on the type parameters.
 impl<S, N, E, W> Layer<S, N, E, W> {
-    /// Sets the [`MakeWriter`] that the [`Layer`] being built will use to write events.
+    /// Sets the [`MakeWriter`] that the layer being built will use to write events.
     ///
     /// # Examples
     ///
@@ -142,9 +171,6 @@ impl<S, N, E, W> Layer<S, N, E, W> {
     /// # use tracing_subscriber::Layer as _;
     /// # let _ = layer.with_subscriber(tracing_subscriber::registry::Registry::default());
     /// ```
-    ///
-    /// [`MakeWriter`]: ../fmt/trait.MakeWriter.html
-    /// [`Layer`]: ../layer/trait.Layer.html
     pub fn with_writer<W2>(self, make_writer: W2) -> Layer<S, N, E, W2>
     where
         W2: for<'writer> MakeWriter<'writer> + 'static,
@@ -159,7 +185,57 @@ impl<S, N, E, W> Layer<S, N, E, W> {
         }
     }
 
-    /// Configures the subscriber to support [`libtest`'s output capturing][capturing] when used in
+    /// Borrows the [writer] for this [`Layer`].
+    ///
+    /// [writer]: MakeWriter
+    pub fn writer(&self) -> &W {
+        &self.make_writer
+    }
+
+    /// Mutably borrows the [writer] for this [`Layer`].
+    ///
+    /// This method is primarily expected to be used with the
+    /// [`reload::Handle::modify`](crate::reload::Handle::modify) method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tracing::info;
+    /// # use tracing_subscriber::{fmt,reload,Registry,prelude::*};
+    /// # fn non_blocking<T: std::io::Write>(writer: T) -> (fn() -> std::io::Stdout) {
+    /// #   std::io::stdout
+    /// # }
+    /// # fn main() {
+    /// let layer = fmt::layer().with_writer(non_blocking(std::io::stderr()));
+    /// let (layer, reload_handle) = reload::Layer::new(layer);
+    /// #
+    /// # // specifying the Registry type is required
+    /// # let _: &reload::Handle<fmt::Layer<Registry, _, _, _>, Registry> = &reload_handle;
+    /// #
+    /// info!("This will be logged to stderr");
+    /// reload_handle.modify(|layer| *layer.writer_mut() = non_blocking(std::io::stdout()));
+    /// info!("This will be logged to stdout");
+    /// # }
+    /// ```
+    ///
+    /// [writer]: MakeWriter
+    pub fn writer_mut(&mut self) -> &mut W {
+        &mut self.make_writer
+    }
+
+    /// Sets whether this layer should use ANSI terminal formatting
+    /// escape codes (such as colors).
+    ///
+    /// This method is primarily expected to be used with the
+    /// [`reload::Handle::modify`](crate::reload::Handle::modify) method when changing
+    /// the writer.
+    #[cfg(feature = "ansi")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ansi")))]
+    pub fn set_ansi(&mut self, ansi: bool) {
+        self.is_ansi = ansi;
+    }
+
+    /// Configures the layer to support [`libtest`'s output capturing][capturing] when used in
     /// unit tests.
     ///
     /// See [`TestWriter`] for additional details.
@@ -199,6 +275,39 @@ impl<S, N, E, W> Layer<S, N, E, W> {
         Self {
             is_ansi: ansi,
             ..self
+        }
+    }
+
+    /// Updates the [`MakeWriter`] by applying a function to the existing [`MakeWriter`].
+    ///
+    /// This sets the [`MakeWriter`] that the layer being built will use to write events.
+    ///
+    /// # Examples
+    ///
+    /// Redirect output to stderr if level is <= WARN:
+    ///
+    /// ```rust
+    /// use tracing::Level;
+    /// use tracing_subscriber::fmt::{self, writer::MakeWriterExt};
+    ///
+    /// let stderr = std::io::stderr.with_max_level(Level::WARN);
+    /// let layer = fmt::layer()
+    ///     .map_writer(move |w| stderr.or_else(w));
+    /// # // this is necessary for type inference.
+    /// # use tracing_subscriber::Layer as _;
+    /// # let _ = layer.with_subscriber(tracing_subscriber::registry::Registry::default());
+    /// ```
+    pub fn map_writer<W2>(self, f: impl FnOnce(W) -> W2) -> Layer<S, N, E, W2>
+    where
+        W2: for<'writer> MakeWriter<'writer> + 'static,
+    {
+        Layer {
+            fmt_fields: self.fmt_fields,
+            fmt_event: self.fmt_event,
+            fmt_span: self.fmt_span,
+            is_ansi: self.is_ansi,
+            make_writer: f(self.make_writer),
+            _inner: self._inner,
         }
     }
 }
@@ -475,6 +584,36 @@ impl<S, N, E, W> Layer<S, N, E, W> {
         Layer {
             fmt_event: self.fmt_event,
             fmt_fields,
+            fmt_span: self.fmt_span,
+            make_writer: self.make_writer,
+            is_ansi: self.is_ansi,
+            _inner: self._inner,
+        }
+    }
+
+    /// Updates the field formatter by applying a function to the existing field formatter.
+    ///
+    /// This sets the field formatter that the layer being built will use to record fields.
+    ///
+    /// # Examples
+    ///
+    /// Updating a field formatter:
+    ///
+    /// ```rust
+    /// use tracing_subscriber::field::MakeExt;
+    /// let layer = tracing_subscriber::fmt::layer()
+    ///     .map_fmt_fields(|f| f.debug_alt());
+    /// # // this is necessary for type inference.
+    /// # use tracing_subscriber::Layer as _;
+    /// # let _ = layer.with_subscriber(tracing_subscriber::registry::Registry::default());
+    /// ```
+    pub fn map_fmt_fields<N2>(self, f: impl FnOnce(N) -> N2) -> Layer<S, N2, E, W>
+    where
+        N2: for<'writer> FormatFields<'writer> + 'static,
+    {
+        Layer {
+            fmt_event: self.fmt_event,
+            fmt_fields: f(self.fmt_fields),
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,

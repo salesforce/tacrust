@@ -1,3 +1,169 @@
+# 0.3.11 (Apr 9, 2022)
+
+This is a bugfix release for the `Filter` implementation for `EnvFilter` added
+in [v0.3.10].
+
+### Fixed
+
+- **env-filter**: Added missing `Filter::on_record` callback to `EnvFilter`'s
+  `Filter` impl ([#2058])
+- **env-filter**: Fixed method resolution issues when calling `EnvFilter`
+  methods with both the `Filter` and `Layer` traits in scope ([#2057])
+- **env-filter**: Fixed `EnvFilter::builder().parse()` and other parsing methods
+  returning an error when parsing an empty string ([#2052])
+
+Thanks to new contributor @Ma124 for contributing to this release!
+
+[v0.3.10]: https://github.com/tokio-rs/tracing/releases/tag/tracing-subscriber-0.3.10
+[#2058]: https://github.com/tokio-rs/tracing/pull/2058
+[#2057]: https://github.com/tokio-rs/tracing/pull/2057
+[#2052]: https://github.com/tokio-rs/tracing/pull/2052
+
+# 0.3.10 (Apr 1, 2022)
+
+This release adds several new features, including a `Filter` implementation and
+new builder API for `EnvFilter`, support for using a `Vec<L> where L: Layer` as
+a `Layer`, and a number of smaller API improvements to make working with dynamic
+and reloadable layers easier.
+
+### Added
+
+- **registry**: Implement `Filter` for `EnvFilter`, allowing it to be used with
+  per-layer filtering ([#1983])
+- **registry**: `Filter::on_new_span`, `Filter::on_enter`,
+  `Filter::on_exit`, `Filter::on_close` and `Filter::on_record` callbacks to
+  allow `Filter`s to track span states internally ([#1973], [#2017], [#2031])
+- **registry**: `Filtered::filter` and `Filtered::filter_mut` accessors
+  ([#1959])
+- **registry**: `Filtered::inner` and `Filtered::inner_mut` accessors to borrow
+  the wrapped `Layer` ([#2034])
+- **layer**: Implement `Layer` for `Vec<L: Layer>`, to allow composing together
+  a dynamically sized list of `Layer`s ([#2027])
+- **layer**: `Layer::boxed` method to make type-erasing `Layer`s easier
+  ([#2026])
+- **fmt**: `fmt::Layer::writer` and `fmt::Layer::writer_mut` accessors ([#2034])
+- **fmt**: `fmt::Layer::set_ansi` method to allow changing the ANSI formatting
+  configuration at runtime ([#2034])
+- **env-filter**: `EnvFilter::builder` to configure a new `EnvFilter` prior to
+  parsing it ([#2035])
+- Several documentation fixes and improvements ([#1972], [#1971], [#2023],
+  [#2023])
+
+### Fixed
+
+- **fmt**: `fmt::Layer`'s auto traits no longer depend on the `Subscriber` type
+  parameter's auto traits ([#2025])
+- **env-filter**: Fixed missing help text when the `ansi` feature is disabled
+  ([#2029])
+
+Thanks to new contributors @TimoFreiberg and @wagenet, as well as @CAD97 for
+contributing to this release!
+
+[#1983]: https://github.com/tokio-rs/tracing/pull/1983
+[#1973]: https://github.com/tokio-rs/tracing/pull/1973
+[#2017]: https://github.com/tokio-rs/tracing/pull/2017
+[#2031]: https://github.com/tokio-rs/tracing/pull/2031
+[#1959]: https://github.com/tokio-rs/tracing/pull/1959
+[#2034]: https://github.com/tokio-rs/tracing/pull/2034
+[#2027]: https://github.com/tokio-rs/tracing/pull/2027
+[#2026]: https://github.com/tokio-rs/tracing/pull/2026
+[#2035]: https://github.com/tokio-rs/tracing/pull/2035
+[#1972]: https://github.com/tokio-rs/tracing/pull/1972
+[#1971]: https://github.com/tokio-rs/tracing/pull/1971
+[#2023]: https://github.com/tokio-rs/tracing/pull/2023
+[#2025]: https://github.com/tokio-rs/tracing/pull/2025
+[#2029]: https://github.com/tokio-rs/tracing/pull/2029
+
+# 0.3.9 (Feb 17, 2022)
+
+This release updates the minimum supported Rust version (MSRV) to 1.49.0, and
+updates the (optional) dependency on `parking_lot` to v0.12.
+
+### Changed
+
+- Updated minimum supported Rust version (MSRV) to 1.49.0 ([#1913])
+- `parking_lot`: updated to v0.12 ([008339d])
+
+### Added
+
+- **fmt**: Documentation improvements ([#1926], [#1927])
+
+[#1913]: https://github.com/tokio-rs/tracing/pull/1913
+[#1926]: https://github.com/tokio-rs/tracing/pull/1926
+[#1927]: https://github.com/tokio-rs/tracing/pull/1927
+[008339d]: https://github.com/tokio-rs/tracing/commit/008339d1e8750ffe7b4634fc7789bda0c522424f
+
+# 0.3.8 (Feb 4, 2022)
+
+This release adds *experimental* support for recording structured field
+values using the [`valuable`] crate to the `format::Json` formatter. In
+particular, user-defined types which are recorded using their
+[`valuable::Valuable`] implementations will be serialized as JSON objects,
+rather than using their `fmt::Debug` representation. See [this blog post][post]
+for details on `valuable`.
+
+Note that `valuable` support currently requires `--cfg tracing_unstable`. See
+the documentation for details.
+
+Additionally, this release includes a number of other smaller API improvements.
+
+### Added
+
+- **json**: Experimental support for recording [`valuable`] values as structured
+  JSON ([#1862], [#1901])
+- **filter**: `Targets::would_enable` method for testing if a `Targets` filter
+  would enable a given target ([#1903])
+- **fmt**: `map_event_format`, `map_fmt_fields`, and `map_writer` methods to
+  `fmt::Layer` and `fmt::SubscriberBuilder` ([#1871])
+
+### Changed
+
+- `tracing-core`: updated to [0.1.22][core-0.1.22]
+
+### Fixed
+
+- Set `smallvec` minimal version to 1.2.0, to fix compilation errors with `-Z
+  minimal-versions` ([#1890])
+- Minor documentation fixes ([#1902], [#1893])
+
+Thanks to @guswynn, @glts, and @lilyball for contributing to this release!
+
+[`valuable`]: https://crates.io/crates/valuable
+[`valuable::Valuable`]: https://docs.rs/valuable/latest/valuable/trait.Valuable.html
+[post]: https://tokio.rs/blog/2021-05-valuable
+[core-0.1.22]: https://github.com/tokio-rs/tracing/releases/tag/tracing-core-0.1.22
+[#1862]: https://github.com/tokio-rs/tracing/pull/1862
+[#1901]: https://github.com/tokio-rs/tracing/pull/1901
+[#1903]: https://github.com/tokio-rs/tracing/pull/1903
+[#1871]: https://github.com/tokio-rs/tracing/pull/1871
+[#1890]: https://github.com/tokio-rs/tracing/pull/1890
+[#1902]: https://github.com/tokio-rs/tracing/pull/1902
+[#1893]: https://github.com/tokio-rs/tracing/pull/1893
+
+# 0.3.7 (Jan 25, 2022)
+
+This release adds combinators for combining filters.
+
+Additionally, this release also updates the `thread-local` crate to v1.1.4,
+fixing warnings for the security advisory [RUSTSEC-2022-0006]. Note that
+previous versions of `tracing-subscriber` did not use any of the `thread-local`
+crate's APIs effected by the vulnerability. However, updating the version fixes
+warnings emitted by `cargo audit` and similar tools.
+
+### Added
+
+- **filter**: Added combinators for combining filters ([#1578])
+
+### Fixed
+
+- **registry**: Updated `thread-local` to v1.1.4 ([#1858])
+
+Thanks to new contributor @matze for contributing to this release!
+
+[RUSTSEC-2022-0006]: https://rustsec.org/advisories/RUSTSEC-2022-0006
+[#1578]: https://github.com/tokio-rs/tracing/pull/1578
+[#1858]: https://github.com/tokio-rs/tracing/pull/1858
+
 # 0.3.6 (Jan 14, 2022)
 
 This release adds configuration options to `tracing_subscriber::fmt` to log
