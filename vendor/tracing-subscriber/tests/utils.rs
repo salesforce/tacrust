@@ -1,5 +1,6 @@
-mod support;
-use self::support::*;
+#![cfg(feature = "std")]
+
+use tracing_mock::*;
 use tracing_subscriber::prelude::*;
 
 #[test]

@@ -10,7 +10,7 @@
 //! `tracing-subscriber` is intended for use by both `Subscriber` authors and
 //! application authors using `tracing` to instrument their applications.
 //!
-//! *Compiler support: [requires `rustc` 1.42+][msrv]*
+//! *Compiler support: [requires `rustc` 1.49+][msrv]*
 //!
 //! [msrv]: #supported-rust-versions
 //!
@@ -46,31 +46,99 @@
 //!
 //! ## Feature Flags
 //!
+//! - `std`: Enables APIs that depend on the on the Rust standard library
+//!   (enabled by default).
+//! - `alloc`: Depend on [`liballoc`] (enabled by "std").
 //! - `env-filter`: Enables the [`EnvFilter`] type, which implements filtering
-//!   similar to the [`env_logger` crate]. Enabled by default.
+//!   similar to the [`env_logger` crate]. **Requires "std"**.
 //! - `fmt`: Enables the [`fmt`] module, which provides a subscriber
 //!   implementation for printing formatted representations of trace events.
-//!   Enabled by default.
+//!   Enabled by default. **Requires "std"**.
 //! - `ansi`: Enables `fmt` support for ANSI terminal colors. Enabled by
 //!   default.
 //! - `registry`: enables the [`registry`] module. Enabled by default.
-//! - `json`: Enables `fmt` support for JSON output. In JSON output, the ANSI feature does nothing.
+//!   **Requires "std"**.
+//! - `json`: Enables `fmt` support for JSON output. In JSON output, the ANSI
+//!   feature does nothing. **Requires "fmt" and "std"**.
+//! - `local-time`: Enables local time formatting when using the [`time`
+//!   crate]'s timestamp formatters with the `fmt` subscriber.
+//!
+//! [`registry`]: mod@registry
 //!
 //! ### Optional Dependencies
 //!
 //! - [`tracing-log`]: Enables better formatting for events emitted by `log`
-//!   macros in the `fmt` subscriber. On by default.
-//! - [`chrono`]: Enables human-readable time formatting in the `fmt` subscriber.
-//!   Enabled by default.
+//!   macros in the `fmt` subscriber. Enabled by default.
+//! - [`time`][`time` crate]: Enables support for using the [`time` crate] for timestamp
+//!   formatting in the `fmt` subscriber.
 //! - [`smallvec`]: Causes the `EnvFilter` type to use the `smallvec` crate (rather
 //!   than `Vec`) as a performance optimization. Enabled by default.
 //! - [`parking_lot`]: Use the `parking_lot` crate's `RwLock` implementation
 //!   rather than the Rust standard library's implementation.
 //!
+//! ### `no_std` Support
+//!
+//! In embedded systems and other bare-metal applications, `tracing` can be
+//! used without requiring the Rust standard library, although some features are
+//! disabled. Although most of the APIs provided by `tracing-subscriber`, such
+//! as [`fmt`] and [`EnvFilter`], require the standard library, some
+//! functionality, such as the [`Layer`] trait, can still be used in
+//! `no_std` environments.
+//!
+//! The dependency on the standard library is controlled by two crate feature
+//! flags, "std", which enables the dependency on [`libstd`], and "alloc", which
+//! enables the dependency on [`liballoc`] (and is enabled by the "std"
+//! feature). These features are enabled by default, but `no_std` users can
+//! disable them using:
+//!
+//! ```toml
+//! # Cargo.toml
+//! tracing-subscriber = { version = "0.3", default-features = false }
+//! ```
+//!
+//! Additional APIs are available when [`liballoc`] is available. To enable
+//! `liballoc` but not `std`, use:
+//!
+//! ```toml
+//! # Cargo.toml
+//! tracing-subscriber = { version = "0.3", default-features = false, features = ["alloc"] }
+//! ```
+//!
+//! ### Unstable Features
+//!
+//! These feature flags enable **unstable** features. The public API may break in 0.1.x
+//! releases. To enable these features, the `--cfg tracing_unstable` must be passed to
+//! `rustc` when compiling.
+//!
+//! The following unstable feature flags are currently available:
+//!
+//! * `valuable`: Enables support for serializing values recorded using the
+//!   [`valuable`] crate as structured JSON in the [`format::Json`] formatter.
+//!
+//! #### Enabling Unstable Features
+//!
+//! The easiest way to set the `tracing_unstable` cfg is to use the `RUSTFLAGS`
+//! env variable when running `cargo` commands:
+//!
+//! ```shell
+//! RUSTFLAGS="--cfg tracing_unstable" cargo build
+//! ```
+//! Alternatively, the following can be added to the `.cargo/config` file in a
+//! project to automatically enable the cfg flag for that project:
+//!
+//! ```toml
+//! [build]
+//! rustflags = ["--cfg", "tracing_unstable"]
+//! ```
+//!
+//! [feature flags]: https://doc.rust-lang.org/cargo/reference/manifest.html#the-features-section
+//! [`valuable`]: https://crates.io/crates/valuable
+//! [`format::Json`]: crate::fmt::format::Json
+//!
 //! ## Supported Rust Versions
 //!
 //! Tracing is built against the latest stable release. The minimum supported
-//! version is 1.42. The current Tracing version is not guaranteed to build on
+//! version is 1.49. The current Tracing version is not guaranteed to build on
 //! Rust versions earlier than the minimum supported version.
 //!
 //! Tracing follows the same compiler support policies as the rest of the Tokio
@@ -87,11 +155,12 @@
 //! [`fmt`]: fmt/index.html
 //! [`tracing-log`]: https://crates.io/crates/tracing-log
 //! [`smallvec`]: https://crates.io/crates/smallvec
-//! [`chrono`]: https://crates.io/crates/chrono
 //! [`env_logger` crate]: https://crates.io/crates/env_logger
 //! [`parking_lot`]: https://crates.io/crates/parking_lot
-//! [`registry`]: registry/index.html
-#![doc(html_root_url = "https://docs.rs/tracing-subscriber/0.2.25")]
+//! [`time` crate]: https://crates.io/crates/time
+//! [`libstd`]: https://doc.rust-lang.org/std/index.html
+//! [`liballoc`]: https://doc.rust-lang.org/alloc/index.html
+#![doc(html_root_url = "https://docs.rs/tracing-subscriber/0.3.11")]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/tracing/master/assets/logo-type.png",
     issue_tracker_base_url = "https://github.com/tokio-rs/tracing/issues/"
@@ -132,105 +201,49 @@
 // future, reducing diff noise. Allow this even though clippy considers it
 // "needless".
 #![allow(clippy::needless_update)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-use tracing_core::span::Id;
+#[cfg(feature = "alloc")]
+extern crate alloc;
 
-macro_rules! try_lock {
-    ($lock:expr) => {
-        try_lock!($lock, else return)
-    };
-    ($lock:expr, else $els:expr) => {
-        if let Ok(l) = $lock {
-            l
-        } else if std::thread::panicking() {
-            $els
-        } else {
-            panic!("lock poisoned")
-        }
-    };
-}
+#[macro_use]
+mod macros;
 
 pub mod field;
 pub mod filter;
-#[cfg(feature = "fmt")]
-#[cfg_attr(docsrs, doc(cfg(feature = "fmt")))]
-pub mod fmt;
-pub mod layer;
 pub mod prelude;
 pub mod registry;
-pub mod reload;
-pub(crate) mod sync;
-pub(crate) mod thread;
+
+pub mod layer;
 pub mod util;
 
-#[cfg(feature = "env-filter")]
-#[cfg_attr(docsrs, doc(cfg(feature = "env-filter")))]
-pub use filter::EnvFilter;
+feature! {
+    #![feature = "std"]
+    pub mod reload;
+    pub(crate) mod sync;
+}
+
+feature! {
+    #![all(feature = "fmt", feature = "std")]
+    pub mod fmt;
+    pub use fmt::fmt;
+    pub use fmt::Subscriber as FmtSubscriber;
+}
+
+feature! {
+    #![all(feature = "env-filter", feature = "std")]
+    pub use filter::EnvFilter;
+}
 
 pub use layer::Layer;
 
-#[cfg(feature = "registry")]
-#[cfg_attr(docsrs, doc(cfg(feature = "registry")))]
-pub use registry::Registry;
+feature! {
+    #![all(feature = "registry", feature = "std")]
+    pub use registry::Registry;
 
-///
-#[cfg(feature = "registry")]
-#[cfg_attr(docsrs, doc(cfg(feature = "registry")))]
-pub fn registry() -> Registry {
-    Registry::default()
-}
-
-#[cfg(feature = "fmt")]
-#[cfg_attr(docsrs, doc(cfg(feature = "fmt")))]
-pub use fmt::Subscriber as FmtSubscriber;
-
-#[cfg(feature = "fmt")]
-#[cfg_attr(docsrs, doc(cfg(feature = "fmt")))]
-pub use fmt::fmt;
-
-use std::default::Default;
-/// Tracks the currently executing span on a per-thread basis.
-#[derive(Debug)]
-#[deprecated(since = "0.2.18", note = "Will be removed in v0.3")]
-pub struct CurrentSpan {
-    current: thread::Local<Vec<Id>>,
-}
-
-#[allow(deprecated)]
-impl CurrentSpan {
-    /// Returns a new `CurrentSpan`.
-    pub fn new() -> Self {
-        Self {
-            current: thread::Local::new(),
-        }
-    }
-
-    /// Returns the [`Id`] of the span in which the current thread is
-    /// executing, or `None` if it is not inside of a span.
     ///
-    ///
-    /// [`Id`]: https://docs.rs/tracing/latest/tracing/span/struct.Id.html
-    pub fn id(&self) -> Option<Id> {
-        self.current.with(|current| current.last().cloned())?
-    }
-
-    /// Records that the current thread has entered the span with the provided ID.
-    pub fn enter(&self, span: Id) {
-        self.current.with(|current| current.push(span));
-    }
-
-    /// Records that the current thread has exited a span.
-    pub fn exit(&self) {
-        self.current.with(|current| {
-            let _ = current.pop();
-        });
-    }
-}
-
-#[allow(deprecated)]
-impl Default for CurrentSpan {
-    fn default() -> Self {
-        Self::new()
+    pub fn registry() -> Registry {
+        Registry::default()
     }
 }
 

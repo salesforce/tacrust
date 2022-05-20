@@ -13,11 +13,14 @@ use crate::{
     },
     layer,
 };
-use std::{
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+use core::{
     iter::{Extend, FilterMap, FromIterator},
+    slice,
     str::FromStr,
 };
-use tracing_core::{Interest, Metadata, Subscriber};
+use tracing_core::{Interest, Level, Metadata, Subscriber};
 
 /// A filter that enables or disables spans and events based on their [target]
 /// and [level].
@@ -108,7 +111,7 @@ use tracing_core::{Interest, Metadata, Subscriber};
 /// by the user at runtime.
 ///
 /// The `Targets` filter can be used as a [per-layer filter][plf] *and* as a
-/// [global filter]:
+/// [global filter][global]:
 ///
 /// ```rust
 /// use tracing_subscriber::{
@@ -310,6 +313,35 @@ impl Targets {
             Interest::never()
         }
     }
+
+    /// Returns whether a [target]-[`Level`] pair would be enabled
+    /// by this `Targets`.
+    ///
+    /// This method can be used with [`module_path!`] from `std` as the target
+    /// in order to emulate the behavior of the [`tracing::event!`] and [`tracing::span!`]
+    /// macros.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tracing_subscriber::filter::{Targets, LevelFilter};
+    /// use tracing_core::Level;
+    ///
+    /// let filter = Targets::new()
+    ///     .with_target("my_crate", Level::INFO)
+    ///     .with_target("my_crate::interesting_module", Level::DEBUG);
+    ///
+    /// assert!(filter.would_enable("my_crate", &Level::INFO));
+    /// assert!(!filter.would_enable("my_crate::interesting_module", &Level::TRACE));
+    /// ```
+    ///
+    /// [target]: tracing_core::Metadata::target
+    /// [`module_path!`]: std::module_path!
+    pub fn would_enable(&self, target: &str, level: &Level) -> bool {
+        // "Correct" to call because `Targets` only produces `StaticDirective`'s with NO
+        // fields
+        self.0.target_enabled(target, level)
+    }
 }
 
 impl<T, L> Extend<(T, L)> for Targets
@@ -462,7 +494,7 @@ impl Iterator for IntoIter {
 #[derive(Debug)]
 pub struct Iter<'a>(
     FilterMap<
-        std::slice::Iter<'a, StaticDirective>,
+        slice::Iter<'a, StaticDirective>,
         fn(&'a StaticDirective) -> Option<(&'a str, LevelFilter)>,
     >,
 );
@@ -493,6 +525,17 @@ impl<'a> Iterator for Iter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    feature! {
+        #![not(feature = "std")]
+        use alloc::{vec, vec::Vec, string::ToString};
+
+        // `dbg!` is only available with `libstd`; just nop it out when testing
+        // with alloc only.
+        macro_rules! dbg {
+            ($x:expr) => { $x }
+        }
+    }
 
     fn expect_parse(s: &str) -> Targets {
         match dbg!(s).parse::<Targets>() {
@@ -643,6 +686,8 @@ mod tests {
     }
 
     #[test]
+    // `println!` is only available with `libstd`.
+    #[cfg(feature = "std")]
     fn size_of_filters() {
         fn print_sz(s: &str) {
             let filter = s.parse::<Targets>().expect("filter should parse");

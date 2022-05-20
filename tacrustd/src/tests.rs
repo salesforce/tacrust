@@ -45,7 +45,9 @@ where
     assert!(*SETUP_COMPLETED);
     std::env::set_var("TACRUST_LISTEN_ADDRESS", format!("127.0.0.1:{}", port));
     let test_config = include_bytes!("../tacrust.json");
-    let (join_handle, cancel_tx) = RUNTIME.block_on(start_server(Some(test_config))).unwrap();
+    let (join_handle, cancel_tx, _logging_guard) = RUNTIME
+        .block_on(start_server(false, Some(test_config)))
+        .unwrap();
     thread::spawn(move || {
         thread::sleep(timeout);
         cancel_tx.send(()).unwrap();
