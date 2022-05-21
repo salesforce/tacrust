@@ -18,7 +18,9 @@ use tokio::{
 };
 use tokio_util::codec::Framed;
 use tracing_appender::non_blocking::WorkerGuard;
+#[allow(unused_imports)]
 use tracing_subscriber::prelude::*;
+#[allow(unused_imports)]
 use tracing_subscriber::EnvFilter;
 use twelf::{config, Layer};
 
@@ -105,6 +107,20 @@ pub struct Config {
     log_dir: Option<String>,
 }
 
+pub struct RunningServer {
+    // The join handle that can be awaited, will return unit type when the server terminates
+    join_handle: JoinHandle<()>,
+
+    // Send unit type to this channel to shutdown the server
+    #[allow(dead_code)]
+    cancel_channel: UnboundedSender<()>,
+
+    // Logging guard which will flush the logs when it goes out of scope
+    // This is None unless tracing is redirected to a file via --log-dir option
+    #[allow(dead_code)]
+    logging_guard: Option<WorkerGuard>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Report> {
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
@@ -116,19 +132,41 @@ async fn main() -> Result<(), Report> {
     }
     color_eyre::install()?;
 
-    let (join_handle, _cancel_tx, logging_guard) = start_server(true, None).await?;
+    let running_server = start_server(None).await?;
 
-    join_handle.await?;
-
-    drop(logging_guard);
+    running_server.join_handle.await?;
 
     Ok(())
 }
 
-async fn start_server(
-    setup_logging: bool,
-    config_override: Option<&[u8]>,
-) -> Result<(JoinHandle<()>, UnboundedSender<()>, Option<WorkerGuard>), Report> {
+#[cfg(test)]
+fn setup_logging(_log_dir: &Option<String>) -> Option<WorkerGuard> {
+    None
+}
+
+#[cfg(not(test))]
+fn setup_logging(log_dir: &Option<String>) -> Option<WorkerGuard> {
+    if let Some(dir) = log_dir {
+        println!("Setting up logging in {}", dir);
+        let file_appender = tracing_appender::rolling::never(dir, "tacrustd.log");
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .finish()
+            .with(tracing_subscriber::fmt::Layer::default().with_writer(non_blocking))
+            .init();
+        Some(guard)
+    } else {
+        println!("Setting up logging for stdout");
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .finish()
+            .init();
+        None
+    }
+}
+
+async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, Report> {
     let config = Arc::new(setup(config_override)?);
     let state = Arc::new(RwLock::new(State::new(config.key.as_bytes().to_vec())));
 
@@ -167,33 +205,12 @@ async fn start_server(
         std::process::exit(0);
     }
 
-    let guard = if setup_logging {
-        if let Some(dir) = &config.log_dir {
-            println!("Setting up logging in {}", dir);
-            let file_appender = tracing_appender::rolling::never(dir, "tacrustd.log");
-            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-            tracing_subscriber::fmt()
-                .with_env_filter(EnvFilter::from_default_env())
-                .finish()
-                .with(tracing_subscriber::fmt::Layer::default().with_writer(non_blocking))
-                .init();
-            Some(guard)
-        } else {
-            println!("Setting up logging for stdout");
-            tracing_subscriber::fmt()
-                .with_env_filter(EnvFilter::from_default_env())
-                .finish()
-                .init();
-            None
-        }
-    } else {
-        None
-    };
+    let logging_guard = setup_logging(&config.log_dir);
 
     tracing::info!("listening on {}", &config.listen_address);
 
     let listener = TcpListener::bind(&config.listen_address).await?;
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let (cancel_channel, mut cancel_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let join_handle = tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -214,7 +231,7 @@ async fn start_server(
                         }
                     });
                 }
-                _ = rx.recv() => {
+                _ = cancel_rx.recv() => {
                     tracing::info!("received channel req to shutdown, exiting");
                     break;
                 }
@@ -225,7 +242,11 @@ async fn start_server(
             }
         }
     });
-    Ok((join_handle, tx, guard))
+    Ok(RunningServer {
+        join_handle,
+        cancel_channel,
+        logging_guard,
+    })
 }
 
 fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
