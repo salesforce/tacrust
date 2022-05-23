@@ -22,7 +22,7 @@ pub enum PacketType {
     Accounting = 0x03,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 pub enum AuthenticationType {
     Ascii = 0x01,
     Pap = 0x02,
@@ -31,7 +31,7 @@ pub enum AuthenticationType {
     Mschapv2 = 0x06,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 pub enum AuthenticationStatus {
     Pass = 0x01,
     Fail = 0x02,
@@ -43,7 +43,7 @@ pub enum AuthenticationStatus {
     Follow = 0x21,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 pub enum AuthorizationStatus {
     AuthPassAdd = 0x01,
     AuthPassRepl = 0x02,
@@ -52,7 +52,7 @@ pub enum AuthorizationStatus {
     AuthStatusFollow = 0x21,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 pub enum AuthenticationMethod {
     AuthNotSet = 0x00,
     AuthNone = 0x01,
