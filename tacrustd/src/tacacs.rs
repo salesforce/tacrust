@@ -570,7 +570,7 @@ pub async fn verify_user_credentials(
             }
         }
         Credentials::Pam => {
-            let mut pam_auth = pam::Authenticator::with_password("ssh")?;
+            let mut pam_auth = pam::Authenticator::with_password("tac_plus")?;
             pam_auth.get_handler().set_credentials(username, password);
             return Ok(pam_auth.authenticate().is_ok());
         }
