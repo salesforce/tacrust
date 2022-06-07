@@ -45,8 +45,9 @@
         {
           "name": "show",
           "list": [
-            "run",
-            "version"
+            "permit \"run\"",
+            "permit \"version\"",
+            "deny"
           ]
         }
       ]
@@ -92,20 +93,23 @@
         {
           "name": "show",
           "list": [
-            "clock"
+            "permit \"clock\"",
+            "deny"
           ]
         },
         {
           "name": "dir",
           "list": [
-            "/home.*"
+            "permit \"/home.*\"",
+            "deny"
           ]
         },
         {
           "name": "file",
           "list": [
-            "ls.*",
-            "cat.*"
+            "permit \"ls.*\"",
+            "permit \"cat.*\"",
+            "deny"
           ]
         }
       ]
