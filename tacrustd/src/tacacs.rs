@@ -54,19 +54,21 @@ pub trait ConfigAvPair {
             if packet_avpair_key == self.key() && normalized_match(packet_avpair_value, &self_value)
             {
                 tracing::debug!(
-                    "\tconfig <{}={}> == packet<{}> ✓",
+                    "\tconfig <{}={}> == packet<{}={}> ✓",
                     self.key(),
                     &self_value,
-                    packet_avpair
+                    packet_avpair_key,
+                    packet_avpair_value
                 );
                 let args = &mut self.subargs();
                 result_args.append(args);
             } else {
                 tracing::debug!(
-                    "\tconfig <{}={}> != packet<{}> ✘",
+                    "\tconfig <{}={}> != packet<{}={}> ✘",
                     self.key(),
                     &self_value,
-                    packet_avpair
+                    packet_avpair_key,
+                    packet_avpair_value
                 );
             }
         }
