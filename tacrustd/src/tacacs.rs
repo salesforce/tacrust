@@ -1,6 +1,7 @@
 use crate::state::State;
 use crate::{Cmd, Credentials, Service, User};
 use color_eyre::Report;
+use lazy_static::lazy_static;
 use regex::Regex;
 use simple_error::bail;
 use std::collections::HashMap;
@@ -469,13 +470,35 @@ pub async fn verify_cmd_args(
     tracing::debug!("packet_cmd_args_joined: {}", packet_cmd_args_joined);
     for config_cmd_arg in config_cmd_args {
         tracing::debug!("config_cmd_arg: {}", config_cmd_arg);
+        if config_cmd_arg == "deny" {
+            return matching_args;
+        } else if config_cmd_arg == "permit" {
+            for arg in packet_args.cmd_args.clone() {
+                matching_args.push(arg);
+            }
+            return matching_args;
+        }
+
+        lazy_static! {
+            static ref RE_PERMIT: Regex = Regex::new(r#"permit\s+"(.*)""#).unwrap();
+        }
+
+        let cmd_arg_regex = if let Some(matches) = RE_PERMIT.captures(config_cmd_arg) {
+            let config_cmd_arg_quoted = matches[1].to_string();
+            config_cmd_arg_quoted
+        } else {
+            config_cmd_arg.to_string()
+        };
+
+        tracing::debug!("cmd_arg_regex: {}", cmd_arg_regex);
+
         let regex_compiled = shared_state
             .write()
             .await
             .regexes
-            .entry(config_cmd_arg.to_string())
+            .entry(cmd_arg_regex.to_string())
             .or_insert_with(|| {
-                Arc::new(Regex::new(config_cmd_arg).unwrap_or_else(|_| Regex::new("$.").unwrap()))
+                Arc::new(Regex::new(&cmd_arg_regex).unwrap_or_else(|_| Regex::new("$.").unwrap()))
             })
             .clone();
         if regex_compiled.is_match(&packet_cmd_args_joined) {
