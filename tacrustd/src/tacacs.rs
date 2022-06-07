@@ -457,7 +457,7 @@ pub async fn verify_cmd_args(
     config_cmd_args: &Vec<String>,
     packet_args: &PacketArgs,
 ) -> Vec<String> {
-    let mut matching_args: Vec<String> = Vec::new();
+    let mut matching_args_result: Vec<String> = Vec::new();
     let mut packet_cmd_args_joined = String::new();
     for packet_cmd_arg in &packet_args.cmd_args {
         let split_args: Vec<&str> = packet_cmd_arg.split("=").collect();
@@ -471,12 +471,10 @@ pub async fn verify_cmd_args(
     for config_cmd_arg in config_cmd_args {
         tracing::debug!("config_cmd_arg: {}", config_cmd_arg);
         if config_cmd_arg == "deny" {
-            return matching_args;
+            return matching_args_result;
         } else if config_cmd_arg == "permit" {
-            for arg in packet_args.cmd_args.clone() {
-                matching_args.push(arg);
-            }
-            return matching_args;
+            matching_args_result.extend(packet_args.cmd_args.clone());
+            return matching_args_result;
         }
 
         lazy_static! {
@@ -502,12 +500,10 @@ pub async fn verify_cmd_args(
             })
             .clone();
         if regex_compiled.is_match(&packet_cmd_args_joined) {
-            for arg in packet_args.cmd_args.clone() {
-                matching_args.push(arg);
-            }
+            matching_args_result.extend(packet_args.cmd_args.clone())
         }
     }
-    matching_args
+    matching_args_result
 }
 
 pub async fn verify_cmd(
