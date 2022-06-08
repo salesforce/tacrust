@@ -1,6 +1,7 @@
 use crate::state::State;
 use crate::{Cmd, Credentials, Service, User};
 use color_eyre::Report;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use simple_error::bail;
@@ -359,6 +360,52 @@ pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<PacketArgs, Report> {
     Ok(packet_args)
 }
 
+async fn verify_authorization_helper(
+    shared_state: Arc<RwLock<State>>,
+    rem_address: &[u8],
+    args: PacketArgs,
+    service: &Option<Vec<Service>>,
+    cmds: &Option<Vec<Cmd>>,
+    acl: &Option<String>,
+) -> Vec<String> {
+    let mut auth_result: Vec<String> = Vec::new();
+
+    let service_match_results = &mut verify_service(service, &args).await;
+    tracing::debug!(
+        "service authorization results: {:?}",
+        &service_match_results
+    );
+
+    let cmd_match_results = &mut verify_cmd(shared_state.clone(), cmds, &args).await;
+    tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
+
+    let (acl_result, matching_acl) = &mut verify_acl(shared_state.clone(), acl, rem_address).await;
+    tracing::debug!("acl results: ({}, {:?})", &acl_result, matching_acl);
+
+    let matches_found = if args.service.contains(&"service=shell".to_string())
+        || args.service.contains(&"service=exec".to_string())
+    {
+        tracing::debug!("service was shell/exec, so need authorization for both service and cmd");
+        service_match_results.len() != 0 && cmd_match_results.len() != 0
+    } else {
+        tracing::debug!("service was not shell/exec, does not need authorization for cmd");
+        service_match_results.len() != 0
+    };
+
+    if matches_found && (*acl_result || matching_acl.is_none()) {
+        tracing::debug!(
+            "{} matches found for service, {} matches found for cmd",
+            service_match_results.len(),
+            cmd_match_results.len()
+        );
+        auth_result.append(service_match_results);
+        auth_result.append(cmd_match_results);
+        return auth_result.into_iter().unique().collect();
+    }
+
+    return auth_result.into_iter().unique().collect();
+}
+
 pub async fn verify_authorization(
     shared_state: Arc<RwLock<State>>,
     user: &User,
@@ -367,7 +414,6 @@ pub async fn verify_authorization(
 ) -> Vec<String> {
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
-    let packet_args = &mut args.clone();
     if user.member.is_none() {
         return auth_result;
     }
@@ -386,43 +432,21 @@ pub async fn verify_authorization(
             .get(&next_group_name)
             .unwrap()
             .clone();
-        let service_match_results = &mut verify_service(&next_group.service, &packet_args).await;
-        tracing::debug!(
-            "service authorization results: {:?}",
-            &service_match_results
-        );
-        let cmd_match_results =
-            &mut verify_cmd(shared_state.clone(), &next_group.cmds, &packet_args).await;
-        tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
-        let (acl_result, matching_acl) =
-            &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
-        tracing::debug!("acl results: ({}, {:?})", &acl_result, matching_acl);
-        let matches_found = if args.service.contains(&"service=shell".to_string())
-            || args.service.contains(&"service=exec".to_string())
-        {
-            tracing::debug!(
-                "service was shell/exec, so need authorization for both service and cmd"
-            );
-            service_match_results.len() != 0 && cmd_match_results.len() != 0
-        } else {
-            tracing::debug!("service was not shell/exec, does not need authorization for cmd");
-            service_match_results.len() != 0
-        };
-        if matches_found && (*acl_result || matching_acl.is_none()) {
-            tracing::debug!(
-                "{} matches found for service, {} matches found for cmd",
-                service_match_results.len(),
-                cmd_match_results.len()
-            );
-            auth_result.append(service_match_results);
-            auth_result.append(cmd_match_results);
-            auth_result.dedup();
-            return auth_result;
-        }
+
+        let auth_results_for_group = verify_authorization_helper(
+            shared_state.clone(),
+            rem_address,
+            args.clone(),
+            &next_group.service,
+            &next_group.cmds,
+            &next_group.acl,
+        )
+        .await;
+        auth_result.extend(auth_results_for_group);
+
         if let Some(member) = &next_group.member {
             if member == &next_group_name {
-                auth_result.dedup();
-                return auth_result;
+                return auth_result.into_iter().unique().collect();
             }
             next_group_name = member.to_string();
             next_group_found = shared_state
@@ -434,8 +458,7 @@ pub async fn verify_authorization(
             break;
         }
     }
-    auth_result.dedup();
-    return auth_result;
+    return auth_result.into_iter().unique().collect();
 }
 
 pub async fn verify_service(
