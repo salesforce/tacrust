@@ -39,7 +39,7 @@ pub trait ConfigAvPair {
     fn compare(&self, packet_avpairs: &Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
         tracing::debug!(
-            "comparing config=<{}={}> with packet=<{:?}>",
+            "\tcomparing config=<{}={}> with packet=<{:?}>",
             self.key(),
             self.value(),
             packet_avpairs
@@ -48,7 +48,7 @@ pub trait ConfigAvPair {
             let self_value = self.value();
             let packet_avpair_split: Vec<&str> = (&packet_avpair).split(&"=").collect();
             if packet_avpair_split.len() != 2 {
-                tracing::debug!("\tinvalid arguments in packet [{:?}]", packet_avpair);
+                tracing::debug!("\t\tinvalid arguments in packet [{:?}]", packet_avpair);
                 continue;
             }
             let (packet_avpair_key, packet_avpair_value) =
@@ -56,7 +56,7 @@ pub trait ConfigAvPair {
             if packet_avpair_key == self.key() && normalized_match(packet_avpair_value, &self_value)
             {
                 tracing::debug!(
-                    "\tconfig <{}={}> == packet<{}={}> ✓",
+                    "\t\tconfig <{}={}> == packet<{}={}> ✓",
                     self.key(),
                     &self_value,
                     packet_avpair_key,
@@ -66,7 +66,7 @@ pub trait ConfigAvPair {
                 result_args.append(args);
             } else {
                 tracing::debug!(
-                    "\tconfig <{}={}> != packet<{}={}> ✘",
+                    "\t\tconfig <{}={}> != packet<{}={}> ✘",
                     self.key(),
                     &self_value,
                     packet_avpair_key,
@@ -362,11 +362,9 @@ pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<PacketArgs, Report> {
 
 async fn verify_authorization_helper(
     shared_state: Arc<RwLock<State>>,
-    rem_address: &[u8],
     args: PacketArgs,
     service: &Option<Vec<Service>>,
     cmds: &Option<Vec<Cmd>>,
-    acl: &Option<String>,
 ) -> Vec<String> {
     let mut auth_result: Vec<String> = Vec::new();
 
@@ -379,9 +377,6 @@ async fn verify_authorization_helper(
     let cmd_match_results = &mut verify_cmd(shared_state.clone(), cmds, &args).await;
     tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
 
-    let (acl_result, matching_acl) = &mut verify_acl(shared_state.clone(), acl, rem_address).await;
-    tracing::debug!("acl results: ({}, {:?})", &acl_result, matching_acl);
-
     let matches_found = if args.service.contains(&"service=shell".to_string())
         || args.service.contains(&"service=exec".to_string())
     {
@@ -392,7 +387,7 @@ async fn verify_authorization_helper(
         service_match_results.len() != 0
     };
 
-    if matches_found && (*acl_result || matching_acl.is_none()) {
+    if matches_found {
         tracing::debug!(
             "{} matches found for service, {} matches found for cmd",
             service_match_results.len(),
@@ -400,7 +395,6 @@ async fn verify_authorization_helper(
         );
         auth_result.append(service_match_results);
         auth_result.append(cmd_match_results);
-        return auth_result.into_iter().unique().collect();
     }
 
     return auth_result.into_iter().unique().collect();
@@ -414,9 +408,20 @@ pub async fn verify_authorization(
 ) -> Vec<String> {
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
+    let mut acl_results: Vec<(bool, Option<String>)> = Vec::new();
+    let mut _acl_found = false;
+
+    if user.acl.is_some() {
+        _acl_found = true;
+        let (acl_result, matching_acl) =
+            verify_acl(shared_state.clone(), &user.acl, rem_address).await;
+        acl_results.push((acl_result, matching_acl));
+    }
+
     if user.member.is_none() {
         return auth_result;
     }
+
     let mut next_group_name = user.member.as_ref().unwrap().to_string();
     let mut next_group_found = shared_state
         .read()
@@ -435,18 +440,23 @@ pub async fn verify_authorization(
 
         let auth_results_for_group = verify_authorization_helper(
             shared_state.clone(),
-            rem_address,
             args.clone(),
             &next_group.service,
             &next_group.cmds,
-            &next_group.acl,
         )
         .await;
         auth_result.extend(auth_results_for_group);
 
+        if next_group.acl.is_some() {
+            _acl_found = true;
+            let (acl_result, matching_acl) =
+                verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
+            acl_results.push((acl_result, matching_acl));
+        }
+
         if let Some(member) = &next_group.member {
             if member == &next_group_name {
-                return auth_result.into_iter().unique().collect();
+                break;
             }
             next_group_name = member.to_string();
             next_group_found = shared_state
@@ -458,6 +468,26 @@ pub async fn verify_authorization(
             break;
         }
     }
+
+    for (acl_result, matching_acl) in acl_results.into_iter() {
+        if matching_acl.is_some() {
+            tracing::debug!("an acl was matched: ({}, {:?})", &acl_result, matching_acl);
+            if acl_result {
+                return auth_result.into_iter().unique().collect();
+            } else {
+                return vec![];
+            }
+        }
+    }
+
+    if _acl_found {
+        tracing::debug!(
+            "at least one acl was found to be applicable to the user, but none permitted the request",
+        );
+        return vec![];
+    }
+
+    tracing::debug!("no acls found applicable to the user");
     return auth_result.into_iter().unique().collect();
 }
 
@@ -555,13 +585,22 @@ pub async fn verify_acl(
     acl: &Option<String>,
     rem_address: &[u8],
 ) -> (bool, Option<String>) {
+    tracing::debug!(
+        "verifying acl {:?} against rem_address {:?}",
+        acl,
+        rem_address
+    );
     if acl.is_none() {
+        tracing::debug!("acl is empty");
         return (false, None);
     }
     let acl = {
         match shared_state.read().await.acls.get(acl.as_ref().unwrap()) {
             Some(acl) => acl.clone(),
-            None => return (false, None),
+            None => {
+                tracing::debug!("acl {} not found in config", acl.as_ref().unwrap());
+                return (false, None);
+            }
         }
     };
     let rem_address = String::from_utf8_lossy(rem_address);

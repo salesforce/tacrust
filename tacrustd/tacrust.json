@@ -3,10 +3,9 @@
   "key": "tackey",
   "acls": [
     {
-      "name": "testacl",
+      "name": "testacl_permit_all_deny_none",
       "list": [
-        "permit = ^.*$",
-        "deny = .*"
+        "permit = ^.*$"
       ]
     }
   ],
@@ -31,7 +30,7 @@
   "groups": [
     {
       "name": "group-superuser",
-      "acl": "testacl",
+      "acl": "testacl_permit_all_deny_none",
       "member": "group-user",
       "service": [
         {
@@ -54,7 +53,7 @@
     },
     {
       "name": "group-user",
-      "acl": "testacl",
+      "acl": "testacl_permit_all_deny_none",
       "service": [
         {
           "name": "exec",

@@ -72,6 +72,7 @@ pub struct User {
     name: String,
     credentials: Credentials,
     member: Option<String>,
+    acl: Option<String>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
