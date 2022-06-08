@@ -309,7 +309,7 @@ pub async fn process_tacacs_packet(
                             status: AuthorizationStatus::AuthStatusFail,
                             data: vec![],
                             server_msg: vec![],
-                            args,
+                            args: vec![],
                         },
                     })
                 }
@@ -320,7 +320,7 @@ pub async fn process_tacacs_packet(
                         status: AuthorizationStatus::AuthStatusFail,
                         data: vec![],
                         server_msg: vec![],
-                        args,
+                        args: vec![],
                     },
                 })
             }

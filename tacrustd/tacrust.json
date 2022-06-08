@@ -7,6 +7,12 @@
       "list": [
         "permit = ^.*$"
       ]
+    },
+    {
+      "name": "testacl_permit_unmatchable",
+      "list": [
+        "permit = $."
+      ]
     }
   ],
   "users": [
@@ -25,6 +31,22 @@
         "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
       },
       "member": "group-superuser"
+    },
+    {
+      "name": "johndoe",
+      "credentials": {
+        "type": "Ascii",
+        "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
+      },
+      "member": "group-acl-test-acl-present-but-not-matched"
+    },
+    {
+      "name": "janedoe",
+      "credentials": {
+        "type": "Ascii",
+        "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
+      },
+      "member": "group-acl-test-acl-not-present"
     }
   ],
   "groups": [
@@ -109,6 +131,29 @@
             "permit \"ls.*\"",
             "permit \"cat.*\"",
             "deny"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "group-acl-test-acl-present-but-not-matched",
+      "acl": "testacl_permit_unmatchable",
+      "service": [
+        {
+          "name": "some_service",
+          "args": [
+            "some_arg=some_value"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "group-acl-test-acl-not-present",
+      "service": [
+        {
+          "name": "some_service",
+          "args": [
+            "some_arg=some_value"
           ]
         }
       ]
