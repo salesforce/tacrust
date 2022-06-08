@@ -396,7 +396,7 @@ pub async fn verify_authorization(
         tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
         let (acl_result, matching_acl) =
             &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
-        tracing::debug!("acl results: ({}, {})", &acl_result, &matching_acl);
+        tracing::debug!("acl results: ({}, {:?})", &acl_result, matching_acl);
         let matches_found = if args.service.contains(&"service=shell".to_string())
             || args.service.contains(&"service=exec".to_string())
         {
@@ -408,7 +408,7 @@ pub async fn verify_authorization(
             tracing::debug!("service was not shell/exec, does not need authorization for cmd");
             service_match_results.len() != 0
         };
-        if matches_found && *acl_result {
+        if matches_found && (*acl_result || matching_acl.is_none()) {
             tracing::debug!(
                 "{} matches found for service, {} matches found for cmd",
                 service_match_results.len(),
@@ -531,14 +531,14 @@ pub async fn verify_acl(
     shared_state: Arc<RwLock<State>>,
     acl: &Option<String>,
     rem_address: &[u8],
-) -> (bool, String) {
+) -> (bool, Option<String>) {
     if acl.is_none() {
-        return (false, String::new());
+        return (false, None);
     }
     let acl = {
         match shared_state.read().await.acls.get(acl.as_ref().unwrap()) {
             Some(acl) => acl.clone(),
-            None => return (false, String::new()),
+            None => return (false, None),
         }
     };
     let rem_address = String::from_utf8_lossy(rem_address);
@@ -566,12 +566,12 @@ pub async fn verify_acl(
             continue;
         }
         match acl_action {
-            "permit" => return (true, acl_expr.to_string()),
-            "deny" => return (false, acl_expr.to_string()),
+            "permit" => return (true, Some(acl_expr.to_string())),
+            "deny" => return (false, Some(acl_expr.to_string())),
             _ => continue,
         }
     }
-    (false, String::new())
+    (false, None)
 }
 
 pub async fn verify_user_credentials(
