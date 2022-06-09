@@ -145,12 +145,7 @@ fn test_java_author() {
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
     test_server(port, Duration::from_secs(1), || {
         let packet = include_bytes!("../packets/java-author-1.tacacs");
-        test_author_packet(
-            packet,
-            key,
-            AuthorizationStatus::AuthStatusFail,
-            vec![b"service=trapstation".to_vec()],
-        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
     });
 }
 
@@ -234,17 +229,7 @@ fn test_cisco_nexus_9000() {
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/05-author-shell-show-interface-bad.tacacs"
         );
-        test_author_packet(
-            packet,
-            key,
-            AuthorizationStatus::AuthStatusFail,
-            vec![
-                b"service=shell".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=interface".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
-        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/06-author-shell-show-clock-bad.tacacs"
@@ -265,17 +250,7 @@ fn test_cisco_nexus_9000() {
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/07-author-shell-dir-root-bad.tacacs"
         );
-        test_author_packet(
-            packet,
-            key,
-            AuthorizationStatus::AuthStatusFail,
-            vec![
-                b"service=shell".to_vec(),
-                b"cmd=dir".to_vec(),
-                b"cmd-arg=bootflash:/".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
-        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/08-author-shell-dir-home-good.tacacs"
@@ -311,47 +286,17 @@ fn test_cisco_nexus_9000() {
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/02.b-author-shell-show-run-bad.tacacs"
         );
-        test_author_packet(
-            packet,
-            key,
-            AuthorizationStatus::AuthStatusFail,
-            vec![
-                b"service=shell".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=running-config".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
-        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/03-author-shell-show-version-bad.tacacs"
         );
-        test_author_packet(
-            packet,
-            key,
-            AuthorizationStatus::AuthStatusFail,
-            vec![
-                b"service=shell".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=version".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
-        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/04-author-shell-show-interface-bad.tacacs"
         );
-        test_author_packet(
-            packet,
-            key,
-            AuthorizationStatus::AuthStatusFail,
-            vec![
-                b"service=shell".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=interface".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
-        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/05-author-shell-show-clock-good.tacacs"
@@ -370,17 +315,7 @@ fn test_cisco_nexus_9000() {
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/06-author-shell-dir-root-bad.tacacs"
         );
-        test_author_packet(
-            packet,
-            key,
-            AuthorizationStatus::AuthStatusFail,
-            vec![
-                b"service=shell".to_vec(),
-                b"cmd=dir".to_vec(),
-                b"cmd-arg=bootflash:/".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
-        );
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/07-author-shell-dir-home-good.tacacs"
@@ -532,6 +467,33 @@ fn test_fortigate_firewall() {
                 b"memberof=FGT_admin".to_vec(),
                 b"admin_prof=super_admin".to_vec(),
             ],
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_acl_present_but_not_matched() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/johndoe_author_some_service.tacacs");
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+    });
+}
+
+#[test]
+#[serial]
+fn test_acl_not_present() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/janedoe_author_some_service.tacacs");
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"some_arg=some_value".to_vec()],
         );
     });
 }

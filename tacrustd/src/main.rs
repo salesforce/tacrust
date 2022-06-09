@@ -72,6 +72,7 @@ pub struct User {
     name: String,
     credentials: Credentials,
     member: Option<String>,
+    acl: Option<String>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -277,10 +278,10 @@ fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
     if let Some(c) = arg_matches.value_of("config") {
         layers.clear();
         layers.push(Layer::Json(c.into()));
-    } else {
-        layers.push(Layer::Env(Some("TACRUST_".to_string())));
-        layers.push(Layer::Clap(arg_matches.clone()));
     }
+
+    layers.push(Layer::Env(Some("TACRUST_".to_string())));
+    layers.push(Layer::Clap(arg_matches.clone()));
 
     let config = Config::with_layers(&layers)?;
 

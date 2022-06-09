@@ -1,6 +1,7 @@
 use crate::state::State;
 use crate::{Cmd, Credentials, Service, User};
 use color_eyre::Report;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use simple_error::bail;
@@ -38,7 +39,7 @@ pub trait ConfigAvPair {
     fn compare(&self, packet_avpairs: &Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
         tracing::debug!(
-            "comparing config=<{}={}> with packet=<{:?}>",
+            "\tcomparing config=<{}={}> with packet=<{:?}>",
             self.key(),
             self.value(),
             packet_avpairs
@@ -47,7 +48,7 @@ pub trait ConfigAvPair {
             let self_value = self.value();
             let packet_avpair_split: Vec<&str> = (&packet_avpair).split(&"=").collect();
             if packet_avpair_split.len() != 2 {
-                tracing::debug!("\tinvalid arguments in packet [{:?}]", packet_avpair);
+                tracing::debug!("\t\tinvalid arguments in packet [{:?}]", packet_avpair);
                 continue;
             }
             let (packet_avpair_key, packet_avpair_value) =
@@ -55,7 +56,7 @@ pub trait ConfigAvPair {
             if packet_avpair_key == self.key() && normalized_match(packet_avpair_value, &self_value)
             {
                 tracing::debug!(
-                    "\tconfig <{}={}> == packet<{}={}> ✓",
+                    "\t\tconfig <{}={}> == packet<{}={}> ✓",
                     self.key(),
                     &self_value,
                     packet_avpair_key,
@@ -65,7 +66,7 @@ pub trait ConfigAvPair {
                 result_args.append(args);
             } else {
                 tracing::debug!(
-                    "\tconfig <{}={}> != packet<{}={}> ✘",
+                    "\t\tconfig <{}={}> != packet<{}={}> ✘",
                     self.key(),
                     &self_value,
                     packet_avpair_key,
@@ -308,7 +309,7 @@ pub async fn process_tacacs_packet(
                             status: AuthorizationStatus::AuthStatusFail,
                             data: vec![],
                             server_msg: vec![],
-                            args,
+                            args: vec![],
                         },
                     })
                 }
@@ -319,7 +320,7 @@ pub async fn process_tacacs_packet(
                         status: AuthorizationStatus::AuthStatusFail,
                         data: vec![],
                         server_msg: vec![],
-                        args,
+                        args: vec![],
                     },
                 })
             }
@@ -359,6 +360,46 @@ pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<PacketArgs, Report> {
     Ok(packet_args)
 }
 
+async fn verify_authorization_helper(
+    shared_state: Arc<RwLock<State>>,
+    args: PacketArgs,
+    service: &Option<Vec<Service>>,
+    cmds: &Option<Vec<Cmd>>,
+) -> Vec<String> {
+    let mut auth_result: Vec<String> = Vec::new();
+
+    let service_match_results = &mut verify_service(service, &args).await;
+    tracing::debug!(
+        "service authorization results: {:?}",
+        &service_match_results
+    );
+
+    let cmd_match_results = &mut verify_cmd(shared_state.clone(), cmds, &args).await;
+    tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
+
+    let matches_found = if args.service.contains(&"service=shell".to_string())
+        || args.service.contains(&"service=exec".to_string())
+    {
+        tracing::debug!("service was shell/exec, so need authorization for both service and cmd");
+        service_match_results.len() != 0 && cmd_match_results.len() != 0
+    } else {
+        tracing::debug!("service was not shell/exec, does not need authorization for cmd");
+        service_match_results.len() != 0
+    };
+
+    if matches_found {
+        tracing::debug!(
+            "{} matches found for service, {} matches found for cmd",
+            service_match_results.len(),
+            cmd_match_results.len()
+        );
+        auth_result.append(service_match_results);
+        auth_result.append(cmd_match_results);
+    }
+
+    return auth_result.into_iter().unique().collect();
+}
+
 pub async fn verify_authorization(
     shared_state: Arc<RwLock<State>>,
     user: &User,
@@ -367,10 +408,20 @@ pub async fn verify_authorization(
 ) -> Vec<String> {
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
-    let packet_args = &mut args.clone();
+    let mut acl_results: Vec<(bool, Option<String>)> = Vec::new();
+    let mut _acl_found = false;
+
+    if user.acl.is_some() {
+        _acl_found = true;
+        let (acl_result, matching_acl) =
+            verify_acl(shared_state.clone(), &user.acl, rem_address).await;
+        acl_results.push((acl_result, matching_acl));
+    }
+
     if user.member.is_none() {
         return auth_result;
     }
+
     let mut next_group_name = user.member.as_ref().unwrap().to_string();
     let mut next_group_found = shared_state
         .read()
@@ -386,43 +437,26 @@ pub async fn verify_authorization(
             .get(&next_group_name)
             .unwrap()
             .clone();
-        let service_match_results = &mut verify_service(&next_group.service, &packet_args).await;
-        tracing::debug!(
-            "service authorization results: {:?}",
-            &service_match_results
-        );
-        let cmd_match_results =
-            &mut verify_cmd(shared_state.clone(), &next_group.cmds, &packet_args).await;
-        tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
-        let (acl_result, matching_acl) =
-            &mut verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
-        tracing::debug!("acl results: ({}, {})", &acl_result, &matching_acl);
-        let matches_found = if args.service.contains(&"service=shell".to_string())
-            || args.service.contains(&"service=exec".to_string())
-        {
-            tracing::debug!(
-                "service was shell/exec, so need authorization for both service and cmd"
-            );
-            service_match_results.len() != 0 && cmd_match_results.len() != 0
-        } else {
-            tracing::debug!("service was not shell/exec, does not need authorization for cmd");
-            service_match_results.len() != 0
-        };
-        if matches_found && *acl_result {
-            tracing::debug!(
-                "{} matches found for service, {} matches found for cmd",
-                service_match_results.len(),
-                cmd_match_results.len()
-            );
-            auth_result.append(service_match_results);
-            auth_result.append(cmd_match_results);
-            auth_result.dedup();
-            return auth_result;
+
+        let auth_results_for_group = verify_authorization_helper(
+            shared_state.clone(),
+            args.clone(),
+            &next_group.service,
+            &next_group.cmds,
+        )
+        .await;
+        auth_result.extend(auth_results_for_group);
+
+        if next_group.acl.is_some() {
+            _acl_found = true;
+            let (acl_result, matching_acl) =
+                verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
+            acl_results.push((acl_result, matching_acl));
         }
+
         if let Some(member) = &next_group.member {
             if member == &next_group_name {
-                auth_result.dedup();
-                return auth_result;
+                break;
             }
             next_group_name = member.to_string();
             next_group_found = shared_state
@@ -434,8 +468,27 @@ pub async fn verify_authorization(
             break;
         }
     }
-    auth_result.dedup();
-    return auth_result;
+
+    for (acl_result, matching_acl) in acl_results.into_iter() {
+        if matching_acl.is_some() {
+            tracing::debug!("an acl was matched: ({}, {:?})", &acl_result, matching_acl);
+            if acl_result {
+                return auth_result.into_iter().unique().collect();
+            } else {
+                return vec![];
+            }
+        }
+    }
+
+    if _acl_found {
+        tracing::debug!(
+            "at least one acl was found to be applicable to the user, but none permitted the request",
+        );
+        return vec![];
+    }
+
+    tracing::debug!("no acls found applicable to the user");
+    return auth_result.into_iter().unique().collect();
 }
 
 pub async fn verify_service(
@@ -531,14 +584,23 @@ pub async fn verify_acl(
     shared_state: Arc<RwLock<State>>,
     acl: &Option<String>,
     rem_address: &[u8],
-) -> (bool, String) {
+) -> (bool, Option<String>) {
+    tracing::debug!(
+        "verifying acl {:?} against rem_address {:?}",
+        acl,
+        rem_address
+    );
     if acl.is_none() {
-        return (false, String::new());
+        tracing::debug!("acl is empty");
+        return (false, None);
     }
     let acl = {
         match shared_state.read().await.acls.get(acl.as_ref().unwrap()) {
             Some(acl) => acl.clone(),
-            None => return (false, String::new()),
+            None => {
+                tracing::debug!("acl {} not found in config", acl.as_ref().unwrap());
+                return (false, None);
+            }
         }
     };
     let rem_address = String::from_utf8_lossy(rem_address);
@@ -566,12 +628,12 @@ pub async fn verify_acl(
             continue;
         }
         match acl_action {
-            "permit" => return (true, acl_expr.to_string()),
-            "deny" => return (false, acl_expr.to_string()),
+            "permit" => return (true, Some(acl_expr.to_string())),
+            "deny" => return (false, Some(acl_expr.to_string())),
             _ => continue,
         }
     }
-    (false, String::new())
+    (false, None)
 }
 
 pub async fn verify_user_credentials(
