@@ -17,6 +17,7 @@ use tokio::{
     sync::RwLock,
 };
 use tokio_util::codec::Framed;
+use tracing::Instrument;
 use tracing_appender::non_blocking::WorkerGuard;
 #[allow(unused_imports)]
 use tracing_subscriber::prelude::*;
@@ -224,13 +225,14 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
                         },
                     };
                     let state = Arc::clone(&state);
+                    let span = tracing::span!(tracing::Level::INFO, "tacacs_request", ?addr);
 
                     tokio::spawn(async move {
                         tracing::debug!("accepted connection");
                         if let Err(e) = process(state, stream, addr).await {
                             tracing::info!("an error occurred; error = {}", e);
                         }
-                    });
+                    }.instrument(span));
                 }
                 _ = cancel_rx.recv() => {
                     tracing::info!("received channel req to shutdown, exiting");
