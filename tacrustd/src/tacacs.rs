@@ -643,7 +643,10 @@ pub async fn verify_user_credentials(
 ) -> Result<bool, Report> {
     let user = match shared_state.read().await.users.get(username) {
         Some(u) => u.clone(),
-        None => return Ok(false),
+        None => {
+            tracing::info!("user {} not found in config", username);
+            return Ok(false);
+        }
     };
 
     match &user.credentials {
