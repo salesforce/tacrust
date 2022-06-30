@@ -406,6 +406,7 @@ pub async fn verify_authorization(
     rem_address: &[u8],
     args: PacketArgs,
 ) -> Vec<String> {
+    tracing::info!("packet args: {:?}", args);
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
     let mut acl_results: Vec<(bool, Option<String>)> = Vec::new();
