@@ -165,7 +165,7 @@ pub async fn process_tacacs_packet(
                         } else {
                             AuthenticationStatus::Fail
                         };
-                    tracing::debug!(
+                    tracing::info!(
                         "verifying credentials: username={}, password=({} bytes) | result={:?}",
                         username,
                         password.len(),
@@ -226,7 +226,7 @@ pub async fn process_tacacs_packet(
                     } else {
                         AuthenticationStatus::Fail
                     };
-                tracing::debug!(
+                tracing::info!(
                     "verifying credentials: username={}, password=({} bytes) | result={:?}",
                     username,
                     password.len(),
