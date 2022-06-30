@@ -651,11 +651,16 @@ pub async fn verify_user_credentials(
 
     match &user.credentials {
         Credentials::Ascii(hash) => {
+            tracing::info!(
+                "verifying password for {} against the hash specified in config",
+                username
+            );
             if tacrust::hash::verify_hash(password.as_bytes(), &hash).unwrap_or(false) {
                 return Ok(true);
             }
         }
         Credentials::Pam => {
+            tracing::info!("authenticating {} via pam", username);
             let mut pam_auth = pam::Authenticator::with_password("tac_plus")?;
             pam_auth.get_handler().set_credentials(username, password);
             return Ok(pam_auth.authenticate().is_ok());
