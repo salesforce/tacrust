@@ -107,6 +107,9 @@ pub struct Config {
 
     // Directory to log the files to
     log_dir: Option<String>,
+
+    // PAM service to use for authentication
+    pam_service: Option<String>,
 }
 
 pub struct RunningServer {
@@ -170,7 +173,14 @@ fn setup_logging(log_dir: &Option<String>) -> Option<WorkerGuard> {
 
 async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, Report> {
     let config = Arc::new(setup(config_override)?);
-    let state = Arc::new(RwLock::new(State::new(config.key.as_bytes().to_vec())));
+    let state = Arc::new(RwLock::new(State::new(
+        config.key.as_bytes().to_vec(),
+        config
+            .pam_service
+            .as_ref()
+            .unwrap_or(&"tacrustd".to_string())
+            .clone(),
+    )));
 
     if config.acls.is_some() {
         let mut state = state.write().await;
