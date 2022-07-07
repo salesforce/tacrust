@@ -11,6 +11,7 @@ pub type Rx = mpsc::UnboundedReceiver<Vec<u8>>;
 #[derive(Debug, Clone)]
 pub struct State {
     pub key: Vec<u8>,
+    pub pam_service: String,
     pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
     pub regexes: HashMap<String, Arc<Regex>>,
@@ -20,9 +21,10 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(key: Vec<u8>) -> Self {
+    pub fn new(key: Vec<u8>, pam_service: String) -> Self {
         State {
             key,
+            pam_service,
             sockets: HashMap::new(),
             maps: HashMap::new(),
             regexes: HashMap::new(),

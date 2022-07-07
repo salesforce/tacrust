@@ -17,6 +17,13 @@
   ],
   "users": [
     {
+      "name": "k.khan",
+      "credentials": {
+        "type": "Pam"
+      },
+      "member": "group-user"
+    },
+    {
       "name": "kamran",
       "credentials": {
         "type": "Ascii",

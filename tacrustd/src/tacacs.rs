@@ -661,8 +661,13 @@ pub async fn verify_user_credentials(
             }
         }
         Credentials::Pam => {
-            tracing::info!("authenticating {} via pam", username);
-            let mut pam_auth = pam::Authenticator::with_password("tacrustd")?;
+            let pam_service = shared_state.read().await.pam_service.clone();
+            tracing::info!(
+                "authenticating {} via pam service {}",
+                username,
+                pam_service
+            );
+            let mut pam_auth = pam::Authenticator::with_password(&pam_service)?;
             pam_auth.get_handler().set_credentials(username, password);
             return Ok(pam_auth.authenticate().is_ok());
         }
