@@ -21,7 +21,7 @@
       "credentials": {
         "type": "Pam"
       },
-      "member": "group-user"
+      "member": ["group-user"]
     },
     {
       "name": "kamran",
@@ -29,7 +29,7 @@
         "type": "Ascii",
         "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
       },
-      "member": "group-user"
+      "member": ["group-user"]
     },
     {
       "name": "aditya",
@@ -37,7 +37,7 @@
         "type": "Ascii",
         "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
       },
-      "member": "group-superuser"
+      "member": ["group-superuser"]
     },
     {
       "name": "johndoe",
@@ -45,7 +45,7 @@
         "type": "Ascii",
         "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
       },
-      "member": "group-acl-test-acl-present-but-not-matched"
+      "member": ["group-acl-test-acl-present-but-not-matched"]
     },
     {
       "name": "janedoe",
@@ -53,10 +53,22 @@
         "type": "Ascii",
         "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
       },
-      "member": "group-acl-test-acl-not-present"
+      "member": ["group-acl-test-acl-not-present"]
+    },
+    {
+      "name": "jackdoe",
+      "credentials": {
+        "type": "Ascii",
+        "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
+      },
+      "member": ["group-useless", "group-nonexisting", "group-user"]
     }
   ],
   "groups": [
+    {
+      "name": "group-useless",
+      "acl": "testacl_permit_all_deny_none"
+    },
     {
       "name": "group-superuser",
       "acl": "testacl_permit_all_deny_none",

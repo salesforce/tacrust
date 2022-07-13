@@ -72,7 +72,7 @@ pub struct Group {
 pub struct User {
     name: String,
     credentials: Credentials,
-    member: Option<String>,
+    member: Option<Vec<String>>,
     acl: Option<String>,
 }
 

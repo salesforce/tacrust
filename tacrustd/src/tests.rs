@@ -497,3 +497,19 @@ fn test_acl_not_present() {
         );
     });
 }
+
+#[test]
+#[serial]
+fn test_multiple_group_memberships() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/jackdoe_author_raccess.tacacs");
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"groupname=admin".to_vec()],
+        );
+    });
+}

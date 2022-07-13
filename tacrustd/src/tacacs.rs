@@ -423,51 +423,52 @@ pub async fn verify_authorization(
         return auth_result;
     }
 
-    let mut next_group_name = user.member.as_ref().unwrap().to_string();
-    let mut next_group_found = shared_state
-        .read()
-        .await
-        .groups
-        .contains_key(&next_group_name);
-    while next_group_found {
-        tracing::debug!("verifying authorization against group {}", &next_group_name);
-        let next_group = shared_state
-            .read()
-            .await
-            .groups
-            .get(&next_group_name)
-            .unwrap()
-            .clone();
+    let mut groups_pending = user.member.as_ref().unwrap().clone();
+    let mut groups_processed = vec![];
+
+    tracing::debug!("pending groups: {:?}", groups_pending);
+
+    while let Some(next_group) = groups_pending.pop() {
+        tracing::debug!("pending groups: {:?}", groups_pending);
+        tracing::debug!("processed groups: {:?}", groups_processed);
+        tracing::info!("next group: {}", &next_group);
+
+        let group = match shared_state.read().await.groups.get(&next_group) {
+            Some(g) => g.clone(),
+            None => {
+                tracing::info!("group {} not found in config", next_group);
+                continue;
+            }
+        };
+
+        tracing::debug!("group {} was found in config", next_group);
 
         let auth_results_for_group = verify_authorization_helper(
             shared_state.clone(),
             args.clone(),
-            &next_group.service,
-            &next_group.cmds,
+            &group.service,
+            &group.cmds,
         )
         .await;
         auth_result.extend(auth_results_for_group);
 
-        if next_group.acl.is_some() {
+        if group.acl.is_some() {
             _acl_found = true;
             let (acl_result, matching_acl) =
-                verify_acl(shared_state.clone(), &next_group.acl, rem_address).await;
+                verify_acl(shared_state.clone(), &group.acl, rem_address).await;
             acl_results.push((acl_result, matching_acl));
         }
 
-        if let Some(member) = &next_group.member {
-            if member == &next_group_name {
-                break;
-            }
-            next_group_name = member.to_string();
-            next_group_found = shared_state
-                .read()
-                .await
-                .groups
-                .contains_key(&next_group_name);
-        } else {
-            break;
+        groups_processed.push(group.name.clone());
+
+        if group.member.is_none() {
+            continue;
         }
+        let next_group = group.member.as_ref().unwrap().to_string();
+        if groups_processed.contains(&next_group) {
+            continue;
+        }
+        groups_pending.push(next_group);
     }
 
     for (acl_result, matching_acl) in acl_results.into_iter() {
