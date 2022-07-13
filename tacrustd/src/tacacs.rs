@@ -428,20 +428,20 @@ pub async fn verify_authorization(
 
     tracing::debug!("pending groups: {:?}", groups_pending);
 
-    while let Some(next_group_name) = groups_pending.pop() {
+    while let Some(next_group) = groups_pending.pop() {
         tracing::debug!("pending groups: {:?}", groups_pending);
         tracing::debug!("processed groups: {:?}", groups_processed);
-        tracing::info!("next group: {}", &next_group_name);
+        tracing::info!("next group: {}", &next_group);
 
-        let group = match shared_state.read().await.groups.get(&next_group_name) {
+        let group = match shared_state.read().await.groups.get(&next_group) {
             Some(g) => g.clone(),
             None => {
-                tracing::info!("group {} not found in config", next_group_name);
+                tracing::info!("group {} not found in config", next_group);
                 continue;
             }
         };
 
-        tracing::debug!("group {} was found in config", next_group_name);
+        tracing::debug!("group {} was found in config", next_group);
 
         let auth_results_for_group = verify_authorization_helper(
             shared_state.clone(),
