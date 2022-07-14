@@ -67,6 +67,20 @@ pub enum AuthenticationMethod {
     AuthRcmd = 0x20,
 }
 
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
+pub enum AccountingRequestFlags {
+    AcctFlagStart = 0x02,
+    AcctFlagStop = 0x04,
+    AcctFlagWatchDog = 0x08,
+}
+
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
+pub enum AccountingReplyStatus {
+    AcctStatusSuccess = 0x01,
+    AcctStatusError = 0x02,
+    AcctStatusFollow = 0x21,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct PacketFlags {
     pub unencrypted: bool,
@@ -138,6 +152,24 @@ pub enum Body {
         data: Vec<u8>,
         server_msg: Vec<u8>,
         args: Vec<Vec<u8>>,
+    },
+
+    AccountingRequest {
+        flags: AccountingRequestFlags,
+        authen_method: AuthenticationMethod,
+        priv_lvl: u8,
+        authen_type: u8,
+        authen_service: u8,
+        user: Vec<u8>,
+        port: Vec<u8>,
+        rem_addr: Vec<u8>,
+        args: Vec<Vec<u8>>,
+    },
+
+    AccountingReply {
+        status: AccountingReplyStatus,
+        server_msg: Vec<u8>,
+        data: Vec<u8>,
     },
 }
 
