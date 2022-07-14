@@ -1,9 +1,8 @@
 use crate::{
     pseudo_pad::{PseudoPad, MD5_DIGEST_LENGTH},
-    AccountingReplyStatus, AccountingRequestFlags, AuthenticationContinueFlags,
-    AuthenticationMethod, AuthenticationReplyFlags, AuthorizationStatus, Body, Header, Packet,
-    PacketFlags, PacketType, TAC_PLUS_CONTINUE_FLAG_ABORT, TAC_PLUS_SINGLE_CONNECT_FLAG,
-    TAC_PLUS_UNENCRYPTED_FLAG,
+    AuthenticationContinueFlags, AuthenticationMethod, AuthenticationReplyFlags,
+    AuthorizationStatus, Body, Header, Packet, PacketFlags, PacketType,
+    TAC_PLUS_CONTINUE_FLAG_ABORT, TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
 use crate::{AuthenticationStatus, TAC_PLUS_REPLY_FLAG_NOECHO};
 use std::fmt::Debug;
@@ -221,60 +220,6 @@ pub fn parse_author_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
     Ok((input, body))
 }
 
-pub fn parse_accounting_request(input: &[u8]) -> nom::IResult<&[u8], Body> {
-    let (input, flags) = nom::number::complete::be_u8(input)?;
-    let (input, auth_method) = nom::number::complete::be_u8(input)?;
-    let (input, priv_lvl) = nom::number::complete::be_u8(input)?;
-    let (input, authen_type) = nom::number::complete::be_u8(input)?;
-    let (input, authen_service) = nom::number::complete::be_u8(input)?;
-    let (input, user_len) = nom::number::complete::be_u8(input)?;
-    let (input, port_len) = nom::number::complete::be_u8(input)?;
-    let (input, rem_addr_len) = nom::number::complete::be_u8(input)?;
-    let (input, arg_count) = nom::number::complete::be_u8(input)?;
-    let (input, arg_lengths) = count(nom::number::complete::be_u8, arg_count.into())(input)?;
-    let (input, user) = nom::bytes::complete::take(user_len)(input)?;
-    let (input, port) = nom::bytes::complete::take(port_len)(input)?;
-    let (mut input, rem_addr) = nom::bytes::complete::take(rem_addr_len)(input)?;
-    let mut args: Vec<Vec<u8>> = Vec::with_capacity(arg_count as usize);
-    for arg_length in arg_lengths {
-        let (i, arg) = nom::bytes::complete::take(arg_length)(input)?;
-        args.push(arg.to_vec());
-        input = i;
-    }
-
-    let body = Body::AccountingRequest {
-        flags: num::FromPrimitive::from_u8(flags).unwrap_or(AccountingRequestFlags::AcctFlagStart),
-        authen_method: num::FromPrimitive::from_u8(auth_method)
-            .unwrap_or(AuthenticationMethod::AuthNone),
-        priv_lvl,
-        authen_type,
-        authen_service,
-        user: user.to_vec(),
-        port: port.to_vec(),
-        rem_addr: rem_addr.to_vec(),
-        args: args.to_vec(),
-    };
-
-    Ok((input, body))
-}
-
-pub fn parse_accounting_reply(input: &[u8]) -> nom::IResult<&[u8], Body> {
-    let (input, msg_len) = nom::number::complete::be_u16(input)?;
-    let (input, data_len) = nom::number::complete::be_u16(input)?;
-    let (input, status) = nom::number::complete::be_u8(input)?;
-    let (input, server_msg) = nom::bytes::complete::take(msg_len)(input)?;
-    let (input, data) = nom::bytes::complete::take(data_len)(input)?;
-
-    let body = Body::AccountingReply {
-        status: num::FromPrimitive::from_u8(status)
-            .unwrap_or(AccountingReplyStatus::AcctStatusError),
-        server_msg: server_msg.to_vec(),
-        data: data.to_vec(),
-    };
-
-    Ok((input, body))
-}
-
 pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
     match header.r#type {
         PacketType::Authentication => {
@@ -282,8 +227,10 @@ pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
         }
 
         PacketType::Authorization => alt((parse_author_req, parse_author_reply))(input),
-
-        PacketType::Accounting => alt((parse_accounting_request, parse_accounting_reply))(input),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Fail,
+        ))),
     }
 }
 

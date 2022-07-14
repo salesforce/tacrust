@@ -170,78 +170,11 @@ fn serialize_author(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
     Ok(serialized)
 }
 
-fn serialize_accounting(body: &Body) -> Result<Vec<u8>, Box<dyn error::Error>> {
-    let mut serialized: Vec<u8> = Vec::new();
-
-    match body {
-        Body::AccountingRequest {
-            flags,
-            authen_method,
-            priv_lvl,
-            authen_type,
-            authen_service,
-            user,
-            port,
-            rem_addr,
-            args,
-        } => {
-            let flg = num::ToPrimitive::to_u8(flags)
-                .ok_or_else(|| SerializerError::new("invalid flag"))?;
-            serialized.write_u8(flg)?;
-            let auth_method = num::ToPrimitive::to_u8(authen_method)
-                .ok_or_else(|| SerializerError::new("invalid auth method"))?;
-            serialized.write_u8(auth_method)?;
-            serialized.write_u8(*priv_lvl)?;
-            serialized.write_u8(*authen_type)?;
-            serialized.write_u8(*authen_service)?;
-            serialized.write_u8(user.len().try_into()?)?;
-            serialized.write_u8(port.len().try_into()?)?;
-            serialized.write_u8(rem_addr.len().try_into()?)?;
-            serialized.write_u8(args.len().try_into()?)?;
-            for i in 0..args.len() {
-                serialized.write_u8(
-                    args.get(i)
-                        .ok_or_else(|| SerializerError::new("invalid arg"))?
-                        .len()
-                        .try_into()?,
-                )?;
-            }
-            serialized.extend_from_slice(user);
-            serialized.extend_from_slice(port);
-            serialized.extend_from_slice(rem_addr);
-            for i in 0..args.len() {
-                serialized.extend_from_slice(
-                    args.get(i)
-                        .ok_or_else(|| SerializerError::new("invalid arg"))?,
-                );
-            }
-        }
-
-        Body::AccountingReply {
-            status,
-            server_msg,
-            data,
-        } => {
-            serialized.write_u16::<BigEndian>(server_msg.len().try_into()?)?;
-            serialized.write_u16::<BigEndian>(data.len().try_into()?)?;
-            let status_res = num::ToPrimitive::to_u8(status)
-                .ok_or_else(|| SerializerError::new("invalid status"))?;
-            serialized.write_u8(status_res)?;
-            serialized.extend_from_slice(server_msg);
-            serialized.extend_from_slice(data);
-        }
-
-        _ => bail!("not implemented yet"),
-    };
-
-    Ok(serialized)
-}
-
 pub fn serialize_packet(packet: &Packet, key: &[u8]) -> Result<Vec<u8>, Box<dyn error::Error>> {
     let plaintext_body = match packet.header.r#type {
         PacketType::Authentication => serialize_authen_start(&(packet.body)),
         PacketType::Authorization => serialize_author(&(packet.body)),
-        PacketType::Accounting => serialize_accounting(&(packet.body)),
+        _ => bail!("not implemented yet"),
     }?;
 
     let pseudo_pad = PseudoPad::new(
