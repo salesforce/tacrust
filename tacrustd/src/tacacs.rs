@@ -314,6 +314,10 @@ pub async fn process_tacacs_packet(
                     })
                 }
             } else {
+                tracing::info!(
+                    "user specified in authz request not found in config: {}",
+                    username
+                );
                 Ok(Packet {
                     header: generate_response_header(&request_packet.header),
                     body: Body::AuthorizationReply {
