@@ -431,6 +431,7 @@ pub async fn verify_authorization(
     while let Some(next_group) = groups_pending.pop() {
         tracing::debug!("pending groups: {:?}", groups_pending);
         tracing::debug!("processed groups: {:?}", groups_processed);
+        tracing::info!("result so far: {:?}", auth_result);
         tracing::info!("next group: {}", &next_group);
 
         let group = match shared_state.read().await.groups.get(&next_group) {
