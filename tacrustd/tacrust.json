@@ -86,7 +86,7 @@
           "name": "show",
           "list": [
             "permit \"run\"",
-            "permit \"version\"",
+            "permit version",
             "deny"
           ]
         }
@@ -147,7 +147,7 @@
         {
           "name": "file",
           "list": [
-            "permit \"ls.*\"",
+            "permit ls.*",
             "permit \"cat.*\"",
             "deny"
           ]

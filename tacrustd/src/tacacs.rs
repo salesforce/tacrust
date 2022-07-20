@@ -538,12 +538,12 @@ pub async fn verify_cmd_args(
         }
 
         lazy_static! {
-            static ref RE_PERMIT: Regex = Regex::new(r#"permit\s+"(.*)""#).unwrap();
+            static ref RE_PERMIT: Regex = Regex::new(r#"permit\s+(.*)"#).unwrap();
         }
 
         let cmd_arg_regex = if let Some(matches) = RE_PERMIT.captures(config_cmd_arg) {
             let config_cmd_arg_quoted = matches[1].to_string();
-            config_cmd_arg_quoted
+            config_cmd_arg_quoted.trim_matches('"').to_string()
         } else {
             config_cmd_arg.to_string()
         };
