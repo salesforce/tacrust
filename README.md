@@ -9,15 +9,15 @@ Hardware test matrix and instructions at: [sfdc.co/tacrust-testing](https://sfdc
 - [x] Packet header parsing
 - [x] Packet body extraction
 - [x] Packet body decryption
-- [ ] Packet body parsing
+- [x] Packet body parsing
   - [x] AuthenticationStart packet parsing
   - [x] AuthenticationContinue packet parsing
   - [x] AuthorizationRequest packet parsing
-  - [ ] AccountingRequest packet parsing
-- [ ] Packet serialization
+  - [x] AccountingRequest packet parsing
+- [x] Packet serialization
   - [x] AuthenticationReply serialization
   - [x] AuthorizationReply serialization
-  - [ ] AccountingReply serialization
+  - [x] AccountingReply serialization
 - [x] Networking
   - [x] Packet routing
   - [x] Regex-based ACLs
