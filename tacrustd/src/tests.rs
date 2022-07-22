@@ -227,9 +227,14 @@ fn test_cisco_nexus_9000() {
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/aditya/05-author-shell-show-interface-bad.tacacs"
+            "../packets/cisco-nexus-9000/aditya/05-author-shell-show-interface-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/06-author-shell-show-clock-bad.tacacs"
@@ -248,9 +253,14 @@ fn test_cisco_nexus_9000() {
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/aditya/07-author-shell-dir-root-bad.tacacs"
+            "../packets/cisco-nexus-9000/aditya/07-author-shell-dir-root-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/08-author-shell-dir-home-good.tacacs"
@@ -284,19 +294,34 @@ fn test_cisco_nexus_9000() {
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/02.b-author-shell-show-run-bad.tacacs"
+            "../packets/cisco-nexus-9000/kamran/02.b-author-shell-show-run-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/03-author-shell-show-version-bad.tacacs"
+            "../packets/cisco-nexus-9000/kamran/03-author-shell-show-version-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/04-author-shell-show-interface-bad.tacacs"
+            "../packets/cisco-nexus-9000/kamran/04-author-shell-show-interface-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/05-author-shell-show-clock-good.tacacs"
@@ -313,9 +338,14 @@ fn test_cisco_nexus_9000() {
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/06-author-shell-dir-root-bad.tacacs"
+            "../packets/cisco-nexus-9000/kamran/06-author-shell-dir-root-good.tacacs"
         );
-        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+        test_author_packet(
+            packet,
+            key,
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/07-author-shell-dir-home-good.tacacs"
