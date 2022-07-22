@@ -381,25 +381,13 @@ async fn verify_authorization_helper(
     let cmd_match_results = &mut verify_cmd(shared_state.clone(), cmds, &args).await;
     tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
 
-    let matches_found = if args.service.contains(&"service=shell".to_string())
-        || args.service.contains(&"service=exec".to_string())
-    {
-        tracing::debug!("service was shell/exec, so need authorization for both service and cmd");
-        service_match_results.len() != 0 && cmd_match_results.len() != 0
-    } else {
-        tracing::debug!("service was not shell/exec, does not need authorization for cmd");
-        service_match_results.len() != 0
-    };
-
-    if matches_found {
-        tracing::debug!(
-            "{} matches found for service, {} matches found for cmd",
-            service_match_results.len(),
-            cmd_match_results.len()
-        );
-        auth_result.append(service_match_results);
-        auth_result.append(cmd_match_results);
-    }
+    tracing::debug!(
+        "{} matches found for service, {} matches found for cmd",
+        service_match_results.len(),
+        cmd_match_results.len()
+    );
+    auth_result.append(service_match_results);
+    auth_result.append(cmd_match_results);
 
     return auth_result.into_iter().unique().collect();
 }
