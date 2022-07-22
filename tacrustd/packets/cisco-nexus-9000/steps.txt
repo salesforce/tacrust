@@ -1,3 +1,11 @@
+The instructions below were pre PR #148: https://git.soma.salesforce.com/Kuleana/tacrust/pull/148
+
+Post #148 most of these commands will succeed because of the `priv-lvl=15` that both users have.
+
+TODO: Repeat testing of Cisco Nexus 9000 to verify no regression in terms of opening up AuthZ.
+
+---
+
 User commands:
     - show run
     - show version
