@@ -567,8 +567,6 @@ pub async fn verify_cmd(
                 cmd_result.append(
                     &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await,
                 );
-            } else if packet_args.cmd.len() > 0 {
-                cmd_result.push("service=shell".to_string());
             }
         }
     }
