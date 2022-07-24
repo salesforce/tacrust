@@ -195,7 +195,7 @@ fn test_cisco_nexus_9000() {
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec(), b"service=shell".to_vec()],
+            vec![b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -290,7 +290,7 @@ fn test_cisco_nexus_9000() {
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec(), b"service=shell".to_vec()],
+            vec![b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -418,7 +418,7 @@ fn test_mrv_lx() {
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec(), b"service=shell".to_vec()],
+            vec![b"priv-lvl=15".to_vec()],
         );
     });
 }
@@ -440,7 +440,7 @@ fn test_ciena_waveserver() {
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec(), b"service=shell".to_vec()],
+            vec![b"priv-lvl=15".to_vec()],
         );
 
         let packet =
