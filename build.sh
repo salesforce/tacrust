@@ -3,9 +3,10 @@
 export HTTP_PROXY=http://${PROXY_SERVER}
 export HTTPS_PROXY=http://${PROXY_SERVER}
 
-PROJ_NAME="tacrust"
-VERSION=0.1
-ITERATION=$(date -u +'%Y%m%d%H%M%S')
+export PROJ_NAME="tacrust"
+export VERSION=$(git rev-list --count HEAD)
+export ITERATION=$(date -u +'%Y%m%d%H%M%S')
+export FULL_VERSION="${VERSION}-${ITERATION}"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 make build-release
