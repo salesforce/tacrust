@@ -219,6 +219,8 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
 
     let logging_guard = setup_logging(&config.log_dir);
 
+    tracing::info!("commit: {}", env!("GIT_HASH"));
+    tracing::info!("version: {}", env!("FULL_VERSION"));
     tracing::info!("listening on {}", &config.listen_address);
 
     let listener = TcpListener::bind(&config.listen_address).await?;
