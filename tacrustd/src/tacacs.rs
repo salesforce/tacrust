@@ -284,8 +284,14 @@ pub async fn process_tacacs_packet(
                     tracing::debug!("arg: {}", String::from_utf8_lossy(&arg));
                 }
                 let args_map = process_args(&args).await?;
-                let result =
-                    verify_authorization(shared_state.clone(), &user, &rem_address, args_map).await;
+                let result = verify_authorization(
+                    shared_state.clone(),
+                    &user,
+                    &addr,
+                    &rem_address,
+                    args_map,
+                )
+                .await;
                 tracing::info!("authorization result: {:?}", result);
                 if result
                     .iter()
@@ -331,15 +337,15 @@ pub async fn process_tacacs_packet(
         }
 
         Body::AccountingRequest {
-            flags,
-            authen_method,
-            priv_lvl,
-            authen_type,
-            authen_service,
-            user,
-            port,
-            rem_addr,
-            args,
+            flags: _,
+            authen_method: _,
+            priv_lvl: _,
+            authen_type: _,
+            authen_service: _,
+            user: _,
+            port: _,
+            rem_addr: _,
+            args: _,
         } => Ok(Packet {
             header: generate_response_header(&request_packet.header),
             body: Body::AccountingReply {
@@ -414,6 +420,7 @@ async fn verify_authorization_helper(
 pub async fn verify_authorization(
     shared_state: Arc<RwLock<State>>,
     user: &User,
+    client_address: &SocketAddr,
     rem_address: &[u8],
     args: PacketArgs,
 ) -> Vec<String> {
@@ -426,7 +433,7 @@ pub async fn verify_authorization(
     if user.acl.is_some() {
         _acl_found = true;
         let (acl_result, matching_acl) =
-            verify_acl(shared_state.clone(), &user.acl, rem_address).await;
+            verify_acl(shared_state.clone(), &user.acl, client_address, rem_address).await;
         acl_results.push((acl_result, matching_acl));
     }
 
@@ -466,8 +473,13 @@ pub async fn verify_authorization(
 
         if group.acl.is_some() {
             _acl_found = true;
-            let (acl_result, matching_acl) =
-                verify_acl(shared_state.clone(), &group.acl, rem_address).await;
+            let (acl_result, matching_acl) = verify_acl(
+                shared_state.clone(),
+                &group.acl,
+                client_address,
+                rem_address,
+            )
+            .await;
             acl_results.push((acl_result, matching_acl));
         }
 
@@ -595,12 +607,15 @@ pub async fn verify_cmd(
 pub async fn verify_acl(
     shared_state: Arc<RwLock<State>>,
     acl: &Option<String>,
+    client_address: &SocketAddr,
     rem_address: &[u8],
 ) -> (bool, Option<String>) {
-    tracing::debug!(
-        "verifying acl {:?} against rem_address {:?}",
+    let client_ip = client_address.ip().to_string();
+    tracing::info!(
+        "verifying acl {:?} against client_ip {} [rem_address={}]",
         acl,
-        rem_address
+        client_ip,
+        String::from_utf8_lossy(rem_address)
     );
     if acl.is_none() {
         tracing::debug!("acl is empty");
@@ -615,12 +630,6 @@ pub async fn verify_acl(
             }
         }
     };
-    let rem_address = String::from_utf8_lossy(rem_address);
-    tracing::debug!(
-        "verifying rem_address {} against acl {:?}",
-        rem_address,
-        acl
-    );
     for acl_expr in &(acl.list) {
         let acl_expr_split: Vec<&str> = acl_expr.split("=").collect();
         if acl_expr_split.len() != 2 {
@@ -636,7 +645,7 @@ pub async fn verify_acl(
                 Arc::new(Regex::new(acl_regex).unwrap_or_else(|_| Regex::new("$.").unwrap()))
             })
             .clone();
-        if !acl_regex_compiled.is_match(&rem_address) {
+        if !acl_regex_compiled.is_match(&client_ip) {
             continue;
         }
         match acl_action {
