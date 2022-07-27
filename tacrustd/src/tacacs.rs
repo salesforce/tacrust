@@ -331,15 +331,15 @@ pub async fn process_tacacs_packet(
         }
 
         Body::AccountingRequest {
-            flags,
-            authen_method,
-            priv_lvl,
-            authen_type,
-            authen_service,
-            user,
-            port,
-            rem_addr,
-            args,
+            flags: _,
+            authen_method: _,
+            priv_lvl: _,
+            authen_type: _,
+            authen_service: _,
+            user: _,
+            port: _,
+            rem_addr: _,
+            args: _,
         } => Ok(Packet {
             header: generate_response_header(&request_packet.header),
             body: Body::AccountingReply {
