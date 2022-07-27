@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tacrust::{
-    parser, serializer, AuthenticationReplyFlags, AuthenticationStatus, AuthenticationType,
-    AuthorizationStatus, Body, Header, Packet,
+    parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
+    AuthenticationType, AuthorizationStatus, Body, Header, Packet,
 };
 use tokio::sync::RwLock;
 
@@ -329,6 +329,25 @@ pub async fn process_tacacs_packet(
                 })
             }
         }
+
+        Body::AccountingRequest {
+            flags,
+            authen_method,
+            priv_lvl,
+            authen_type,
+            authen_service,
+            user,
+            port,
+            rem_addr,
+            args,
+        } => Ok(Packet {
+            header: generate_response_header(&request_packet.header),
+            body: Body::AccountingReply {
+                status: AccountingReplyStatus::AcctStatusSuccess,
+                server_msg: vec![],
+                data: vec![],
+            },
+        }),
         _ => Err(Report::msg("not supported yet")),
     }?;
 
