@@ -1,6 +1,6 @@
 FROM dva-registry.internal.salesforce.com/dva/kuleana-rust-builder:33 as builder
 
-ENV BUILD_NUMBER=$BUILD_NUMBER
+ENV BUILD_NUMBER=docker-${BUILD_NUMBER}
 
 USER root
 ADD . /tmp/src
