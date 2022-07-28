@@ -5,6 +5,11 @@ export HTTPS_PROXY=http://${PROXY_SERVER}
 
 export PROJ_NAME="tacrust"
 export VERSION=$(git rev-list --count HEAD)
+
+if [ "$VERSION" == "" ]; then
+	export VERSION=$BUILD_NUMBER
+fi
+
 export ITERATION=$(date -u +'%Y%m%d%H%M%S')
 export FULL_VERSION="${VERSION}-${ITERATION}"
 
