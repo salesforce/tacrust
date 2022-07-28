@@ -10,6 +10,10 @@ if [ "$VERSION" == "" ]; then
 	export VERSION=$BUILD_NUMBER
 fi
 
+if [ "$VERSION" == "" ]; then
+	export VERSION="0.99"
+fi
+
 export ITERATION=$(date -u +'%Y%m%d%H%M%S')
 export FULL_VERSION="${VERSION}-${ITERATION}"
 
