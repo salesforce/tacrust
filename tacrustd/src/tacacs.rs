@@ -23,6 +23,12 @@ pub struct PacketArgs {
     cmd_args: Vec<String>,
 }
 
+#[derive(Clone, Debug)]
+pub enum AclResult {
+    Pass,
+    Reject,
+}
+
 fn normalized_match(s1: &str, s2: &str) -> bool {
     if s1.len() == 0 || s2.len() == 0 {
         return true;
@@ -427,7 +433,7 @@ pub async fn verify_authorization(
     tracing::info!("packet args: {:?}", args);
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
-    let mut acl_results: Vec<(bool, Option<String>)> = Vec::new();
+    let mut acl_results: Vec<(AclResult, Option<String>)> = Vec::new();
     let mut _acl_found = false;
 
     if user.acl.is_some() {
@@ -497,13 +503,20 @@ pub async fn verify_authorization(
 
     for (acl_result, matching_acl) in acl_results.into_iter() {
         if matching_acl.is_some() {
-            tracing::info!("an acl was matched: ({}, {:?})", &acl_result, matching_acl);
-            if acl_result {
-                tracing::info!("acl matched, request accepted");
-                return auth_result.into_iter().unique().collect();
-            } else {
-                tracing::info!("acl matched, request rejected");
-                return vec![];
+            tracing::info!(
+                "an acl was matched: ({:?}, {:?})",
+                &acl_result,
+                matching_acl
+            );
+            match acl_result {
+                AclResult::Pass => {
+                    tracing::info!("acl matched, request accepted");
+                    return auth_result.into_iter().unique().collect();
+                }
+                AclResult::Reject => {
+                    tracing::info!("acl matched, request rejected");
+                    return vec![];
+                }
             }
         }
     }
@@ -611,7 +624,7 @@ pub async fn verify_acl(
     acl: &Option<String>,
     client_address: &SocketAddr,
     rem_address: &[u8],
-) -> (bool, Option<String>) {
+) -> (AclResult, Option<String>) {
     let client_ip = client_address.ip().to_string();
     tracing::info!(
         "verifying acl {} against client_ip {} [rem_address={}]",
@@ -621,14 +634,14 @@ pub async fn verify_acl(
     );
     if acl.is_none() {
         tracing::debug!("acl is empty");
-        return (false, None);
+        return (AclResult::Reject, None);
     }
     let acl = {
         match shared_state.read().await.acls.get(acl.as_ref().unwrap()) {
             Some(acl) => acl.clone(),
             None => {
                 tracing::debug!("acl {} not found in config", acl.as_ref().unwrap());
-                return (false, None);
+                return (AclResult::Reject, None);
             }
         }
     };
@@ -651,12 +664,12 @@ pub async fn verify_acl(
             continue;
         }
         match acl_action {
-            "permit" => return (true, Some(acl_expr.to_string())),
-            "deny" => return (false, Some(acl_expr.to_string())),
+            "permit" => return (AclResult::Pass, Some(acl_expr.to_string())),
+            "deny" => return (AclResult::Reject, Some(acl_expr.to_string())),
             _ => continue,
         }
     }
-    (false, None)
+    (AclResult::Reject, None)
 }
 
 pub async fn verify_user_credentials(
