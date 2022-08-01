@@ -612,8 +612,8 @@ pub async fn verify_acl(
 ) -> (bool, Option<String>) {
     let client_ip = client_address.ip().to_string();
     tracing::info!(
-        "verifying acl {:?} against client_ip {} [rem_address={}]",
-        acl,
+        "verifying acl {} against client_ip {} [rem_address={}]",
+        acl.as_ref().unwrap_or(&"none".to_string()),
         client_ip,
         String::from_utf8_lossy(rem_address)
     );
