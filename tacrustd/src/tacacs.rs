@@ -497,23 +497,25 @@ pub async fn verify_authorization(
 
     for (acl_result, matching_acl) in acl_results.into_iter() {
         if matching_acl.is_some() {
-            tracing::debug!("an acl was matched: ({}, {:?})", &acl_result, matching_acl);
+            tracing::info!("an acl was matched: ({}, {:?})", &acl_result, matching_acl);
             if acl_result {
+                tracing::info!("acl matched, request accepted");
                 return auth_result.into_iter().unique().collect();
             } else {
+                tracing::info!("acl matched, request rejected");
                 return vec![];
             }
         }
     }
 
     if _acl_found {
-        tracing::debug!(
+        tracing::info!(
             "at least one acl was found to be applicable to the user, but none permitted the request",
         );
         return vec![];
     }
 
-    tracing::debug!("no acls found applicable to the user");
+    tracing::info!("no acls found applicable to the user");
     return auth_result.into_iter().unique().collect();
 }
 
