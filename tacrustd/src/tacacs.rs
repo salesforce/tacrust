@@ -482,7 +482,7 @@ pub async fn verify_authorization(
                     v,
                     group.name
                 );
-                _authz_override_found = true;
+                _authz_override_found = v;
             }
             _ => {
                 tracing::debug!(
