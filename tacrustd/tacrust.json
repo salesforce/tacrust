@@ -62,6 +62,14 @@
         "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
       },
       "member": ["group-useless", "group-nonexisting", "group-user"]
+    },
+    {
+      "name": "alexdelarge",
+      "credentials": {
+        "type": "Ascii",
+        "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
+      },
+      "member": ["group-no-services"]
     }
   ],
   "groups": [
@@ -176,6 +184,10 @@
           ]
         }
       ]
+    },
+    {
+      "name": "group-no-services",
+      "always_permit_authorization": true
     }
   ]
 }

@@ -277,7 +277,6 @@ pub async fn process_tacacs_packet(
         } => {
             let username = String::from_utf8_lossy(&user).to_string();
             let user_found = shared_state.read().await.users.contains_key(&username);
-            let mut arg_result: Vec<Vec<u8>> = Vec::new();
             if user_found {
                 let user = shared_state
                     .read()
@@ -290,7 +289,7 @@ pub async fn process_tacacs_packet(
                     tracing::debug!("arg: {}", String::from_utf8_lossy(&arg));
                 }
                 let args_map = process_args(&args).await?;
-                let result = verify_authorization(
+                let (auth_status, auth_result) = verify_authorization(
                     shared_state.clone(),
                     &user,
                     &addr,
@@ -298,24 +297,22 @@ pub async fn process_tacacs_packet(
                     args_map,
                 )
                 .await;
-                tracing::info!("authorization result: {:?}", result);
-                if result
-                    .iter()
-                    .map(|val| arg_result.push(val.as_bytes().to_vec()))
-                    .count()
-                    > 0
-                {
-                    Ok(Packet {
+                tracing::info!("authorization result: {:?}", auth_result);
+                let mut auth_result_bytes: Vec<Vec<u8>> = Vec::new();
+                for value in auth_result {
+                    auth_result_bytes.push(value.as_bytes().to_vec());
+                }
+                match auth_status {
+                    AuthorizationStatus::AuthPassAdd => Ok(Packet {
                         header: generate_response_header(&request_packet.header),
                         body: Body::AuthorizationReply {
                             status: AuthorizationStatus::AuthPassAdd,
                             data: vec![],
                             server_msg: vec![],
-                            args: arg_result,
+                            args: auth_result_bytes,
                         },
-                    })
-                } else {
-                    Ok(Packet {
+                    }),
+                    _ => Ok(Packet {
                         header: generate_response_header(&request_packet.header),
                         body: Body::AuthorizationReply {
                             status: AuthorizationStatus::AuthStatusFail,
@@ -323,7 +320,7 @@ pub async fn process_tacacs_packet(
                             server_msg: vec![],
                             args: vec![],
                         },
-                    })
+                    }),
                 }
             } else {
                 tracing::info!(
@@ -429,12 +426,13 @@ pub async fn verify_authorization(
     client_address: &SocketAddr,
     rem_address: &[u8],
     args: PacketArgs,
-) -> Vec<String> {
+) -> (AuthorizationStatus, Vec<String>) {
     tracing::info!("packet args: {:?}", args);
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
     let mut acl_results: Vec<(AclResult, Option<String>)> = Vec::new();
     let mut _acl_found = false;
+    let mut _authz_override_found = false;
 
     if user.acl.is_some() {
         _acl_found = true;
@@ -444,7 +442,7 @@ pub async fn verify_authorization(
     }
 
     if user.member.is_none() {
-        return auth_result;
+        return (AuthorizationStatus::AuthStatusFail, auth_result);
     }
 
     let mut groups_pending = user.member.as_ref().unwrap().clone();
@@ -477,6 +475,23 @@ pub async fn verify_authorization(
         .await;
         auth_result.extend(auth_results_for_group);
 
+        match group.always_permit_authorization {
+            Some(v) => {
+                tracing::info!(
+                    "always_permit_authorization set to {} for group {}",
+                    v,
+                    group.name
+                );
+                _authz_override_found = true;
+            }
+            _ => {
+                tracing::debug!(
+                    "always_permit_authorization not set for group {}",
+                    group.name
+                );
+            }
+        }
+
         if group.acl.is_some() {
             _acl_found = true;
             let (acl_result, matching_acl) = verify_acl(
@@ -501,6 +516,15 @@ pub async fn verify_authorization(
         groups_pending.push(next_group);
     }
 
+    let auth_status = if auth_result.len() > 0 {
+        AuthorizationStatus::AuthPassAdd
+    } else if _authz_override_found {
+        tracing::info!("no matches found but authz overround was found so returning success");
+        AuthorizationStatus::AuthPassAdd
+    } else {
+        AuthorizationStatus::AuthStatusFail
+    };
+
     for (acl_result, matching_acl) in acl_results.into_iter() {
         if matching_acl.is_some() {
             tracing::info!(
@@ -511,11 +535,11 @@ pub async fn verify_authorization(
             match acl_result {
                 AclResult::Pass => {
                     tracing::info!("acl matched, request accepted");
-                    return auth_result.into_iter().unique().collect();
+                    return (auth_status, auth_result.into_iter().unique().collect());
                 }
                 AclResult::Reject => {
                     tracing::info!("acl matched, request rejected");
-                    return vec![];
+                    return (AuthorizationStatus::AuthStatusFail, vec![]);
                 }
             }
         }
@@ -525,11 +549,11 @@ pub async fn verify_authorization(
         tracing::info!(
             "at least one acl was found to be applicable to the user, but none permitted the request",
         );
-        return vec![];
+        return (AuthorizationStatus::AuthStatusFail, vec![]);
     }
 
     tracing::info!("no acls found applicable to the user");
-    return auth_result.into_iter().unique().collect();
+    return (auth_status, auth_result.into_iter().unique().collect());
 }
 
 pub async fn verify_service(

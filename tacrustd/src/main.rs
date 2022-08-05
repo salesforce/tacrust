@@ -60,7 +60,7 @@ pub struct Cmd {
 #[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Group {
     name: String,
-    defservice: Option<String>,
+    always_permit_authorization: Option<bool>,
     acl: Option<String>,
     pap: Option<String>,
     member: Option<String>,

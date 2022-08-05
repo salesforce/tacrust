@@ -543,3 +543,14 @@ fn test_multiple_group_memberships() {
         );
     });
 }
+
+#[test]
+#[serial]
+fn test_always_permit_authz_flag() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/alexdelarge_author_raccess.tacacs");
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd, vec![]);
+    });
+}
