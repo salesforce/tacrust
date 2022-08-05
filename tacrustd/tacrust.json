@@ -69,7 +69,23 @@
         "type": "Ascii",
         "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
       },
-      "member": ["group-no-services"]
+      "member": ["group-no-services-authz-override-true"]
+    },
+    {
+      "name": "jacktorrance",
+      "credentials": {
+        "type": "Ascii",
+        "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
+      },
+      "member": ["group-no-services-authz-override-false"]
+    },
+    {
+      "name": "davebowman",
+      "credentials": {
+        "type": "Ascii",
+        "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
+      },
+      "member": ["group-no-services-authz-override-missing"]
     }
   ],
   "groups": [
@@ -186,8 +202,15 @@
       ]
     },
     {
-      "name": "group-no-services",
+      "name": "group-no-services-authz-override-true",
       "always_permit_authorization": true
+    },
+    {
+      "name": "group-no-services-authz-override-false",
+      "always_permit_authorization": false
+    },
+    {
+      "name": "group-no-services-authz-override-missing"
     }
   ]
 }

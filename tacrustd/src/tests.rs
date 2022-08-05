@@ -552,5 +552,11 @@ fn test_always_permit_authz_flag() {
     test_server(port, Duration::from_secs(5), || {
         let packet = include_bytes!("../packets/alexdelarge_author_raccess.tacacs");
         test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd, vec![]);
+
+        let packet = include_bytes!("../packets/jacktorrance_author_carwash.tacacs");
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
+
+        let packet = include_bytes!("../packets/davebowman_author_carwash.tacacs");
+        test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
     });
 }
