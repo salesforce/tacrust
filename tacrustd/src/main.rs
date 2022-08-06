@@ -73,6 +73,7 @@ pub struct User {
     name: String,
     credentials: Credentials,
     member: Option<Vec<String>>,
+    always_permit_authorization: Option<bool>,
     acl: Option<String>,
 }
 

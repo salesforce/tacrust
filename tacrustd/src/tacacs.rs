@@ -297,7 +297,11 @@ pub async fn process_tacacs_packet(
                     args_map,
                 )
                 .await;
-                tracing::info!("authorization result: {:?}", auth_result);
+                tracing::info!(
+                    "authorization result: ({:?}, {:?})",
+                    auth_status,
+                    auth_result
+                );
                 let mut auth_result_bytes: Vec<Vec<u8>> = Vec::new();
                 for value in auth_result {
                     auth_result_bytes.push(value.as_bytes().to_vec());
@@ -441,8 +445,33 @@ pub async fn verify_authorization(
         acl_results.push((acl_result, matching_acl));
     }
 
+    match user.always_permit_authorization {
+        Some(v) => {
+            tracing::info!(
+                "always_permit_authorization set to {} for user {}",
+                v,
+                user.name
+            );
+            _authz_override_found = v;
+        }
+        _ => {
+            tracing::debug!(
+                "always_permit_authorization not set for group {}",
+                user.name
+            );
+        }
+    }
+
     if user.member.is_none() {
-        return (AuthorizationStatus::AuthStatusFail, auth_result);
+        if _authz_override_found {
+            tracing::info!("user is not member of any groups but authz override found at user level, returning success");
+            return (AuthorizationStatus::AuthPassAdd, auth_result);
+        } else {
+            tracing::info!(
+                "user is not member of any groups and no authz override found, returning failure"
+            );
+            return (AuthorizationStatus::AuthStatusFail, auth_result);
+        }
     }
 
     let mut groups_pending = user.member.as_ref().unwrap().clone();
@@ -519,7 +548,7 @@ pub async fn verify_authorization(
     let auth_status = if auth_result.len() > 0 {
         AuthorizationStatus::AuthPassAdd
     } else if _authz_override_found {
-        tracing::info!("no matches found but authz overround was found so returning success");
+        tracing::info!("no matches found but authz override was found so returning success");
         AuthorizationStatus::AuthPassAdd
     } else {
         AuthorizationStatus::AuthStatusFail
