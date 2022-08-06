@@ -98,7 +98,7 @@ pub struct Config {
     key: String,
 
     // Extra keys (will be tried if primary key fails)
-    extra_keys: Vec<String>,
+    extra_keys: Option<Vec<String>>,
 
     // List of users
     users: Option<Vec<User>>,
@@ -181,6 +181,8 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
         config.key.as_bytes().to_vec(),
         config
             .extra_keys
+            .as_ref()
+            .unwrap_or(&vec![])
             .iter()
             .map(|k| k.as_bytes().to_vec())
             .collect(),
