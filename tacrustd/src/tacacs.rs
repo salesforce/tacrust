@@ -119,6 +119,34 @@ fn generate_response_header(request_header: &Header) -> Header {
     }
 }
 
+async fn decrypt_request(
+    request_bytes: &[u8],
+    shared_state: Arc<RwLock<State>>,
+) -> Result<(Vec<u8>, Packet), Report> {
+    let primary_key = &(shared_state.read().await.key);
+    match parser::parse_packet(request_bytes, &(shared_state.read().await.key)) {
+        Ok((_, p)) => {
+            tracing::info!("packet parsed with primary key");
+            Ok((primary_key.to_vec(), p))
+        }
+        Err(e) => {
+            tracing::info!("unable to parse packet using primary key: {:?}", e);
+            for extra_key in &(shared_state.read().await.extra_keys) {
+                match parser::parse_packet(request_bytes, &extra_key) {
+                    Ok((_, p)) => {
+                        tracing::info!("packet parsed with extra key");
+                        return Ok((extra_key.to_vec(), p));
+                    }
+                    Err(e) => {
+                        tracing::info!("unable to parse packet using extra key: {:?}", e)
+                    }
+                };
+            }
+            bail!("unable to parse packet using any keys: {:?}", e)
+        }
+    }
+}
+
 pub async fn process_tacacs_packet(
     shared_state: Arc<RwLock<State>>,
     addr: &SocketAddr,
@@ -131,11 +159,8 @@ pub async fn process_tacacs_packet(
         .entry(addr.ip())
         .or_insert_with(|| Arc::new(RwLock::new(HashMap::new())))
         .clone();
-    let request_packet = match parser::parse_packet(request_bytes, &(shared_state.read().await.key))
-    {
-        Ok((_, p)) => p,
-        Err(e) => bail!("unable to parse packet: {:?}", e),
-    };
+    let (request_key, request_packet) =
+        decrypt_request(request_bytes, shared_state.clone()).await?;
 
     let response_packet = match request_packet.body {
         Body::AuthenticationStart {
@@ -364,11 +389,10 @@ pub async fn process_tacacs_packet(
         _ => Err(Report::msg("not supported yet")),
     }?;
 
-    let response_bytes =
-        match serializer::serialize_packet(&response_packet, &(shared_state.read().await.key)) {
-            Ok(b) => b,
-            Err(e) => bail!("unable to serialize packet: {:?}", e),
-        };
+    let response_bytes = match serializer::serialize_packet(&response_packet, &request_key) {
+        Ok(b) => b,
+        Err(e) => bail!("unable to serialize packet: {:?}", e),
+    };
     Ok(response_bytes)
 }
 

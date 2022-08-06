@@ -27,5 +27,6 @@ Hardware test matrix and instructions at: [sfdc.co/tacrust-testing](https://sfdc
   - [x] Group membership
 - [ ] Feature enhancements (things not supported in the Shrubbery daemon)
   - [x] Support multiple groups per user
-  - [ ] Per client secret keys
+  - [x] Support for [multiple keys](https://git.soma.salesforce.com/Kuleana/tacacs/pull/3)
+  - [ ] Per client IP secret keys (groups are not known until packet is decrypted)
   - [ ] Command and service definitions at user level (instead of requiring groups)

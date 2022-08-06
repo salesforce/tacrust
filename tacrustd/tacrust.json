@@ -1,6 +1,11 @@
 {
   "listen_address": "0.0.0.0:49",
   "key": "tackey",
+  "extra_keys": [
+      "tackey1",
+      "tackey2",
+      "tackey3"
+  ],
   "acls": [
     {
       "name": "testacl_permit_all_deny_none",
