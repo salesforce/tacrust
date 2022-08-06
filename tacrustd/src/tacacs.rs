@@ -323,7 +323,7 @@ pub async fn process_tacacs_packet(
                 )
                 .await;
                 tracing::info!(
-                    "authorization result: ({:?}, {:?})",
+                    "final authorization result: ({:?}, {:?})",
                     auth_status,
                     auth_result
                 );
@@ -465,7 +465,14 @@ pub async fn verify_authorization(
     if user.acl.is_some() {
         _acl_found = true;
         let (acl_result, matching_acl) =
-            verify_acl(shared_state.clone(), &user.acl, client_address, rem_address).await;
+            verify_acl(shared_state.clone(), &user.acl, client_address).await;
+        tracing::info!(
+            "verifying acl {} against client_ip {} [rem_address={}] | result={:?}",
+            user.acl.as_ref().unwrap_or(&"none".to_string()),
+            client_address.ip(),
+            String::from_utf8_lossy(rem_address),
+            acl_result
+        );
         acl_results.push((acl_result, matching_acl));
     }
 
@@ -503,7 +510,7 @@ pub async fn verify_authorization(
     while let Some(next_group) = groups_pending.pop() {
         tracing::debug!("pending groups: {:?}", groups_pending);
         tracing::debug!("processed groups: {:?}", groups_processed);
-        tracing::info!("result so far: {:?}", auth_result);
+        tracing::info!("authorization result so far: {:?}", auth_result);
         tracing::info!("next group: {}", &next_group);
 
         let group = match shared_state.read().await.groups.get(&next_group) {
@@ -544,13 +551,15 @@ pub async fn verify_authorization(
 
         if group.acl.is_some() {
             _acl_found = true;
-            let (acl_result, matching_acl) = verify_acl(
-                shared_state.clone(),
-                &group.acl,
-                client_address,
-                rem_address,
-            )
-            .await;
+            let (acl_result, matching_acl) =
+                verify_acl(shared_state.clone(), &group.acl, client_address).await;
+            tracing::info!(
+                "verifying acl {} against client_ip {} [rem_address={}] | result={:?}",
+                group.acl.as_ref().unwrap_or(&"none".to_string()),
+                client_address.ip(),
+                String::from_utf8_lossy(rem_address),
+                acl_result
+            );
             acl_results.push((acl_result, matching_acl));
         }
 
@@ -566,7 +575,7 @@ pub async fn verify_authorization(
         groups_pending.push(next_group);
     }
 
-    tracing::info!("result so far: {:?}", auth_result);
+    tracing::info!("authorization result so far: {:?}", auth_result);
 
     let auth_status = if auth_result.len() > 0 {
         AuthorizationStatus::AuthPassAdd
@@ -699,15 +708,8 @@ pub async fn verify_acl(
     shared_state: Arc<RwLock<State>>,
     acl: &Option<String>,
     client_address: &SocketAddr,
-    rem_address: &[u8],
 ) -> (AclResult, Option<String>) {
     let client_ip = client_address.ip().to_string();
-    tracing::info!(
-        "verifying acl {} against client_ip {} [rem_address={}]",
-        acl.as_ref().unwrap_or(&"none".to_string()),
-        client_ip,
-        String::from_utf8_lossy(rem_address)
-    );
     if acl.is_none() {
         tracing::debug!("acl is empty");
         return (AclResult::Reject, None);
