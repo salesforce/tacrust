@@ -542,6 +542,8 @@ pub async fn verify_authorization(
         groups_pending.push(next_group);
     }
 
+    tracing::info!("result so far: {:?}", auth_result);
+
     let auth_status = if auth_result.len() > 0 {
         AuthorizationStatus::AuthPassAdd
     } else if _authz_override_found {
