@@ -455,10 +455,7 @@ pub async fn verify_authorization(
             _authz_override_found = v;
         }
         _ => {
-            tracing::debug!(
-                "always_permit_authorization not set for group {}",
-                user.name
-            );
+            tracing::debug!("always_permit_authorization not set for user {}", user.name);
         }
     }
 
