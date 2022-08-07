@@ -453,9 +453,10 @@ pub async fn verify_authorization(
     user: &User,
     client_address: &SocketAddr,
     rem_address: &[u8],
-    args: PacketArgs,
+    packet_args: PacketArgs,
 ) -> (AuthorizationStatus, Vec<String>) {
-    tracing::info!("packet args: {:?}", args);
+    tracing::info!("packet args: {:?}", packet_args);
+    tracing::info!("rem address: {}", String::from_utf8_lossy(rem_address));
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
     let mut acl_results: Vec<(AclResult, Option<String>)> = Vec::new();
@@ -467,10 +468,9 @@ pub async fn verify_authorization(
         let (acl_result, matching_acl) =
             verify_acl(shared_state.clone(), &user.acl, client_address).await;
         tracing::info!(
-            "verifying acl {} against client_ip {} [rem_address={}] | result={:?}",
+            "verifying acl {} against client_ip {} | result={:?}",
             user.acl.as_ref().unwrap_or(&"none".to_string()),
             client_address.ip(),
-            String::from_utf8_lossy(rem_address),
             acl_result
         );
         acl_results.push((acl_result, matching_acl));
@@ -525,7 +525,7 @@ pub async fn verify_authorization(
 
         let auth_results_for_group = verify_authorization_helper(
             shared_state.clone(),
-            args.clone(),
+            packet_args.clone(),
             &group.service,
             &group.cmds,
         )
@@ -554,10 +554,9 @@ pub async fn verify_authorization(
             let (acl_result, matching_acl) =
                 verify_acl(shared_state.clone(), &group.acl, client_address).await;
             tracing::info!(
-                "verifying acl {} against client_ip {} [rem_address={}] | result={:?}",
+                "verifying acl {} against client_ip {} | result={:?}",
                 group.acl.as_ref().unwrap_or(&"none".to_string()),
                 client_address.ip(),
-                String::from_utf8_lossy(rem_address),
                 acl_result
             );
             acl_results.push((acl_result, matching_acl));
