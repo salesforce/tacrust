@@ -7,6 +7,6 @@ unit_tests_command: STRATA=yes ./test.sh                # The command we'll run 
 docker_package_images: dva/kuleana-rust-builder:33      # The image that will be used to package your RPM
 package_generation_command: ./build.sh                  # The command we'll run to package your RPMs
 package_repository: kuleana                             # Please see the list of available yum repos and create a PR if your group
-publish_to_gcp: true
+promote_to_falcon: true
 docker_images:                                          # Provide a map of image names to custom Dockerfile names
    kuleana-tacrust: ./Dockerfile

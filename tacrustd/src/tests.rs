@@ -563,3 +563,14 @@ fn test_always_permit_authz_flag() {
         test_author_packet(packet, key, AuthorizationStatus::AuthStatusFail, vec![]);
     });
 }
+
+#[test]
+#[serial]
+fn test_extra_keys() {
+    let key = b"tackey2";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), || {
+        let packet = include_bytes!("../packets/faramir_author_carwash_tackey2.tacacs");
+        test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd, vec![]);
+    });
+}

@@ -119,6 +119,34 @@ fn generate_response_header(request_header: &Header) -> Header {
     }
 }
 
+async fn decrypt_request(
+    request_bytes: &[u8],
+    shared_state: Arc<RwLock<State>>,
+) -> Result<(Vec<u8>, Packet), Report> {
+    let primary_key = &(shared_state.read().await.key);
+    match parser::parse_packet(request_bytes, &(shared_state.read().await.key)) {
+        Ok((_, p)) => {
+            tracing::info!("packet parsed with primary key");
+            Ok((primary_key.to_vec(), p))
+        }
+        Err(e) => {
+            tracing::info!("unable to parse packet using primary key: {:?}", e);
+            for extra_key in &(shared_state.read().await.extra_keys) {
+                match parser::parse_packet(request_bytes, &extra_key) {
+                    Ok((_, p)) => {
+                        tracing::info!("packet parsed with extra key");
+                        return Ok((extra_key.to_vec(), p));
+                    }
+                    Err(e) => {
+                        tracing::info!("unable to parse packet using extra key: {:?}", e)
+                    }
+                };
+            }
+            bail!("unable to parse packet using any keys: {:?}", e)
+        }
+    }
+}
+
 pub async fn process_tacacs_packet(
     shared_state: Arc<RwLock<State>>,
     addr: &SocketAddr,
@@ -131,11 +159,8 @@ pub async fn process_tacacs_packet(
         .entry(addr.ip())
         .or_insert_with(|| Arc::new(RwLock::new(HashMap::new())))
         .clone();
-    let request_packet = match parser::parse_packet(request_bytes, &(shared_state.read().await.key))
-    {
-        Ok((_, p)) => p,
-        Err(e) => bail!("unable to parse packet: {:?}", e),
-    };
+    let (request_key, request_packet) =
+        decrypt_request(request_bytes, shared_state.clone()).await?;
 
     let response_packet = match request_packet.body {
         Body::AuthenticationStart {
@@ -298,7 +323,7 @@ pub async fn process_tacacs_packet(
                 )
                 .await;
                 tracing::info!(
-                    "authorization result: ({:?}, {:?})",
+                    "final authorization result: ({:?}, {:?})",
                     auth_status,
                     auth_result
                 );
@@ -364,11 +389,10 @@ pub async fn process_tacacs_packet(
         _ => Err(Report::msg("not supported yet")),
     }?;
 
-    let response_bytes =
-        match serializer::serialize_packet(&response_packet, &(shared_state.read().await.key)) {
-            Ok(b) => b,
-            Err(e) => bail!("unable to serialize packet: {:?}", e),
-        };
+    let response_bytes = match serializer::serialize_packet(&response_packet, &request_key) {
+        Ok(b) => b,
+        Err(e) => bail!("unable to serialize packet: {:?}", e),
+    };
     Ok(response_bytes)
 }
 
@@ -429,9 +453,10 @@ pub async fn verify_authorization(
     user: &User,
     client_address: &SocketAddr,
     rem_address: &[u8],
-    args: PacketArgs,
+    packet_args: PacketArgs,
 ) -> (AuthorizationStatus, Vec<String>) {
-    tracing::info!("packet args: {:?}", args);
+    tracing::info!("packet args: {:?}", packet_args);
+    tracing::info!("rem address: {}", String::from_utf8_lossy(rem_address));
     tracing::info!("verifying authorization for {}", user.name);
     let mut auth_result: Vec<String> = Vec::new();
     let mut acl_results: Vec<(AclResult, Option<String>)> = Vec::new();
@@ -441,7 +466,13 @@ pub async fn verify_authorization(
     if user.acl.is_some() {
         _acl_found = true;
         let (acl_result, matching_acl) =
-            verify_acl(shared_state.clone(), &user.acl, client_address, rem_address).await;
+            verify_acl(shared_state.clone(), &user.acl, client_address).await;
+        tracing::info!(
+            "verifying acl {} against client_ip {} | result={:?}",
+            user.acl.as_ref().unwrap_or(&"none".to_string()),
+            client_address.ip(),
+            acl_result
+        );
         acl_results.push((acl_result, matching_acl));
     }
 
@@ -479,7 +510,7 @@ pub async fn verify_authorization(
     while let Some(next_group) = groups_pending.pop() {
         tracing::debug!("pending groups: {:?}", groups_pending);
         tracing::debug!("processed groups: {:?}", groups_processed);
-        tracing::info!("result so far: {:?}", auth_result);
+        tracing::info!("authorization result so far: {:?}", auth_result);
         tracing::info!("next group: {}", &next_group);
 
         let group = match shared_state.read().await.groups.get(&next_group) {
@@ -494,7 +525,7 @@ pub async fn verify_authorization(
 
         let auth_results_for_group = verify_authorization_helper(
             shared_state.clone(),
-            args.clone(),
+            packet_args.clone(),
             &group.service,
             &group.cmds,
         )
@@ -520,13 +551,14 @@ pub async fn verify_authorization(
 
         if group.acl.is_some() {
             _acl_found = true;
-            let (acl_result, matching_acl) = verify_acl(
-                shared_state.clone(),
-                &group.acl,
-                client_address,
-                rem_address,
-            )
-            .await;
+            let (acl_result, matching_acl) =
+                verify_acl(shared_state.clone(), &group.acl, client_address).await;
+            tracing::info!(
+                "verifying acl {} against client_ip {} | result={:?}",
+                group.acl.as_ref().unwrap_or(&"none".to_string()),
+                client_address.ip(),
+                acl_result
+            );
             acl_results.push((acl_result, matching_acl));
         }
 
@@ -542,7 +574,7 @@ pub async fn verify_authorization(
         groups_pending.push(next_group);
     }
 
-    tracing::info!("result so far: {:?}", auth_result);
+    tracing::info!("authorization result so far: {:?}", auth_result);
 
     let auth_status = if auth_result.len() > 0 {
         AuthorizationStatus::AuthPassAdd
@@ -675,15 +707,8 @@ pub async fn verify_acl(
     shared_state: Arc<RwLock<State>>,
     acl: &Option<String>,
     client_address: &SocketAddr,
-    rem_address: &[u8],
 ) -> (AclResult, Option<String>) {
     let client_ip = client_address.ip().to_string();
-    tracing::info!(
-        "verifying acl {} against client_ip {} [rem_address={}]",
-        acl.as_ref().unwrap_or(&"none".to_string()),
-        client_ip,
-        String::from_utf8_lossy(rem_address)
-    );
     if acl.is_none() {
         tracing::debug!("acl is empty");
         return (AclResult::Reject, None);

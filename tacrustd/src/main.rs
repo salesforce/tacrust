@@ -97,6 +97,9 @@ pub struct Config {
     // Server key (for now we use a global one like tac_plus)
     key: String,
 
+    // Extra keys (will be tried if primary key fails)
+    extra_keys: Option<Vec<String>>,
+
     // List of users
     users: Option<Vec<User>>,
 
@@ -176,6 +179,13 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
     let config = Arc::new(setup(config_override)?);
     let state = Arc::new(RwLock::new(State::new(
         config.key.as_bytes().to_vec(),
+        config
+            .extra_keys
+            .as_ref()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|k| k.as_bytes().to_vec())
+            .collect(),
         config
             .pam_service
             .as_ref()
