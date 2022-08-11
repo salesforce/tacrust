@@ -1,5 +1,7 @@
 #!/bin/bash -ex
 
+env
+
 export HTTP_PROXY=http://${PROXY_SERVER}
 export HTTPS_PROXY=http://${PROXY_SERVER}
 
