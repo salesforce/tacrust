@@ -13,6 +13,7 @@ pub struct State {
     pub key: Vec<u8>,
     pub extra_keys: Vec<Vec<u8>>,
     pub pam_service: String,
+    pub upstream_tacacs_server: String,
     pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
     pub regexes: HashMap<String, Arc<Regex>>,
@@ -22,11 +23,17 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(key: Vec<u8>, extra_keys: Vec<Vec<u8>>, pam_service: String) -> Self {
+    pub fn new(
+        key: Vec<u8>,
+        extra_keys: Vec<Vec<u8>>,
+        pam_service: String,
+        upstream_tacacs_server: String,
+    ) -> Self {
         State {
             key,
             extra_keys,
             pam_service,
+            upstream_tacacs_server,
             sockets: HashMap::new(),
             maps: HashMap::new(),
             regexes: HashMap::new(),

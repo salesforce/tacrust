@@ -17,7 +17,7 @@ pub struct ParserError<I, J: Default + Debug> {
 }
 
 impl<I, J: Default + Debug> ParserError<I, J> {
-    fn new(
+    pub fn new(
         input: I,
         code: nom::error::ErrorKind,
         inner_error: nom::Err<nom::error::Error<J>>,
@@ -58,7 +58,7 @@ impl<I, J: Default + Debug> From<ParserError<I, J>> for nom::Err<nom::error::Err
     }
 }
 
-fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
+pub fn parse_header(input: &[u8]) -> nom::IResult<&[u8], (u32, Header)> {
     let (input, version) = nom::number::complete::be_u8(input)?;
     let major_version = (version & 0b11110000) >> 4;
     let minor_version = version & 0b00001111;

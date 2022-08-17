@@ -6,8 +6,10 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use simple_error::bail;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
+use tacrust::serializer::serialize_packet;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
     AuthenticationType, AuthorizationStatus, Body, Header, Packet,
@@ -119,7 +121,7 @@ fn generate_response_header(request_header: &Header) -> Header {
     }
 }
 
-async fn decrypt_request(
+pub(crate) async fn decrypt_request(
     request_bytes: &[u8],
     shared_state: Arc<RwLock<State>>,
 ) -> Result<(Vec<u8>, Packet), Report> {
@@ -786,4 +788,100 @@ pub async fn verify_user_credentials(
     }
 
     Ok(false)
+}
+
+pub async fn process_request_forwarding_helper(
+    shared_state: Arc<RwLock<State>>,
+    request_bytes: &[u8],
+    upstream_server: &TcpStream,
+) -> Option<Vec<u8>> {
+    let (_request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
+        .await
+        .ok()?;
+    let out = match request_packet.body {
+        Body::AuthenticationStart {
+            action: _,
+            priv_lvl: _,
+            authen_type: _,
+            authen_service: _,
+            user,
+            port: _,
+            rem_addr: _,
+            data: _,
+        } => {
+            process_user(
+                shared_state.clone(),
+                user.clone(),
+                request_bytes.clone(),
+                upstream_server,
+            )
+            .await
+        }
+
+        Body::AuthenticationContinue {
+            flags: _,
+            user,
+            data: _,
+        } => {
+            process_user(
+                shared_state.clone(),
+                user.clone(),
+                request_bytes.clone(),
+                upstream_server,
+            )
+            .await
+        }
+
+        Body::AuthorizationRequest {
+            auth_method: _,
+            priv_lvl: _,
+            authen_type: _,
+            authen_service: _,
+            user,
+            port: _,
+            rem_address: _,
+            args: _,
+        } => {
+            process_user(
+                shared_state.clone(),
+                user.clone(),
+                request_bytes.clone(),
+                upstream_server,
+            )
+            .await
+        }
+
+        _ => None,
+    };
+    return out;
+}
+
+pub async fn process_user(
+    shared_state: Arc<RwLock<State>>,
+    _user: Vec<u8>,
+    request_bytes: &[u8],
+    shrub_server: &TcpStream,
+) -> Option<Vec<u8>> {
+    let mut server = shrub_server.try_clone().unwrap();
+    server.write_all(&request_bytes).unwrap();
+    server.flush().unwrap();
+    tracing::info!(
+        "forwarded {} bytes to upstream server",
+        &request_bytes.len()
+    );
+    let mut final_buffer = Vec::new();
+    let mut wire_buffer: [u8; 4096] = [0; 4096];
+    loop {
+        let bytes_read = server.read(&mut wire_buffer).unwrap_or(0);
+        if bytes_read > 0 {
+            final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
+            break;
+        }
+    }
+    tracing::info!("read {} bytes from upstream server", &final_buffer.len());
+    let (request_key, request_packet) = decrypt_request(&final_buffer, shared_state.clone())
+        .await
+        .ok()?;
+    let output_buffer = serialize_packet(&request_packet, &request_key).unwrap();
+    Some(output_buffer.clone())
 }
