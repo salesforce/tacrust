@@ -1,19 +1,18 @@
 use crate::start_server;
 use base64::display::Base64Display;
 use rand::Rng;
-use serial_test::serial;
 use std::io::prelude::*;
 use std::net::{SocketAddr, TcpStream};
+use std::sync::Once;
 use std::thread;
 use std::time::Duration;
 use tacrust::{AuthenticationStatus, AuthorizationStatus, Body};
 use tokio::runtime::Runtime;
 use tracing_subscriber::EnvFilter;
 
+static INIT: Once = Once::new();
+
 fn setup() {
-    if std::env::var("TACRUST_TESTS_SETUP_COMPLETED").is_ok() {
-        return;
-    }
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         std::env::set_var("RUST_LIB_BACKTRACE", "1")
     }
@@ -27,22 +26,24 @@ fn setup() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
     color_eyre::install().unwrap();
-
-    std::env::set_var("TACRUST_TESTS_SETUP_COMPLETED", "1")
 }
 
 fn test_server<T>(port: u16, timeout: Duration, test: T) -> ()
 where
     T: FnOnce() -> (),
 {
-    setup();
+    INIT.call_once(|| {
+        setup();
+    });
     let runtime: Runtime = tokio::runtime::Builder::new_multi_thread()
         .max_blocking_threads(4)
         .worker_threads(4)
         .enable_all()
         .build()
         .unwrap();
-    std::env::set_var("TACRUST_LISTEN_ADDRESS", format!("127.0.0.1:{}", port));
+    let listen_address = format!("127.0.0.1:{}", port);
+    std::env::set_var("TACRUST_LISTEN_ADDRESS", &listen_address);
+    tracing::info!("starting test server at: {}", &listen_address);
     let test_config = include_bytes!("../tacrust.json");
     let running_server = runtime.block_on(start_server(Some(test_config))).unwrap();
     thread::spawn(move || {
@@ -138,7 +139,6 @@ fn test_author_packet(
 }
 
 #[test]
-#[serial]
 fn test_java_author() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -149,7 +149,6 @@ fn test_java_author() {
 }
 
 #[test]
-#[serial]
 fn test_golang_authen() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -167,7 +166,6 @@ fn test_golang_authen() {
 }
 
 #[test]
-#[serial]
 fn test_cisco_nexus_9000() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -363,7 +361,6 @@ fn test_cisco_nexus_9000() {
 }
 
 #[test]
-#[serial]
 fn test_f5_lb() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -382,7 +379,6 @@ fn test_f5_lb() {
 }
 
 #[test]
-#[serial]
 fn test_juniper_firewall() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -401,7 +397,6 @@ fn test_juniper_firewall() {
 }
 
 #[test]
-#[serial]
 fn test_mrv_lx() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -423,7 +418,6 @@ fn test_mrv_lx() {
 }
 
 #[test]
-#[serial]
 fn test_ciena_waveserver() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -454,7 +448,6 @@ fn test_ciena_waveserver() {
 }
 
 #[test]
-#[serial]
 fn test_opengear_console() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -476,7 +469,6 @@ fn test_opengear_console() {
 }
 
 #[test]
-#[serial]
 fn test_fortigate_firewall() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -501,7 +493,6 @@ fn test_fortigate_firewall() {
 }
 
 #[test]
-#[serial]
 fn test_acl_present_but_not_matched() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -512,7 +503,6 @@ fn test_acl_present_but_not_matched() {
 }
 
 #[test]
-#[serial]
 fn test_acl_not_present() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -528,7 +518,6 @@ fn test_acl_not_present() {
 }
 
 #[test]
-#[serial]
 fn test_multiple_group_memberships() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -544,7 +533,6 @@ fn test_multiple_group_memberships() {
 }
 
 #[test]
-#[serial]
 fn test_always_permit_authz_flag() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -564,7 +552,6 @@ fn test_always_permit_authz_flag() {
 }
 
 #[test]
-#[serial]
 fn test_extra_keys() {
     let key = b"tackey2";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -575,7 +562,6 @@ fn test_extra_keys() {
 }
 
 #[test]
-#[serial]
 fn test_proxy_forwarding() {
     let key = b"tackey";
     let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
