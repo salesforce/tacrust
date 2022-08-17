@@ -7,8 +7,6 @@ use clap_rs as clap;
 use color_eyre::Report;
 use futures::SinkExt;
 use serde::{Deserialize, Serialize};
-use std::borrow::BorrowMut;
-use std::collections::HashMap;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::net::TcpStream as netStream;
@@ -16,7 +14,6 @@ use std::{path::Path, sync::Arc};
 use tacrust::tacacs_codec::TacacsCodec;
 use tacrust::Body;
 use tempfile::NamedTempFile;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 use tokio::{
@@ -401,7 +398,6 @@ async fn process(
                     );
                 }
                 None => {
-                     tracing::info!("breaking loop");
                     break
                 },
             },

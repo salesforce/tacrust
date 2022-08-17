@@ -3,29 +3,19 @@ use crate::{Cmd, Credentials, Service, User};
 use color_eyre::Report;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use regex::internal::Input;
 use regex::Regex;
 use simple_error::bail;
 use std::collections::HashMap;
-use std::error::Error;
-use std::future::Future;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream as netStream};
-use std::num;
 use std::sync::Arc;
-use std::time::Duration;
-use tacrust::parser::{parse_body, parse_header, ParserError, ParserResult};
 use tacrust::serializer::serialize_packet;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
     AuthenticationType, AuthorizationStatus, Body, Header, Packet, PacketFlags, PacketType,
     TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::TcpStream;
 use tokio::sync::RwLock;
-use tokio::time::sleep;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 
