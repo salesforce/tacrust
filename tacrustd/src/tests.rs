@@ -574,3 +574,31 @@ fn test_extra_keys() {
         test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd, vec![]);
     });
 }
+
+#[test]
+#[serial]
+fn test_proxy_forwarding() {
+    let key = b"tackey";
+    let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    tracing::info!(
+        "downstream_port: {}, upstream_port: {}",
+        downstream_port,
+        upstream_port
+    );
+    std::env::set_var(
+        "TACRUST_UPSTREAM_TACACS_SERVER",
+        format!("127.0.0.1:{}", upstream_port),
+    );
+    test_server(downstream_port, Duration::from_secs(5), || {
+        std::env::set_var("TACRUST_UPSTREAM_TACACS_SERVER", "");
+        test_server(upstream_port, Duration::from_secs(5), || {
+            std::env::set_var(
+                "TACRUST_LISTEN_ADDRESS",
+                format!("127.0.0.1:{}", downstream_port),
+            );
+            let packet = include_bytes!("../packets/faramir_author_carwash.tacacs");
+            test_author_packet(packet, key, AuthorizationStatus::AuthPassAdd, vec![]);
+        });
+    });
+}
