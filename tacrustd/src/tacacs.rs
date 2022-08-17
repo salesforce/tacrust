@@ -3,8 +3,6 @@ use crate::{Cmd, Credentials, Service, User};
 use color_eyre::Report;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use nom::branch::alt;
-use nom::bytes;
 use regex::internal::Input;
 use regex::Regex;
 use simple_error::bail;

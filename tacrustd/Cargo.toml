@@ -28,5 +28,4 @@ serial_test = { version = "0.5.1" }
 base64 = { version = "0.13.0" }
 tempfile = { version = "3.2.0" }
 itertools = { version = "0.10.3" }
-nom = "7.1.0"
 
