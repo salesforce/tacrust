@@ -3,16 +3,31 @@ use crate::{Cmd, Credentials, Service, User};
 use color_eyre::Report;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use nom::branch::alt;
+use nom::bytes;
+use regex::internal::Input;
 use regex::Regex;
 use simple_error::bail;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::error::Error;
+use std::future::Future;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream as netStream};
+use std::num;
 use std::sync::Arc;
+use std::time::Duration;
+use tacrust::parser::{parse_body, parse_header, ParserError, ParserResult};
+use tacrust::serializer::serialize_packet;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
-    AuthenticationType, AuthorizationStatus, Body, Header, Packet,
+    AuthenticationType, AuthorizationStatus, Body, Header, Packet, PacketFlags, PacketType,
+    TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::net::TcpStream;
 use tokio::sync::RwLock;
+use tokio::time::sleep;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 
@@ -119,7 +134,7 @@ fn generate_response_header(request_header: &Header) -> Header {
     }
 }
 
-async fn decrypt_request(
+pub(crate) async fn decrypt_request(
     request_bytes: &[u8],
     shared_state: Arc<RwLock<State>>,
 ) -> Result<(Vec<u8>, Packet), Report> {
@@ -786,4 +801,104 @@ pub async fn verify_user_credentials(
     }
 
     Ok(false)
+}
+
+pub async fn process_packet_forwarding(
+    shared_state: Arc<RwLock<State>>,
+    request_bytes: &[u8],
+    upstream_server: &netStream,
+) -> Option<Vec<u8>> {
+    let (request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
+        .await
+        .ok()?;
+    let out = match request_packet.body {
+        Body::AuthenticationStart {
+            action: _,
+            priv_lvl: _,
+            authen_type,
+            authen_service: _,
+            user,
+            port: _,
+            rem_addr: _,
+            data,
+        } => {
+            process_user(
+                shared_state.clone(),
+                user.clone(),
+                request_bytes.clone(),
+                upstream_server,
+            )
+            .await
+        }
+
+        Body::AuthenticationContinue {
+            flags: _,
+            user,
+            data: _,
+        } => {
+            process_user(
+                shared_state.clone(),
+                user.clone(),
+                request_bytes.clone(),
+                upstream_server,
+            )
+            .await
+        }
+
+        Body::AuthorizationRequest {
+            auth_method: _,
+            priv_lvl: _,
+            authen_type: _,
+            authen_service: _,
+            user,
+            port: _,
+            rem_address,
+            args,
+        } => {
+            process_user(
+                shared_state.clone(),
+                user.clone(),
+                request_bytes.clone(),
+                upstream_server,
+            )
+            .await
+        }
+
+        _ => None,
+    };
+    return out;
+}
+
+pub async fn process_user(
+    shared_state: Arc<RwLock<State>>,
+    user: Vec<u8>,
+    request_bytes: &[u8],
+    shrub_server: &netStream,
+) -> Option<Vec<u8>> {
+    tracing::info!("line 881");
+    let mut server = shrub_server.try_clone().unwrap();
+    tracing::info!("line 883");
+    server.write_all(&request_bytes).unwrap();
+    tracing::info!("line 884");
+    server.flush().unwrap();
+    tracing::info!("line 887");
+    let mut final_buffer = Vec::new();
+    let mut wire_buffer: [u8; 4096] = [0; 4096];
+    loop {
+        tracing::info!("line 891");
+        let bytes_read = server.read(&mut wire_buffer).unwrap_or(0);
+        tracing::info!("line 893");
+        if bytes_read > 0 {
+            tracing::info!("line 895");
+            final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
+            break;
+        }
+    }
+    tracing::info!("line 900");
+    let (request_key, request_packet) = decrypt_request(&final_buffer, shared_state.clone())
+        .await
+        .ok()?;
+    let output_buffer = serialize_packet(&request_packet, &request_key).unwrap();
+    tracing::info!("line 904");
+    Some(output_buffer.clone())
 }
