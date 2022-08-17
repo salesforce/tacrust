@@ -1,6 +1,5 @@
 use crate::start_server;
 use base64::display::Base64Display;
-use lazy_static::lazy_static;
 use rand::Rng;
 use serial_test::serial;
 use std::io::prelude::*;
@@ -11,17 +10,10 @@ use tacrust::{AuthenticationStatus, AuthorizationStatus, Body};
 use tokio::runtime::Runtime;
 use tracing_subscriber::EnvFilter;
 
-lazy_static! {
-    static ref SETUP_COMPLETED: bool = setup();
-    static ref RUNTIME: Runtime = tokio::runtime::Builder::new_multi_thread()
-        .max_blocking_threads(4)
-        .worker_threads(4)
-        .enable_all()
-        .build()
-        .unwrap();
-}
-
-fn setup() -> bool {
+fn setup() {
+    if std::env::var("TACRUST_TESTS_SETUP_COMPLETED").is_ok() {
+        return;
+    }
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         std::env::set_var("RUST_LIB_BACKTRACE", "1")
     }
@@ -35,23 +27,30 @@ fn setup() -> bool {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
     color_eyre::install().unwrap();
-    true
+
+    std::env::set_var("TACRUST_TESTS_SETUP_COMPLETED", "1")
 }
 
 fn test_server<T>(port: u16, timeout: Duration, test: T) -> ()
 where
     T: FnOnce() -> (),
 {
-    assert!(*SETUP_COMPLETED);
+    setup();
+    let runtime: Runtime = tokio::runtime::Builder::new_multi_thread()
+        .max_blocking_threads(4)
+        .worker_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     std::env::set_var("TACRUST_LISTEN_ADDRESS", format!("127.0.0.1:{}", port));
     let test_config = include_bytes!("../tacrust.json");
-    let running_server = RUNTIME.block_on(start_server(Some(test_config))).unwrap();
+    let running_server = runtime.block_on(start_server(Some(test_config))).unwrap();
     thread::spawn(move || {
         thread::sleep(timeout);
         running_server.cancel_channel.send(()).unwrap();
     });
     test();
-    RUNTIME.block_on(running_server.join_handle).unwrap();
+    runtime.block_on(running_server.join_handle).unwrap();
 }
 
 fn get_tcp_client_for_tacrust() -> TcpStream {
