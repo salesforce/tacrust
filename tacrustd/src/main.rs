@@ -337,7 +337,7 @@ async fn process(
     let pipe = Framed::new(stream, TacacsCodec::new());
     let mut client = Client::new(shared_state.clone(), pipe).await?;
     let upstream_address = shared_state.read().await.upstream_tacacs_server.clone();
-    let upstream_address_val = upstream_addrecleass.is_empty();
+    let upstream_address_val = upstream_address.is_empty();
     let upstream_server = match upstream_address_val {
         false => {
             let mut result = TcpStream::connect(upstream_address.clone()).await;

@@ -875,30 +875,23 @@ pub async fn process_user(
     request_bytes: &[u8],
     shrub_server: &netStream,
 ) -> Option<Vec<u8>> {
-    tracing::info!("line 881");
     let mut server = shrub_server.try_clone().unwrap();
-    tracing::info!("line 883");
     server.write_all(&request_bytes).unwrap();
-    tracing::info!("line 884");
     server.flush().unwrap();
-    tracing::info!("line 887");
+    tracing::info!("Forwarded {} bytes to upstream server", &request_bytes.len());
     let mut final_buffer = Vec::new();
     let mut wire_buffer: [u8; 4096] = [0; 4096];
     loop {
-        tracing::info!("line 891");
         let bytes_read = server.read(&mut wire_buffer).unwrap_or(0);
-        tracing::info!("line 893");
         if bytes_read > 0 {
-            tracing::info!("line 895");
             final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
             break;
         }
     }
-    tracing::info!("line 900");
+    tracing::info!("Read {} bytes from upstream server", &final_buffer.len());
     let (request_key, request_packet) = decrypt_request(&final_buffer, shared_state.clone())
         .await
         .ok()?;
     let output_buffer = serialize_packet(&request_packet, &request_key).unwrap();
-    tracing::info!("line 904");
     Some(output_buffer.clone())
 }
