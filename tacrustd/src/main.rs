@@ -302,23 +302,28 @@ fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
         }
     }
 
-    if config_override.is_some() {
-        tempconfig.write_all(config_override.unwrap())?;
-        layers.push(Layer::Json(tempconfig.path().into()));
+    match config_override {
+        Some(cfg) => {
+            tempconfig.write_all(cfg)?;
+            layers.push(Layer::Json(tempconfig.path().into()));
+            layers.push(Layer::Env(Some("TACRUST_".to_string())));
+        }
+        None => {
+            let app = clap::App::new("tacrust")
+                .args(&Config::clap_args())
+                .arg(Arg::with_name("config").long("config").takes_value(true));
+            let arg_matches = app.get_matches();
+
+            if let Some(c) = arg_matches.value_of("config") {
+                layers.clear();
+                layers.push(Layer::Json(c.into()));
+            }
+            layers.push(Layer::Env(Some("TACRUST_".to_string())));
+            if config_override.is_none() {
+                layers.push(Layer::Clap(arg_matches.clone()));
+            }
+        }
     }
-
-    let app = clap::App::new("tacrust")
-        .args(&Config::clap_args())
-        .arg(Arg::with_name("config").long("config").takes_value(true));
-    let arg_matches = app.get_matches();
-
-    if let Some(c) = arg_matches.value_of("config") {
-        layers.clear();
-        layers.push(Layer::Json(c.into()));
-    }
-
-    layers.push(Layer::Env(Some("TACRUST_".to_string())));
-    layers.push(Layer::Clap(arg_matches.clone()));
 
     let config = Config::with_layers(&layers)?;
 
