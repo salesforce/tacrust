@@ -1,7 +1,7 @@
 use crate::client::Client;
 use crate::state::State;
 use crate::tacacs::decrypt_request;
-use crate::tacacs::process_packet_forwarding;
+use crate::tacacs::process_request_forwarding_helper;
 use clap::Arg;
 use clap_rs as clap;
 use color_eyre::Report;
@@ -334,30 +334,26 @@ async fn process(
     let pipe = Framed::new(stream, TacacsCodec::new());
     let mut client = Client::new(shared_state.clone(), pipe).await?;
     let upstream_address = shared_state.read().await.upstream_tacacs_server.clone();
-    let upstream_address_val = upstream_address.is_empty();
-    let upstream_server = match upstream_address_val {
-        false => {
-            let result = TcpStream::connect(upstream_address.clone()).await;
-            match result {
-                Ok(server) => match server.into_std() {
-                    Ok(std_stream) => Some(std_stream.try_clone().unwrap()),
-                    Err(_) => {
-                        tracing::info!("Error converting to std stream");
-                        None
-                    }
-                },
+    let upstream_server = if upstream_address.is_empty() {
+        tracing::info!("upstream server not present {}", upstream_address.clone());
+        None
+    } else {
+        let result = TcpStream::connect(upstream_address.clone()).await;
+        match result {
+            Ok(server) => match server.into_std() {
+                Ok(std_stream) => Some(std_stream.try_clone().unwrap()),
                 Err(_) => {
-                    tracing::info!(
-                        "Error connecting to upstream server {}",
-                        upstream_address.clone()
-                    );
+                    tracing::info!("error converting to std stream");
                     None
                 }
+            },
+            Err(_) => {
+                tracing::info!(
+                    "error connecting to upstream server {}, processing request without forwarding",
+                    upstream_address.clone()
+                );
+                None
             }
-        }
-        true => {
-            tracing::info!("Upstream server not present {}", upstream_address.clone());
-            None
         }
     };
 
@@ -372,20 +368,25 @@ async fn process(
                     tracing::info!("received {} bytes from {}", msg.len(), addr);
                     match upstream_server {
                         Some(ref server) => {
-                            if packet_forward == true {
-                                process_forward(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
+                            if packet_forward {
+                                tracing::info!("packet forwarding is already true, processing forwarding request");
+                                process_request_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
                             } else {
-                               let result = check_user_forward(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
-                                if result == true {
+                                tracing::info!("packet forwarding is not true, checking if user needs forwarding");
+                                let result = check_user_forward(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
+                                if result {
+                                    tracing::info!("user has forwarding enabled, setting packet forwarding to true");
                                     packet_forward = true;
-                                    process_forward(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
+                                    process_request_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
                                 } else {
-                                    let _result = process_normal(shared_state.clone(), &msg.clone(), addr.clone()).await;
+                                    tracing::info!("user does not have forwarding enabled, processing packet without forwarding");
+                                    let _result = process_request_nonforwarding(shared_state.clone(), &msg.clone(), addr.clone()).await;
                                 }
                             }
                         }
                         None => {
-                           let _result = process_normal(shared_state.clone(), &msg.clone(), addr.clone()).await;
+                            tracing::info!("no upstream server available, processing packet without forwarding");
+                           let _result = process_request_nonforwarding(shared_state.clone(), &msg.clone(), addr.clone()).await;
 
                         }
                     }
@@ -428,7 +429,7 @@ async fn check_user_forward(
             data: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
-            check(shared_state, user).await
+            is_user_forwarded(shared_state, user).await
         }
 
         Body::AuthenticationContinue {
@@ -437,7 +438,7 @@ async fn check_user_forward(
             data: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
-            check(shared_state, user).await
+            is_user_forwarded(shared_state, user).await
         }
 
         Body::AuthorizationRequest {
@@ -451,7 +452,7 @@ async fn check_user_forward(
             args: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
-            check(shared_state, user).await
+            is_user_forwarded(shared_state, user).await
         }
 
         _ => None,
@@ -459,7 +460,7 @@ async fn check_user_forward(
     out
 }
 
-async fn check(shared_state: Arc<RwLock<State>>, user: String) -> Option<bool> {
+async fn is_user_forwarded(shared_state: Arc<RwLock<State>>, user: String) -> Option<bool> {
     let users = shared_state.read().await.users.clone();
     let conf_user = users.get(&user);
     match conf_user {
@@ -477,16 +478,16 @@ async fn check(shared_state: Arc<RwLock<State>>, user: String) -> Option<bool> {
     }
 }
 
-pub async fn process_forward(
+pub async fn process_request_forwarding(
     shared_state: Arc<RwLock<State>>,
     msg: &[u8],
     server: &netStream,
     addr: SocketAddr,
 ) {
-    let resp = process_packet_forwarding(shared_state.clone(), msg, server).await;
+    let resp = process_request_forwarding_helper(shared_state.clone(), msg, server).await;
     match resp {
         Some(ref _response) => {
-            tracing::info!("forwarded packet to upstream server");
+            tracing::info!("got response from upstream server {}", addr);
             shared_state
                 .read()
                 .await
@@ -495,12 +496,12 @@ pub async fn process_forward(
         }
 
         None => {
-            tracing::info!("Error porwarding packet");
+            tracing::info!("error proxying request to upstream server {}", addr);
         }
     };
 }
 
-pub async fn process_normal(
+pub async fn process_request_nonforwarding(
     shared_state: Arc<RwLock<State>>,
     msg: &[u8],
     addr: SocketAddr,

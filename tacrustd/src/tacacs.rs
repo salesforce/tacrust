@@ -7,7 +7,7 @@ use regex::Regex;
 use simple_error::bail;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream as netStream};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 use tacrust::serializer::serialize_packet;
 use tacrust::{
@@ -790,10 +790,10 @@ pub async fn verify_user_credentials(
     Ok(false)
 }
 
-pub async fn process_packet_forwarding(
+pub async fn process_request_forwarding_helper(
     shared_state: Arc<RwLock<State>>,
     request_bytes: &[u8],
-    upstream_server: &netStream,
+    upstream_server: &TcpStream,
 ) -> Option<Vec<u8>> {
     let (_request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
         .await
@@ -860,13 +860,13 @@ pub async fn process_user(
     shared_state: Arc<RwLock<State>>,
     _user: Vec<u8>,
     request_bytes: &[u8],
-    shrub_server: &netStream,
+    shrub_server: &TcpStream,
 ) -> Option<Vec<u8>> {
     let mut server = shrub_server.try_clone().unwrap();
     server.write_all(&request_bytes).unwrap();
     server.flush().unwrap();
     tracing::info!(
-        "Forwarded {} bytes to upstream server",
+        "forwarded {} bytes to upstream server",
         &request_bytes.len()
     );
     let mut final_buffer = Vec::new();
@@ -878,7 +878,7 @@ pub async fn process_user(
             break;
         }
     }
-    tracing::info!("Read {} bytes from upstream server", &final_buffer.len());
+    tracing::info!("read {} bytes from upstream server", &final_buffer.len());
     let (request_key, request_packet) = decrypt_request(&final_buffer, shared_state.clone())
         .await
         .ok()?;
