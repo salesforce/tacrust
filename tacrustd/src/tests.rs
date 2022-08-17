@@ -503,7 +503,7 @@ fn test_opengear_console() {
 fn test_fortigate_firewall() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(5), |server_address: &str| {
+    test_server(port, Duration::from_secs(1), |server_address: &str| {
         let packet = include_bytes!("../packets/fortigate-firewall/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
 
@@ -528,7 +528,7 @@ fn test_fortigate_firewall() {
 fn test_acl_present_but_not_matched() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(5), |server_address: &str| {
+    test_server(port, Duration::from_secs(1), |server_address: &str| {
         let packet = include_bytes!("../packets/johndoe_author_some_service.tacacs");
         test_author_packet(
             server_address,
@@ -544,7 +544,7 @@ fn test_acl_present_but_not_matched() {
 fn test_acl_not_present() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(5), |server_address: &str| {
+    test_server(port, Duration::from_secs(1), |server_address: &str| {
         let packet = include_bytes!("../packets/janedoe_author_some_service.tacacs");
         test_author_packet(
             server_address,
@@ -560,7 +560,7 @@ fn test_acl_not_present() {
 fn test_multiple_group_memberships() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(5), |server_address: &str| {
+    test_server(port, Duration::from_secs(1), |server_address: &str| {
         let packet = include_bytes!("../packets/jackdoe_author_raccess.tacacs");
         test_author_packet(
             server_address,
@@ -576,7 +576,7 @@ fn test_multiple_group_memberships() {
 fn test_always_permit_authz_flag() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(5), |server_address: &str| {
+    test_server(port, Duration::from_secs(1), |server_address: &str| {
         let packet = include_bytes!("../packets/alexdelarge_author_raccess.tacacs");
         test_author_packet(
             server_address,
@@ -619,7 +619,7 @@ fn test_always_permit_authz_flag() {
 fn test_extra_keys() {
     let key = b"tackey2";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(5), |server_address: &str| {
+    test_server(port, Duration::from_secs(1), |server_address: &str| {
         let packet = include_bytes!("../packets/faramir_author_carwash_tackey2.tacacs");
         test_author_packet(
             server_address,
@@ -647,12 +647,12 @@ fn test_proxy_forwarding() {
     );
     test_server(
         downstream_port,
-        Duration::from_secs(5),
+        Duration::from_secs(1),
         |downstream_server_address: &str| {
             std::env::set_var("TACRUST_UPSTREAM_TACACS_SERVER", "");
             test_server(
                 upstream_port,
-                Duration::from_secs(5),
+                Duration::from_secs(1),
                 |_upstream_server_address: &str| {
                     let packet = include_bytes!("../packets/faramir_author_carwash.tacacs");
                     test_author_packet(
