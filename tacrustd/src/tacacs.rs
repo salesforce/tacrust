@@ -876,7 +876,10 @@ pub async fn process_user(
     let mut server = shrub_server.try_clone().unwrap();
     server.write_all(&request_bytes).unwrap();
     server.flush().unwrap();
-    tracing::info!("Forwarded {} bytes to upstream server", &request_bytes.len());
+    tracing::info!(
+        "Forwarded {} bytes to upstream server",
+        &request_bytes.len()
+    );
     let mut final_buffer = Vec::new();
     let mut wire_buffer: [u8; 4096] = [0; 4096];
     loop {
