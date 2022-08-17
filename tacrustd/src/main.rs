@@ -337,7 +337,7 @@ async fn process(
     let upstream_address_val = upstream_address.is_empty();
     let upstream_server = match upstream_address_val {
         false => {
-            let mut result = TcpStream::connect(upstream_address.clone()).await;
+            let result = TcpStream::connect(upstream_address.clone()).await;
             match result {
                 Ok(server) => match server.into_std() {
                     Ok(std_stream) => Some(std_stream.try_clone().unwrap()),
@@ -380,12 +380,12 @@ async fn process(
                                     packet_forward = true;
                                     process_forward(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
                                 } else {
-                                    process_normal(shared_state.clone(), &msg.clone(), addr.clone()).await;
+                                    let _result = process_normal(shared_state.clone(), &msg.clone(), addr.clone()).await;
                                 }
                             }
                         }
                         None => {
-                           process_normal(shared_state.clone(), &msg.clone(), addr.clone());
+                           let _result = process_normal(shared_state.clone(), &msg.clone(), addr.clone()).await;
 
                         }
                     }
@@ -413,19 +413,19 @@ async fn check_user_forward(
     shared_state: Arc<RwLock<State>>,
     request_bytes: &[u8],
 ) -> Option<bool> {
-    let (request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
+    let (_request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
         .await
         .ok()?;
     let out = match request_packet.body {
         Body::AuthenticationStart {
             action: _,
             priv_lvl: _,
-            authen_type,
+            authen_type: _,
             authen_service: _,
             user,
             port: _,
             rem_addr: _,
-            data,
+            data: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
             check(shared_state, user).await
@@ -447,8 +447,8 @@ async fn check_user_forward(
             authen_service: _,
             user,
             port: _,
-            rem_address,
-            args,
+            rem_address: _,
+            args: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
             check(shared_state, user).await
@@ -485,7 +485,7 @@ pub async fn process_forward(
 ) {
     let resp = process_packet_forwarding(shared_state.clone(), msg, server).await;
     match resp {
-        Some(ref response) => {
+        Some(ref _response) => {
             tracing::info!("forwarded packet to upstream server");
             shared_state
                 .read()

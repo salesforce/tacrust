@@ -12,8 +12,7 @@ use std::sync::Arc;
 use tacrust::serializer::serialize_packet;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
-    AuthenticationType, AuthorizationStatus, Body, Header, Packet, PacketFlags, PacketType,
-    TAC_PLUS_SINGLE_CONNECT_FLAG, TAC_PLUS_UNENCRYPTED_FLAG,
+    AuthenticationType, AuthorizationStatus, Body, Header, Packet
 };
 use tokio::sync::RwLock;
 
@@ -796,19 +795,19 @@ pub async fn process_packet_forwarding(
     request_bytes: &[u8],
     upstream_server: &netStream,
 ) -> Option<Vec<u8>> {
-    let (request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
+    let (_request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
         .await
         .ok()?;
     let out = match request_packet.body {
         Body::AuthenticationStart {
             action: _,
             priv_lvl: _,
-            authen_type,
+            authen_type:_,
             authen_service: _,
             user,
             port: _,
             rem_addr: _,
-            data,
+            data:_,
         } => {
             process_user(
                 shared_state.clone(),
@@ -840,8 +839,8 @@ pub async fn process_packet_forwarding(
             authen_service: _,
             user,
             port: _,
-            rem_address,
-            args,
+            rem_address: _,
+            args: _,
         } => {
             process_user(
                 shared_state.clone(),
@@ -859,7 +858,7 @@ pub async fn process_packet_forwarding(
 
 pub async fn process_user(
     shared_state: Arc<RwLock<State>>,
-    user: Vec<u8>,
+    _user: Vec<u8>,
     request_bytes: &[u8],
     shrub_server: &netStream,
 ) -> Option<Vec<u8>> {
