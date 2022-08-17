@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tacrust::serializer::serialize_packet;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
-    AuthenticationType, AuthorizationStatus, Body, Header, Packet
+    AuthenticationType, AuthorizationStatus, Body, Header, Packet,
 };
 use tokio::sync::RwLock;
 
@@ -802,12 +802,12 @@ pub async fn process_packet_forwarding(
         Body::AuthenticationStart {
             action: _,
             priv_lvl: _,
-            authen_type:_,
+            authen_type: _,
             authen_service: _,
             user,
             port: _,
             rem_addr: _,
-            data:_,
+            data: _,
         } => {
             process_user(
                 shared_state.clone(),
