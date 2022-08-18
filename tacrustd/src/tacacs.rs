@@ -568,6 +568,23 @@ pub async fn verify_authorization(
             }
         }
 
+        match group.forward_upstream {
+            Some(v) => {
+                tracing::info!("forward_upstream set to {} for group {}", v, group.name);
+                if !shared_state.read().await.upstream_tacacs_server.is_empty() {
+                    tracing::info!("upstream tacacs server available, requesting forwarding");
+                    return (AuthorizationStatus::AuthForwardUpstream, vec![]);
+                } else {
+                    tracing::info!(
+                        "no upstream tacacs server available, proceeding without forwarding"
+                    )
+                }
+            }
+            _ => {
+                tracing::debug!("forward_upstream not set for group {}", group.name);
+            }
+        }
+
         if group.acl.is_some() {
             _acl_found = true;
             let (acl_result, matching_acl) =

@@ -62,6 +62,7 @@ pub struct Cmd {
 pub struct Group {
     name: String,
     always_permit_authorization: Option<bool>,
+    forward_upstream: Option<bool>,
     acl: Option<String>,
     pap: Option<String>,
     member: Option<String>,

@@ -131,6 +131,14 @@
       },
       "always_permit_authorization": true,
       "forward_upstream": true
+    },
+    {
+      "name": "strider",
+      "credentials": {
+        "type": "Ascii",
+        "value": "$6$4Q1OSpnJ.0z1p$zA3G.m2817WlmyTOQSn/mjq.j3AH6AorPXuztfKy1FK2XJUonk/oXimh/fJq0/2ktuYUGf83LPb5sGUv9RBxp/"
+      },
+      "member": ["group-rangers"]
     }
   ],
   "groups": [
@@ -256,6 +264,11 @@
     },
     {
       "name": "group-no-services-authz-override-missing"
+    },
+    {
+      "name": "group-rangers",
+      "always_permit_authorization": true,
+      "forward_upstream": true
     }
   ]
 }
