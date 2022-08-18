@@ -27,7 +27,7 @@ test:
 
 .PHONY: test-server
 test-server:
-	cargo test -p tacrustd --  --test-threads=1
+	cargo test -p tacrustd
 
 .PHONY: run-server
 run-server:

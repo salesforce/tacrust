@@ -56,17 +56,28 @@ where
     runtime.block_on(running_server.join_handle).unwrap();
 }
 
-fn get_tcp_client_for_tacrust(server_address: &str) -> TcpStream {
+fn get_tacacs_response(
+    server_address: &str,
+    packet: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let server_address: SocketAddr = server_address.parse().unwrap();
     tracing::info!("connecting to server at {}", server_address);
-    let stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(1)).unwrap();
+    let mut stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(1)).unwrap();
     stream
         .set_write_timeout(Some(Duration::from_secs(1)))
         .unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(1)))
         .unwrap();
-    stream
+    tracing::info!(
+        "sending packet: {}",
+        Base64Display::with_config(packet, base64::STANDARD)
+    );
+    stream.write(packet).unwrap();
+    let mut response = [0; 4096];
+    tracing::info!("receiving response");
+    let len = stream.read(&mut response).unwrap();
+    Ok(response[..len].to_vec())
 }
 
 fn test_authen_packet(
@@ -75,20 +86,12 @@ fn test_authen_packet(
     key: &[u8],
     expected_status: AuthenticationStatus,
 ) {
-    let mut client = get_tcp_client_for_tacrust(server_address);
-    tracing::info!(
-        "sending packet: {}",
-        Base64Display::with_config(packet, base64::STANDARD)
-    );
-    client.write(packet).unwrap();
-    let mut response = [0; 4096];
-    tracing::info!("receiving response");
-    let len = client.read(&mut response).unwrap();
+    let response = get_tacacs_response(server_address, packet).unwrap();
     tracing::info!(
         "received response: {}",
-        Base64Display::with_config(&response[0..len], base64::STANDARD)
+        Base64Display::with_config(&response, base64::STANDARD)
     );
-    let (_, parsed_response) = tacrust::parser::parse_packet(&response[0..len], key).unwrap();
+    let (_, parsed_response) = tacrust::parser::parse_packet(&response, key).unwrap();
     tracing::info!("parsed: {:?}", parsed_response);
     assert!(matches!(
         parsed_response.body,
@@ -112,20 +115,12 @@ fn test_author_packet(
     expected_status: AuthorizationStatus,
     expected_avpairs: Vec<Vec<u8>>,
 ) {
-    let mut client = get_tcp_client_for_tacrust(server_address);
-    tracing::info!(
-        "sending packet: {}",
-        Base64Display::with_config(packet, base64::STANDARD)
-    );
-    client.write(packet).unwrap();
-    let mut response = [0; 4096];
-    tracing::info!("receiving response");
-    let len = client.read(&mut response).unwrap();
+    let response = get_tacacs_response(server_address, packet).unwrap();
     tracing::info!(
         "received response: {}",
-        Base64Display::with_config(&response[0..len], base64::STANDARD)
+        Base64Display::with_config(&response, base64::STANDARD)
     );
-    let (_, parsed_response) = tacrust::parser::parse_packet(&response[0..len], key).unwrap();
+    let (_, parsed_response) = tacrust::parser::parse_packet(&response, key).unwrap();
     tracing::info!("parsed: {:?}", parsed_response);
     assert!(matches!(
         parsed_response.body,
