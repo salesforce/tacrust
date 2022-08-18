@@ -264,7 +264,7 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
                     let span = tracing::span!(tracing::Level::INFO, "tacacs_request", ?addr);
                     tokio::spawn(async move {
                         tracing::debug!("accepted connection");
-                        if let Err(e) = process(state, stream, addr).await {
+                        if let Err(e) = process_tacacs_client(state, stream, addr).await {
                             tracing::info!("an error occurred; error = {}", e);
                         }
                     }.instrument(span));
@@ -330,7 +330,7 @@ fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
     Ok(config)
 }
 
-async fn process(
+async fn process_tacacs_client(
     shared_state: Arc<RwLock<State>>,
     stream: TcpStream,
     addr: SocketAddr,
@@ -375,23 +375,23 @@ async fn process(
                         Some(ref server) => {
                             if packet_forward {
                                 tracing::info!("packet forwarding is already true, processing forwarding request");
-                                process_request_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
+                                process_request_with_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
                             } else {
                                 tracing::info!("packet forwarding is not true, checking if user needs forwarding");
-                                let result = packet_user_needs_forwarding(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
+                                let result = packet_needs_forwarding(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
                                 if result {
                                     tracing::info!("user has forwarding enabled, setting packet forwarding to true");
                                     packet_forward = true;
-                                    process_request_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
+                                    process_request_with_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
                                 } else {
                                     tracing::info!("user does not have forwarding enabled, processing packet without forwarding");
-                                    let _result = process_request_nonforwarding(shared_state.clone(), &msg.clone(), addr.clone()).await;
+                                    let _result = process_request_without_forwarding(shared_state.clone(), &msg.clone(), addr.clone()).await;
                                 }
                             }
                         }
                         None => {
                             tracing::info!("no upstream server available, processing packet without forwarding");
-                           let _result = process_request_nonforwarding(shared_state.clone(), &msg.clone(), addr.clone()).await;
+                           let _result = process_request_without_forwarding(shared_state.clone(), &msg.clone(), addr.clone()).await;
 
                         }
                     }
@@ -415,7 +415,7 @@ async fn process(
     Ok(())
 }
 
-async fn packet_user_needs_forwarding(
+async fn packet_needs_forwarding(
     shared_state: Arc<RwLock<State>>,
     request_bytes: &[u8],
 ) -> Option<bool> {
@@ -472,7 +472,7 @@ async fn is_user_forwarded(shared_state: Arc<RwLock<State>>, username: &str) -> 
     }
 }
 
-pub async fn process_request_forwarding(
+pub async fn process_request_with_forwarding(
     shared_state: Arc<RwLock<State>>,
     msg: &[u8],
     server: &netStream,
@@ -490,7 +490,7 @@ pub async fn process_request_forwarding(
     };
 }
 
-pub async fn process_request_nonforwarding(
+pub async fn process_request_without_forwarding(
     shared_state: Arc<RwLock<State>>,
     msg: &[u8],
     addr: SocketAddr,
