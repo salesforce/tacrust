@@ -378,7 +378,7 @@ async fn process(
                                 process_request_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
                             } else {
                                 tracing::info!("packet forwarding is not true, checking if user needs forwarding");
-                                let result = check_user_forward(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
+                                let result = packet_user_needs_forwarding(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
                                 if result {
                                     tracing::info!("user has forwarding enabled, setting packet forwarding to true");
                                     packet_forward = true;
@@ -415,7 +415,7 @@ async fn process(
     Ok(())
 }
 
-async fn check_user_forward(
+async fn packet_user_needs_forwarding(
     shared_state: Arc<RwLock<State>>,
     request_bytes: &[u8],
 ) -> Option<bool> {
