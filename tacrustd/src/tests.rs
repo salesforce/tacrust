@@ -60,23 +60,23 @@ fn get_tacacs_response(
     server_address: &str,
     packet: &[u8],
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let server_address: SocketAddr = server_address.parse().unwrap();
+    let server_address: SocketAddr = server_address.parse()?;
     tracing::info!("connecting to server at {}", server_address);
-    let mut stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(1)).unwrap();
+    let mut stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(5)).unwrap();
     stream
-        .set_write_timeout(Some(Duration::from_secs(1)))
+        .set_write_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     stream
-        .set_read_timeout(Some(Duration::from_secs(1)))
+        .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     tracing::info!(
         "sending packet: {}",
         Base64Display::with_config(packet, base64::STANDARD)
     );
-    stream.write(packet).unwrap();
+    stream.write(packet)?;
     let mut response = [0; 4096];
     tracing::info!("receiving response");
-    let len = stream.read(&mut response).unwrap();
+    let len = stream.read(&mut response)?;
     Ok(response[..len].to_vec())
 }
 
@@ -86,7 +86,17 @@ fn test_authen_packet(
     key: &[u8],
     expected_status: AuthenticationStatus,
 ) {
-    let response = get_tacacs_response(server_address, packet).unwrap();
+    let mut response = vec![];
+    loop {
+        if let Ok(r) = get_tacacs_response(server_address, packet) {
+            if r.len() > 4 {
+                response.extend_from_slice(&r);
+                break;
+            }
+        } else {
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
     tracing::info!(
         "received response: {}",
         Base64Display::with_config(&response, base64::STANDARD)
@@ -115,7 +125,17 @@ fn test_author_packet(
     expected_status: AuthorizationStatus,
     expected_avpairs: Vec<Vec<u8>>,
 ) {
-    let response = get_tacacs_response(server_address, packet).unwrap();
+    let mut response = vec![];
+    loop {
+        if let Ok(r) = get_tacacs_response(server_address, packet) {
+            if r.len() > 4 {
+                response.extend_from_slice(&r);
+                break;
+            }
+        } else {
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
     tracing::info!(
         "received response: {}",
         Base64Display::with_config(&response, base64::STANDARD)
@@ -142,7 +162,7 @@ fn test_author_packet(
 fn test_java_author() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/java-author-1.tacacs");
         test_author_packet(
             server_address,
@@ -158,7 +178,7 @@ fn test_java_author() {
 fn test_golang_authen() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         {
             let packet = include_bytes!("../packets/golang-authen-1.tacacs");
             test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
@@ -175,7 +195,7 @@ fn test_golang_authen() {
 fn test_cisco_nexus_9000() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet =
             include_bytes!("../packets/cisco-nexus-9000/aditya/01.a-authen-start-bad.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
@@ -384,7 +404,7 @@ fn test_cisco_nexus_9000() {
 fn test_f5_lb() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/f5-lb/01-authen-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::Pass);
 
@@ -403,7 +423,7 @@ fn test_f5_lb() {
 fn test_juniper_firewall() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/juniper-firewall/01-author-good.tacacs");
         test_author_packet(
             server_address,
@@ -422,7 +442,7 @@ fn test_juniper_firewall() {
 fn test_mrv_lx() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/mrv-lx/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
 
@@ -444,7 +464,7 @@ fn test_mrv_lx() {
 fn test_ciena_waveserver() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/ciena-waveserver/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
 
@@ -476,7 +496,7 @@ fn test_ciena_waveserver() {
 fn test_opengear_console() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/opengear-console/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
 
@@ -498,7 +518,7 @@ fn test_opengear_console() {
 fn test_fortigate_firewall() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/fortigate-firewall/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
 
@@ -523,7 +543,7 @@ fn test_fortigate_firewall() {
 fn test_acl_present_but_not_matched() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/johndoe_author_some_service.tacacs");
         test_author_packet(
             server_address,
@@ -539,7 +559,7 @@ fn test_acl_present_but_not_matched() {
 fn test_acl_not_present() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/janedoe_author_some_service.tacacs");
         test_author_packet(
             server_address,
@@ -555,7 +575,7 @@ fn test_acl_not_present() {
 fn test_multiple_group_memberships() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/jackdoe_author_raccess.tacacs");
         test_author_packet(
             server_address,
@@ -571,7 +591,7 @@ fn test_multiple_group_memberships() {
 fn test_always_permit_authz_flag() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/alexdelarge_author_raccess.tacacs");
         test_author_packet(
             server_address,
@@ -614,7 +634,7 @@ fn test_always_permit_authz_flag() {
 fn test_extra_keys() {
     let key = b"tackey2";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(1), |server_address: &str| {
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/faramir_author_carwash_tackey2.tacacs");
         test_author_packet(
             server_address,
@@ -642,12 +662,12 @@ fn test_proxy_forwarding_for_user() {
     );
     test_server(
         downstream_port,
-        Duration::from_secs(1),
+        Duration::from_secs(5),
         |downstream_server_address: &str| {
             std::env::set_var("TACRUST_UPSTREAM_TACACS_SERVER", "");
             test_server(
                 upstream_port,
-                Duration::from_secs(1),
+                Duration::from_secs(5),
                 |_upstream_server_address: &str| {
                     let packet = include_bytes!("../packets/faramir_author_carwash.tacacs");
                     test_author_packet(
@@ -679,12 +699,12 @@ fn test_proxy_forwarding_for_group() {
     );
     test_server(
         downstream_port,
-        Duration::from_secs(1),
+        Duration::from_secs(5),
         |downstream_server_address: &str| {
             std::env::set_var("TACRUST_UPSTREAM_TACACS_SERVER", "");
             test_server(
                 upstream_port,
-                Duration::from_secs(1),
+                Duration::from_secs(5),
                 |_upstream_server_address: &str| {
                     let packet = include_bytes!("../packets/strider_author_carwash.tacacs");
                     test_author_packet(
