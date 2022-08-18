@@ -497,7 +497,7 @@ pub async fn verify_authorization(
     match user.forward_upstream {
         Some(v) => {
             tracing::info!("forward_upstream set to {} for user {}", v, user.name);
-            if !shared_state.read().await.upstream_tacacs_server.is_empty() {
+            if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
                 tracing::info!("upstream tacacs server available, requesting forwarding");
                 return (AuthorizationStatus::AuthForwardUpstream, vec![]);
             } else {
@@ -571,7 +571,7 @@ pub async fn verify_authorization(
         match group.forward_upstream {
             Some(v) => {
                 tracing::info!("forward_upstream set to {} for group {}", v, group.name);
-                if !shared_state.read().await.upstream_tacacs_server.is_empty() {
+                if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
                     tracing::info!("upstream tacacs server available, requesting forwarding");
                     return (AuthorizationStatus::AuthForwardUpstream, vec![]);
                 } else {
