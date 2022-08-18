@@ -632,7 +632,7 @@ fn test_extra_keys() {
 }
 
 #[test]
-fn test_proxy_forwarding() {
+fn test_proxy_forwarding_for_user() {
     let key = b"tackey";
     let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
     let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -655,6 +655,43 @@ fn test_proxy_forwarding() {
                 Duration::from_secs(1),
                 |_upstream_server_address: &str| {
                     let packet = include_bytes!("../packets/faramir_author_carwash.tacacs");
+                    test_author_packet(
+                        downstream_server_address,
+                        packet,
+                        key,
+                        AuthorizationStatus::AuthPassAdd,
+                        vec![],
+                    );
+                },
+            );
+        },
+    );
+}
+
+#[test]
+fn test_proxy_forwarding_for_group() {
+    let key = b"tackey";
+    let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    tracing::info!(
+        "downstream_port: {}, upstream_port: {}",
+        downstream_port,
+        upstream_port
+    );
+    std::env::set_var(
+        "TACRUST_UPSTREAM_TACACS_SERVER",
+        format!("127.0.0.1:{}", upstream_port),
+    );
+    test_server(
+        downstream_port,
+        Duration::from_secs(1),
+        |downstream_server_address: &str| {
+            std::env::set_var("TACRUST_UPSTREAM_TACACS_SERVER", "");
+            test_server(
+                upstream_port,
+                Duration::from_secs(1),
+                |_upstream_server_address: &str| {
+                    let packet = include_bytes!("../packets/strider_author_carwash.tacacs");
                     test_author_packet(
                         downstream_server_address,
                         packet,
