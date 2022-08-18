@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
-use tacrust::serializer::serialize_packet;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
     AuthenticationType, AuthorizationStatus, Body, Header, Packet,
@@ -343,6 +342,9 @@ pub async fn process_tacacs_packet(
                             args: auth_result_bytes,
                         },
                     }),
+                    AuthorizationStatus::AuthForwardUpstream => {
+                        process_proxy_request(shared_state.clone(), request_bytes).await
+                    }
                     _ => Ok(Packet {
                         header: generate_response_header(&request_packet.header),
                         body: Body::AuthorizationReply {
@@ -489,6 +491,21 @@ pub async fn verify_authorization(
         }
         _ => {
             tracing::debug!("always_permit_authorization not set for user {}", user.name);
+        }
+    }
+
+    match user.forward_upstream {
+        Some(v) => {
+            tracing::info!("forward_upstream set to {} for user {}", v, user.name);
+            if !shared_state.read().await.upstream_tacacs_server.is_empty() {
+                tracing::info!("upstream tacacs server available, requesting forwarding");
+                return (AuthorizationStatus::AuthForwardUpstream, vec![]);
+            } else {
+                tracing::info!("no upstream tacacs server available, proceeding without forwarding")
+            }
+        }
+        _ => {
+            tracing::debug!("forward_upstream not set for user {}", user.name);
         }
     }
 
@@ -790,63 +807,22 @@ pub async fn verify_user_credentials(
     Ok(false)
 }
 
-pub async fn process_request_forwarding_helper(
-    shared_state: Arc<RwLock<State>>,
-    request_bytes: &[u8],
-    upstream_server: &TcpStream,
-) -> Option<Vec<u8>> {
-    let (_request_key, request_packet) = decrypt_request(&request_bytes, shared_state.clone())
-        .await
-        .ok()?;
-    let out = match request_packet.body {
-        Body::AuthenticationStart {
-            action: _,
-            priv_lvl: _,
-            authen_type: _,
-            authen_service: _,
-            user: _,
-            port: _,
-            rem_addr: _,
-            data: _,
-        } => {
-            process_proxy_request(shared_state.clone(), request_bytes.clone(), upstream_server)
-                .await
-        }
-
-        Body::AuthenticationContinue {
-            flags: _,
-            user: _,
-            data: _,
-        } => {
-            process_proxy_request(shared_state.clone(), request_bytes.clone(), upstream_server)
-                .await
-        }
-
-        Body::AuthorizationRequest {
-            auth_method: _,
-            priv_lvl: _,
-            authen_type: _,
-            authen_service: _,
-            user: _,
-            port: _,
-            rem_address: _,
-            args: _,
-        } => {
-            process_proxy_request(shared_state.clone(), request_bytes.clone(), upstream_server)
-                .await
-        }
-
-        _ => None,
-    };
-    return out;
-}
-
 pub async fn process_proxy_request(
     shared_state: Arc<RwLock<State>>,
     request_bytes: &[u8],
-    upstream_server: &TcpStream,
-) -> Option<Vec<u8>> {
-    let mut server = upstream_server.try_clone().unwrap();
+) -> Result<Packet, Report> {
+    tracing::info!("forwarding requested for the tacacs packet");
+    let upstream_tacacs_server = &shared_state.read().await.upstream_tacacs_server;
+    if upstream_tacacs_server.is_empty() {
+        return Err(Report::msg(
+            "upstream tacacs server not specified in config",
+        ));
+    }
+    tracing::info!("forwarding packet to {}", upstream_tacacs_server);
+    let mut server = match TcpStream::connect(upstream_tacacs_server) {
+        Ok(c) => c,
+        Err(_) => return Err(Report::msg("error connecting to upstream server")),
+    };
     server.write_all(&request_bytes).unwrap();
     server.flush().unwrap();
     tracing::info!(
@@ -863,9 +839,7 @@ pub async fn process_proxy_request(
         }
     }
     tracing::info!("read {} bytes from upstream server", &final_buffer.len());
-    let (request_key, request_packet) = decrypt_request(&final_buffer, shared_state.clone())
-        .await
-        .ok()?;
-    let output_buffer = serialize_packet(&request_packet, &request_key).unwrap();
-    Some(output_buffer.clone())
+    let (_request_key, request_packet) =
+        decrypt_request(&final_buffer, shared_state.clone()).await?;
+    Ok(request_packet)
 }
