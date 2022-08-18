@@ -804,32 +804,22 @@ pub async fn process_request_forwarding_helper(
             priv_lvl: _,
             authen_type: _,
             authen_service: _,
-            user,
+            user: _,
             port: _,
             rem_addr: _,
             data: _,
         } => {
-            process_user(
-                shared_state.clone(),
-                user.clone(),
-                request_bytes.clone(),
-                upstream_server,
-            )
-            .await
+            process_proxy_request(shared_state.clone(), request_bytes.clone(), upstream_server)
+                .await
         }
 
         Body::AuthenticationContinue {
             flags: _,
-            user,
+            user: _,
             data: _,
         } => {
-            process_user(
-                shared_state.clone(),
-                user.clone(),
-                request_bytes.clone(),
-                upstream_server,
-            )
-            .await
+            process_proxy_request(shared_state.clone(), request_bytes.clone(), upstream_server)
+                .await
         }
 
         Body::AuthorizationRequest {
@@ -837,18 +827,13 @@ pub async fn process_request_forwarding_helper(
             priv_lvl: _,
             authen_type: _,
             authen_service: _,
-            user,
+            user: _,
             port: _,
             rem_address: _,
             args: _,
         } => {
-            process_user(
-                shared_state.clone(),
-                user.clone(),
-                request_bytes.clone(),
-                upstream_server,
-            )
-            .await
+            process_proxy_request(shared_state.clone(), request_bytes.clone(), upstream_server)
+                .await
         }
 
         _ => None,
@@ -856,13 +841,12 @@ pub async fn process_request_forwarding_helper(
     return out;
 }
 
-pub async fn process_user(
+pub async fn process_proxy_request(
     shared_state: Arc<RwLock<State>>,
-    _user: Vec<u8>,
     request_bytes: &[u8],
-    shrub_server: &TcpStream,
+    upstream_server: &TcpStream,
 ) -> Option<Vec<u8>> {
-    let mut server = shrub_server.try_clone().unwrap();
+    let mut server = upstream_server.try_clone().unwrap();
     server.write_all(&request_bytes).unwrap();
     server.flush().unwrap();
     tracing::info!(
