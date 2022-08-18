@@ -434,7 +434,7 @@ async fn packet_user_needs_forwarding(
             data: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
-            is_user_forwarded(shared_state, user).await
+            is_user_forwarded(shared_state, &user).await
         }
 
         Body::AuthenticationContinue {
@@ -443,7 +443,7 @@ async fn packet_user_needs_forwarding(
             data: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
-            is_user_forwarded(shared_state, user).await
+            is_user_forwarded(shared_state, &user).await
         }
 
         Body::AuthorizationRequest {
@@ -457,7 +457,7 @@ async fn packet_user_needs_forwarding(
             args: _,
         } => {
             let user = String::from_utf8_lossy(&user).to_string().clone();
-            is_user_forwarded(shared_state, user).await
+            is_user_forwarded(shared_state, &user).await
         }
 
         _ => None,
@@ -465,20 +465,9 @@ async fn packet_user_needs_forwarding(
     out
 }
 
-async fn is_user_forwarded(shared_state: Arc<RwLock<State>>, user: String) -> Option<bool> {
-    let users = shared_state.read().await.users.clone();
-    let conf_user = users.get(&user);
-    match conf_user {
-        Some(arc_user) => match arc_user.forward_upstream {
-            Some(upstream) => {
-                if upstream == true {
-                    Some(true)
-                } else {
-                    Some(false)
-                }
-            }
-            _ => None,
-        },
+async fn is_user_forwarded(shared_state: Arc<RwLock<State>>, username: &str) -> Option<bool> {
+    match shared_state.read().await.users.get(username) {
+        Some(user) => return user.forward_upstream,
         None => None,
     }
 }
@@ -489,17 +478,12 @@ pub async fn process_request_forwarding(
     server: &netStream,
     addr: SocketAddr,
 ) {
-    let resp = process_request_forwarding_helper(shared_state.clone(), msg, server).await;
-    match resp {
-        Some(ref _response) => {
+    let response = process_request_forwarding_helper(shared_state.clone(), msg, server).await;
+    match response {
+        Some(r) => {
             tracing::info!("got response from upstream server {}", addr);
-            shared_state
-                .read()
-                .await
-                .unicast(addr, resp.unwrap().clone())
-                .await
+            shared_state.read().await.unicast(addr, r.clone()).await
         }
-
         None => {
             tracing::info!("error proxying request to upstream server {}", addr);
         }
