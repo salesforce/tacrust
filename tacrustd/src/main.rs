@@ -302,23 +302,28 @@ fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
         }
     }
 
-    if config_override.is_some() {
-        tempconfig.write_all(config_override.unwrap())?;
-        layers.push(Layer::Json(tempconfig.path().into()));
+    match config_override {
+        Some(cfg) => {
+            tempconfig.write_all(cfg)?;
+            layers.push(Layer::Json(tempconfig.path().into()));
+            layers.push(Layer::Env(Some("TACRUST_".to_string())));
+        }
+        None => {
+            let app = clap::App::new("tacrust")
+                .args(&Config::clap_args())
+                .arg(Arg::with_name("config").long("config").takes_value(true));
+            let arg_matches = app.get_matches();
+
+            if let Some(c) = arg_matches.value_of("config") {
+                layers.clear();
+                layers.push(Layer::Json(c.into()));
+            }
+            layers.push(Layer::Env(Some("TACRUST_".to_string())));
+            if config_override.is_none() {
+                layers.push(Layer::Clap(arg_matches.clone()));
+            }
+        }
     }
-
-    let app = clap::App::new("tacrust")
-        .args(&Config::clap_args())
-        .arg(Arg::with_name("config").long("config").takes_value(true));
-    let arg_matches = app.get_matches();
-
-    if let Some(c) = arg_matches.value_of("config") {
-        layers.clear();
-        layers.push(Layer::Json(c.into()));
-    }
-
-    layers.push(Layer::Env(Some("TACRUST_".to_string())));
-    layers.push(Layer::Clap(arg_matches.clone()));
 
     let config = Config::with_layers(&layers)?;
 
@@ -373,7 +378,7 @@ async fn process(
                                 process_request_forwarding(shared_state.clone(), &msg.clone(), &server.try_clone().unwrap(), addr.clone()).await;
                             } else {
                                 tracing::info!("packet forwarding is not true, checking if user needs forwarding");
-                                let result = check_user_forward(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
+                                let result = packet_user_needs_forwarding(shared_state.clone(), &msg.clone()).await.unwrap_or(false);
                                 if result {
                                     tracing::info!("user has forwarding enabled, setting packet forwarding to true");
                                     packet_forward = true;
@@ -410,7 +415,7 @@ async fn process(
     Ok(())
 }
 
-async fn check_user_forward(
+async fn packet_user_needs_forwarding(
     shared_state: Arc<RwLock<State>>,
     request_bytes: &[u8],
 ) -> Option<bool> {

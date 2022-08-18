@@ -23,7 +23,7 @@ build-release:
 
 .PHONY: test
 test:
-	cargo test -- --nocapture --test-threads=1
+	cargo test
 
 .PHONY: test-server
 test-server:
