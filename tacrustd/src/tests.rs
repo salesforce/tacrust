@@ -87,7 +87,7 @@ fn test_authen_packet(
     expected_status: AuthenticationStatus,
 ) {
     let mut response = vec![];
-    loop {
+    for _ in 0..10 {
         if let Ok(r) = get_tacacs_response(server_address, packet) {
             if r.len() > 4 {
                 response.extend_from_slice(&r);
@@ -126,7 +126,7 @@ fn test_author_packet(
     expected_avpairs: Vec<Vec<u8>>,
 ) {
     let mut response = vec![];
-    loop {
+    for _ in 0..10 {
         if let Ok(r) = get_tacacs_response(server_address, packet) {
             if r.len() > 4 {
                 response.extend_from_slice(&r);
