@@ -2,9 +2,9 @@ pipeline_template: rpm/Jenkinsfile
 email_reply_to: kuleana@salesforce.com                  # Change this to your group's e-mail address!
 compliance_required: false                              # (Optional) default = true
 docker_test_images:                                     # The image(s) that will be used to run your unit tests (Unit tests will be run against each image)
-    - dva/kuleana-rust-builder:33
+    - sfci/kuleana/rust-builder/kuleana-rust-builder:33
 unit_tests_command: STRATA=yes ./test.sh                # The command we'll run for the unit tests stage
-docker_package_images: dva/kuleana-rust-builder:33      # The image that will be used to package your RPM
+docker_package_images: sfci/kuleana/rust-builder/kuleana-rust-builder:33      # The image that will be used to package your RPM
 package_generation_command: ./build.sh                  # The command we'll run to package your RPMs
 package_repository: kuleana                             # Please see the list of available yum repos and create a PR if your group
 promote_to_falcon: true
