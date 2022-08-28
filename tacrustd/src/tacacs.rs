@@ -6,7 +6,8 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use simple_error::bail;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
@@ -119,7 +120,7 @@ fn generate_response_header(request_header: &Header) -> Header {
     }
 }
 
-async fn decrypt_request(
+pub(crate) async fn decrypt_request(
     request_bytes: &[u8],
     shared_state: Arc<RwLock<State>>,
 ) -> Result<(Vec<u8>, Packet), Report> {
@@ -341,6 +342,9 @@ pub async fn process_tacacs_packet(
                             args: auth_result_bytes,
                         },
                     }),
+                    AuthorizationStatus::AuthForwardUpstream => {
+                        process_proxy_request(shared_state.clone(), request_bytes).await
+                    }
                     _ => Ok(Packet {
                         header: generate_response_header(&request_packet.header),
                         body: Body::AuthorizationReply {
@@ -490,6 +494,21 @@ pub async fn verify_authorization(
         }
     }
 
+    match user.forward_upstream {
+        Some(v) => {
+            tracing::info!("forward_upstream set to {} for user {}", v, user.name);
+            if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
+                tracing::info!("upstream tacacs server available, requesting forwarding");
+                return (AuthorizationStatus::AuthForwardUpstream, vec![]);
+            } else {
+                tracing::info!("no upstream tacacs server available, proceeding without forwarding")
+            }
+        }
+        _ => {
+            tracing::debug!("forward_upstream not set for user {}", user.name);
+        }
+    }
+
     if user.member.is_none() {
         if _authz_override_found {
             tracing::info!("user is not member of any groups but authz override found at user level, returning success");
@@ -546,6 +565,23 @@ pub async fn verify_authorization(
                     "always_permit_authorization not set for group {}",
                     group.name
                 );
+            }
+        }
+
+        match group.forward_upstream {
+            Some(v) => {
+                tracing::info!("forward_upstream set to {} for group {}", v, group.name);
+                if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
+                    tracing::info!("upstream tacacs server available, requesting forwarding");
+                    return (AuthorizationStatus::AuthForwardUpstream, vec![]);
+                } else {
+                    tracing::info!(
+                        "no upstream tacacs server available, proceeding without forwarding"
+                    )
+                }
+            }
+            _ => {
+                tracing::debug!("forward_upstream not set for group {}", group.name);
             }
         }
 
@@ -786,4 +822,41 @@ pub async fn verify_user_credentials(
     }
 
     Ok(false)
+}
+
+pub async fn process_proxy_request(
+    shared_state: Arc<RwLock<State>>,
+    request_bytes: &[u8],
+) -> Result<Packet, Report> {
+    tracing::info!("forwarding requested for the tacacs packet");
+    let upstream_tacacs_server = &shared_state.read().await.upstream_tacacs_server;
+    if upstream_tacacs_server.is_empty() {
+        return Err(Report::msg(
+            "upstream tacacs server not specified in config",
+        ));
+    }
+    tracing::info!("forwarding packet to {}", upstream_tacacs_server);
+    let mut server = match TcpStream::connect(upstream_tacacs_server) {
+        Ok(c) => c,
+        Err(_) => return Err(Report::msg("error connecting to upstream server")),
+    };
+    server.write_all(&request_bytes).unwrap();
+    server.flush().unwrap();
+    tracing::info!(
+        "forwarded {} bytes to upstream server",
+        &request_bytes.len()
+    );
+    let mut final_buffer = Vec::new();
+    let mut wire_buffer: [u8; 4096] = [0; 4096];
+    loop {
+        let bytes_read = server.read(&mut wire_buffer).unwrap_or(0);
+        if bytes_read > 0 {
+            final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
+            break;
+        }
+    }
+    tracing::info!("read {} bytes from upstream server", &final_buffer.len());
+    let (_request_key, request_packet) =
+        decrypt_request(&final_buffer, shared_state.clone()).await?;
+    Ok(request_packet)
 }

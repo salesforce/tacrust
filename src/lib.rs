@@ -50,6 +50,7 @@ pub enum AuthorizationStatus {
     AuthStatusFail = 0x10,
     AuthStatusError = 0x11,
     AuthStatusFollow = 0x21,
+    AuthForwardUpstream = 0xdead,
 }
 
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]

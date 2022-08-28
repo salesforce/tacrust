@@ -26,6 +26,7 @@ Hardware test matrix and instructions at: [sfdc.co/tacrust-testing](https://sfdc
   - [x] ACLs
   - [x] Group membership
 - [ ] Feature enhancements (things not supported in the Shrubbery daemon)
+  - [x] Forward/proxy packets to upstream TACACS+ server based for specific users
   - [x] Support multiple groups per user
   - [x] Support for [multiple keys](https://git.soma.salesforce.com/Kuleana/tacacs/pull/3)
   - [ ] Per client IP secret keys (groups are not known until packet is decrypted)

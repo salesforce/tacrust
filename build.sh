@@ -1,20 +1,19 @@
 #!/bin/bash -ex
 
+env
+
 export HTTP_PROXY=http://${PROXY_SERVER}
 export HTTPS_PROXY=http://${PROXY_SERVER}
 
+export EPOCH="2"
 export PROJ_NAME="tacrust"
-export VERSION=$(git rev-list --count HEAD)
+export VERSION=${BUILD_ID}
 
-if [ "$VERSION" == "" ]; then
-	export VERSION=$BUILD_NUMBER
+if [ "${VERSION}" == "" ]; then
+	export VERSION="dev"
 fi
 
-if [ "$VERSION" == "" ]; then
-	export VERSION="0.99"
-fi
-
-export ITERATION=$(date -u +'%Y%m%d%H%M%S')
+export ITERATION="$(date -u +'%Y%m%d%H%M%S')"
 export FULL_VERSION="${VERSION}-${ITERATION}"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -30,7 +29,7 @@ cd rpmbuild && fpm -s dir -t rpm \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el7" \
 	--version ${VERSION} \
-	--epoch 1 \
+	--epoch ${EPOCH} \
 	--verbose \
 	. && \
 	mv *.rpm ../rpm-generated/
