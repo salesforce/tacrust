@@ -124,15 +124,16 @@ pub(crate) async fn decrypt_request(
     request_bytes: &[u8],
     shared_state: Arc<RwLock<State>>,
 ) -> Result<(Vec<u8>, Packet), Report> {
-    let primary_key = &(shared_state.read().await.key);
-    match parser::parse_packet(request_bytes, &(shared_state.read().await.key)) {
+    let shared_state_read = shared_state.read().await;
+    let primary_key = &(shared_state_read.key);
+    match parser::parse_packet(request_bytes, &(shared_state_read.key)) {
         Ok((_, p)) => {
             tracing::info!("packet parsed with primary key");
             Ok((primary_key.to_vec(), p))
         }
         Err(e) => {
             tracing::info!("unable to parse packet using primary key: {:?}", e);
-            for extra_key in &(shared_state.read().await.extra_keys) {
+            for extra_key in &(shared_state_read.extra_keys) {
                 match parser::parse_packet(request_bytes, &extra_key) {
                     Ok((_, p)) => {
                         tracing::info!("packet parsed with extra key");
