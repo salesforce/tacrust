@@ -28,7 +28,8 @@ test_deadlocks () {
 }
 
 install_tacacs_client () {
-	pip install -r pip/requirements.txt --no-index --find-links pip/vendor
+	yum install python3-pip
+	pip3 install -r pip/requirements.txt --no-index --find-links pip/vendor
 }
 
 if [ "$STRATA" == "yes" ]; then
