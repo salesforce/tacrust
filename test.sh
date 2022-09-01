@@ -16,6 +16,8 @@ test_functionality () {
 test_deadlocks () {
 	./target/debug/tacrustd --listen-address=0.0.0.0:4949 &
 
+	sleep 5
+
 	parallel --halt now,fail=1 --timeout 5 --jobs 100 \
 		tacacs_client -u faramir -r 172.16.100.12 -H 127.0.0.1 -p 4949 -k tackey -d authorize -c service=junos-{} \
 		::: $(seq 1 1000)
