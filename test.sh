@@ -28,7 +28,7 @@ test_deadlocks () {
 }
 
 install_tacacs_client () {
-	yum install python3-pip
+	yum install -y python3-pip
 	pip3 install -r pip/requirements.txt --no-index --find-links pip/vendor
 }
 
