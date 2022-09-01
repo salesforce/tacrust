@@ -27,6 +27,14 @@ test_deadlocks () {
 	return $PARALLEL_RETCODE
 }
 
+install_tacacs_client () {
+	pip install -r pip/requirements.txt --no-index --find-links pip/vendor
+}
+
+if [ "$STRATA" == "yes" ]; then
+	install_tacacs_client
+fi
+
 echo "Testing functionality (unit and integration tests)"
 test_functionality
 
