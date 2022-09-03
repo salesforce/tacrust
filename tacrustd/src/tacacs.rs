@@ -830,34 +830,37 @@ pub async fn process_proxy_request(
     request_bytes: &[u8],
 ) -> Result<Packet, Report> {
     tracing::info!("forwarding requested for the tacacs packet");
-    let upstream_tacacs_server = &shared_state.read().await.upstream_tacacs_server;
+    let upstream_tacacs_server = shared_state.read().await.upstream_tacacs_server.clone();
     if upstream_tacacs_server.is_empty() {
         return Err(Report::msg(
             "upstream tacacs server not specified in config",
         ));
     }
     tracing::info!("forwarding packet to {}", upstream_tacacs_server);
-    let mut server = match TcpStream::connect(upstream_tacacs_server) {
-        Ok(c) => c,
-        Err(_) => return Err(Report::msg("error connecting to upstream server")),
-    };
-    server.write_all(&request_bytes).unwrap();
-    server.flush().unwrap();
-    tracing::info!(
-        "forwarded {} bytes to upstream server",
-        &request_bytes.len()
-    );
-    let mut final_buffer = Vec::new();
-    let mut wire_buffer: [u8; 4096] = [0; 4096];
-    loop {
-        let bytes_read = server.read(&mut wire_buffer).unwrap_or(0);
-        if bytes_read > 0 {
-            final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
-            break;
+
+    let request_vec = request_bytes.to_vec();
+    let response = tokio::task::spawn_blocking(move || {
+        let mut server = match TcpStream::connect(upstream_tacacs_server) {
+            Ok(c) => c,
+            Err(_) => return Err(Report::msg("error connecting to upstream server")),
+        };
+        server.write_all(&request_vec).unwrap();
+        server.flush().unwrap();
+        tracing::info!("forwarded {} bytes to upstream server", &request_vec.len());
+        let mut final_buffer = Vec::new();
+        let mut wire_buffer: [u8; 4096] = [0; 4096];
+        loop {
+            let bytes_read = server.read(&mut wire_buffer).unwrap_or(0);
+            if bytes_read > 0 {
+                final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
+                break;
+            }
         }
-    }
-    tracing::info!("read {} bytes from upstream server", &final_buffer.len());
-    let (_request_key, request_packet) =
-        decrypt_request(&final_buffer, shared_state.clone()).await?;
+        Ok(final_buffer)
+    })
+    .await??;
+    tracing::info!("read {} bytes from upstream server", &response.len());
+
+    let (_request_key, request_packet) = decrypt_request(&response, shared_state.clone()).await?;
     Ok(request_packet)
 }
