@@ -248,7 +248,7 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
     let listener = TcpListener::bind(&config.listen_address).await?;
     let (cancel_channel, mut cancel_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let join_handle = tokio::spawn(async move {
-        let connection_counter = Arc::new(Semaphore::new(100));
+        let connection_counter = Arc::new(Semaphore::new(10000));
         loop {
             tokio::select! {
                 result = listener.accept() => {
@@ -270,7 +270,7 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
                             tracing::info!("an error occurred; error = {}", e);
                         }
                             } else {
-                             tracing::info!("Rejecting clients");
+                             tracing::info!("Rejecting clients, connection limit exceeded");
                         }
                     }.instrument(span));
                 }
