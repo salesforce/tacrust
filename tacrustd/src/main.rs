@@ -265,12 +265,12 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
                     tokio::spawn(async move {
                         let acquire_counter = spawn_tcp_counter.try_acquire();
                         if let Ok(_guard) = acquire_counter {
-                        tracing::debug!("accepted connection");
-                        if let Err(e) = process_tacacs_client(state, stream, addr).await {
-                            tracing::info!("an error occurred; error = {}", e);
-                        }
-                            } else {
-                             tracing::info!("Rejecting clients, connection limit exceeded");
+                            tracing::debug!("accepted connection");
+                            if let Err(e) = process_tacacs_client(state, stream, addr).await {
+                                tracing::info!("error occurred processing tacacs packet: {}", e);
+                            }
+                        } else {
+                            tracing::info!("connection limit exceeded, rejecting connection");
                         }
                     }.instrument(span));
                 }
