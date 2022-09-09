@@ -11,6 +11,7 @@ use std::{path::Path, sync::Arc};
 use tacrust::tacacs_codec::TacacsCodec;
 use tempfile::NamedTempFile;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Semaphore;
 use tokio::task::JoinHandle;
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -247,6 +248,7 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
     let listener = TcpListener::bind(&config.listen_address).await?;
     let (cancel_channel, mut cancel_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let join_handle = tokio::spawn(async move {
+        let connection_counter = Arc::new(Semaphore::new(100));
         loop {
             tokio::select! {
                 result = listener.accept() => {
@@ -259,10 +261,16 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
                     };
                     let state = Arc::clone(&state);
                     let span = tracing::span!(tracing::Level::INFO, "tacacs_request", ?addr);
+                    let spawn_tcp_counter = Arc::clone(&connection_counter);
                     tokio::spawn(async move {
+                        let acquire_counter = spawn_tcp_counter.try_acquire();
+                        if let Ok(_guard) = acquire_counter {
                         tracing::debug!("accepted connection");
                         if let Err(e) = process_tacacs_client(state, stream, addr).await {
                             tracing::info!("an error occurred; error = {}", e);
+                        }
+                            } else {
+                             tracing::info!("Rejecting clients");
                         }
                     }.instrument(span));
                 }
