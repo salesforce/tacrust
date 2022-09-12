@@ -73,7 +73,12 @@ fn get_tacacs_response(
         "sending packet: {}",
         Base64Display::with_config(packet, base64::STANDARD)
     );
-    stream.write(packet)?;
+    let chunk_size: usize = rand::thread_rng().gen_range(2..6);
+    let chunks: Vec<&[u8]> = packet.chunks(chunk_size).collect();
+    for chunk in chunks {
+        stream.write(chunk)?;
+        stream.flush()?;
+    }
     let mut response = [0; 4096];
     tracing::info!("receiving response");
     let len = stream.read(&mut response)?;
