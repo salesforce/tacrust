@@ -268,7 +268,15 @@
     {
       "name": "group-rangers",
       "always_permit_authorization": true,
-      "forward_upstream": true
+      "forward_upstream": true,
+      "service": [
+        {
+          "name": "carwash",
+          "args": [
+            "vendor=brownbear"
+          ]
+        }
+      ]
     }
   ]
 }
