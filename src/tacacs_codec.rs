@@ -1,3 +1,4 @@
+use crate::{parser::parse_header, TAC_PLUS_HEADER_SIZE};
 use bytes::{BufMut, Bytes, BytesMut};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
@@ -5,9 +6,6 @@ use tokio_util::codec::{Decoder, Encoder};
 /*
  * Slightly modified version of `BytesCodec` from:
  * https://github.com/tokio-rs/tokio/blob/master/tokio-util/src/codec/bytes_codec.rs
- * The main difference between `BytesCodec` and `TacacsCodec` is that the latter requires
- * at least 16 bytes (minimum length for TACACS+ header + body) for creating a `Frame`
- *
 */
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
@@ -24,12 +22,32 @@ impl Decoder for TacacsCodec {
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<BytesMut>, io::Error> {
-        if buf.len() >= 16 {
-            let len = buf.len();
-            Ok(Some(buf.split_to(len)))
-        } else {
-            Ok(None)
+        if buf.len() < TAC_PLUS_HEADER_SIZE {
+            return Ok(None);
         }
+
+        let (_, (packet_len, _)) = parse_header(buf)
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "tacacs header parsing failed"))?;
+
+        let body_len: usize = packet_len.try_into().unwrap_or_default();
+        let expected_packet_len = TAC_PLUS_HEADER_SIZE + body_len;
+        let buf_len = buf.len();
+
+        if buf_len > expected_packet_len {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "tacacs packet too large, expected: {}, actual: {}",
+                    expected_packet_len, buf_len
+                ),
+            ));
+        }
+
+        if buf_len < expected_packet_len {
+            return Ok(None);
+        }
+
+        Ok(Some(buf.split_to(expected_packet_len)))
     }
 }
 

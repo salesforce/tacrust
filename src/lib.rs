@@ -98,6 +98,8 @@ pub struct AuthenticationContinueFlags {
     pub abort: bool,
 }
 
+const TAC_PLUS_HEADER_SIZE: usize = 12;
+
 #[derive(Copy, Clone, Debug)]
 pub struct Header {
     #[allow(dead_code)]
