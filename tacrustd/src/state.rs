@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
 
@@ -14,6 +14,7 @@ pub struct State {
     pub extra_keys: Vec<Vec<u8>>,
     pub pam_service: String,
     pub upstream_tacacs_server: String,
+    pub upstream_tacacs_connections: HashMap<SocketAddr, Arc<std::sync::RwLock<TcpStream>>>,
     pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
     pub regexes: HashMap<String, Arc<Regex>>,
@@ -34,6 +35,7 @@ impl State {
             extra_keys,
             pam_service,
             upstream_tacacs_server,
+            upstream_tacacs_connections: HashMap::new(),
             sockets: HashMap::new(),
             maps: HashMap::new(),
             regexes: HashMap::new(),

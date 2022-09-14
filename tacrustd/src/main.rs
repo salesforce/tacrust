@@ -367,6 +367,11 @@ async fn process_tacacs_client(
         }
     }
 
+    shared_state
+        .write()
+        .await
+        .upstream_tacacs_connections
+        .remove(&addr);
     shared_state.write().await.sockets.remove(&addr);
     tracing::info!("connection from {} terminated", addr);
     Ok(())

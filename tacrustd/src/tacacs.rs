@@ -7,8 +7,9 @@ use regex::Regex;
 use simple_error::bail;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
+use std::time::Duration;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
     AuthenticationType, AuthorizationStatus, Body, Header, Packet,
@@ -17,7 +18,7 @@ use tokio::sync::RwLock;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct PacketArgs {
     service: Vec<String>,
     cmd: Vec<String>,
@@ -128,7 +129,7 @@ pub(crate) async fn decrypt_request(
     let primary_key = &(shared_state_read.key);
     match parser::parse_packet(request_bytes, &(shared_state_read.key)) {
         Ok((_, p)) => {
-            tracing::info!("packet parsed with primary key");
+            tracing::info!("packet parsed with primary key: {:?}", p);
             Ok((primary_key.to_vec(), p))
         }
         Err(e) => {
@@ -136,7 +137,7 @@ pub(crate) async fn decrypt_request(
             for extra_key in &(shared_state_read.extra_keys) {
                 match parser::parse_packet(request_bytes, &extra_key) {
                     Ok((_, p)) => {
-                        tracing::info!("packet parsed with extra key");
+                        tracing::info!("packet parsed with extra key: {:?}", p);
                         return Ok((extra_key.to_vec(), p));
                     }
                     Err(e) => {
@@ -164,7 +165,7 @@ pub async fn process_tacacs_packet(
     let (request_key, request_packet) =
         decrypt_request(request_bytes, shared_state.clone()).await?;
 
-    let response_packet = match request_packet.body {
+    let response_packet = match &request_packet.body {
         Body::AuthenticationStart {
             action: _,
             priv_lvl: _,
@@ -176,53 +177,61 @@ pub async fn process_tacacs_packet(
             data,
         } => {
             if user.len() > 0 {
-                map.write().await.insert(
-                    CLIENT_MAP_KEY_USERNAME.to_string(),
-                    String::from_utf8_lossy(&user).to_string(),
-                );
-
-                if authen_type == AuthenticationType::Pap as u8 {
-                    let username = map
-                        .write()
-                        .await
-                        .remove(CLIENT_MAP_KEY_USERNAME)
-                        .unwrap_or(String::new());
-                    let password = String::from_utf8_lossy(&data).to_string();
-                    let authen_status =
-                        if verify_user_credentials(shared_state.clone(), &username, &password)
-                            .await
-                            .unwrap_or(false)
-                        {
-                            AuthenticationStatus::Pass
-                        } else {
-                            AuthenticationStatus::Fail
-                        };
+                let username = String::from_utf8_lossy(&user).to_string();
+                map.write()
+                    .await
+                    .insert(CLIENT_MAP_KEY_USERNAME.to_string(), username.to_string());
+                if user_needs_forwarding(shared_state.clone(), &username).await? {
                     tracing::info!(
-                        "verifying credentials: username={}, password=({} bytes) | result={:?}",
-                        username,
-                        password.len(),
-                        authen_status
+                        "forwarding authentication request for user {} to upstream tacacs server",
+                        username
                     );
-
-                    Ok(Packet {
-                        header: generate_response_header(&request_packet.header),
-                        body: Body::AuthenticationReply {
-                            status: authen_status,
-                            flags: AuthenticationReplyFlags { no_echo: true },
-                            server_msg: b"".to_vec(),
-                            data: b"".to_vec(),
-                        },
-                    })
+                    process_proxy_request(shared_state.clone(), addr, request_bytes).await
                 } else {
-                    Ok(Packet {
-                        header: generate_response_header(&request_packet.header),
-                        body: Body::AuthenticationReply {
-                            status: AuthenticationStatus::GetPass,
-                            flags: AuthenticationReplyFlags { no_echo: true },
-                            server_msg: b"Password: ".to_vec(),
-                            data: b"".to_vec(),
-                        },
-                    })
+                    if *authen_type == AuthenticationType::Pap as u8 {
+                        let username = map
+                            .write()
+                            .await
+                            .remove(CLIENT_MAP_KEY_USERNAME)
+                            .unwrap_or(String::new());
+
+                        let password = String::from_utf8_lossy(&data).to_string();
+                        let authen_status =
+                            if verify_user_credentials(shared_state.clone(), &username, &password)
+                                .await
+                                .unwrap_or(false)
+                            {
+                                AuthenticationStatus::Pass
+                            } else {
+                                AuthenticationStatus::Fail
+                            };
+                        tracing::info!(
+                            "verifying credentials: username={}, password=({} bytes) | result={:?}",
+                            username,
+                            password.len(),
+                            authen_status
+                        );
+
+                        Ok(Packet {
+                            header: generate_response_header(&request_packet.header),
+                            body: Body::AuthenticationReply {
+                                status: authen_status,
+                                flags: AuthenticationReplyFlags { no_echo: true },
+                                server_msg: b"".to_vec(),
+                                data: b"".to_vec(),
+                            },
+                        })
+                    } else {
+                        Ok(Packet {
+                            header: generate_response_header(&request_packet.header),
+                            body: Body::AuthenticationReply {
+                                status: AuthenticationStatus::GetPass,
+                                flags: AuthenticationReplyFlags { no_echo: true },
+                                server_msg: b"Password: ".to_vec(),
+                                data: b"".to_vec(),
+                            },
+                        })
+                    }
                 }
             } else {
                 Ok(Packet {
@@ -241,37 +250,45 @@ pub async fn process_tacacs_packet(
             user,
             data: _,
         } => {
+            let password = String::from_utf8_lossy(&user).to_string();
             let username = map
                 .write()
                 .await
                 .remove(CLIENT_MAP_KEY_USERNAME)
                 .unwrap_or(String::new());
             if username.len() > 0 {
-                let password = String::from_utf8_lossy(&user).to_string();
-                let authen_status =
-                    if verify_user_credentials(shared_state.clone(), &username, &password)
-                        .await
-                        .unwrap_or(false)
-                    {
-                        AuthenticationStatus::Pass
-                    } else {
-                        AuthenticationStatus::Fail
-                    };
-                tracing::info!(
-                    "verifying credentials: username={}, password=({} bytes) | result={:?}",
-                    username,
-                    password.len(),
-                    authen_status
-                );
-                Ok(Packet {
-                    header: generate_response_header(&request_packet.header),
-                    body: Body::AuthenticationReply {
-                        status: authen_status,
-                        flags: AuthenticationReplyFlags { no_echo: false },
-                        server_msg: b"".to_vec(),
-                        data: b"".to_vec(),
-                    },
-                })
+                if user_needs_forwarding(shared_state.clone(), &username).await? {
+                    tracing::info!(
+                        "forwarding authentication request for user {} to upstream tacacs server",
+                        username
+                    );
+                    process_proxy_request(shared_state.clone(), addr, &request_bytes).await
+                } else {
+                    let authen_status =
+                        if verify_user_credentials(shared_state.clone(), &username, &password)
+                            .await
+                            .unwrap_or(false)
+                        {
+                            AuthenticationStatus::Pass
+                        } else {
+                            AuthenticationStatus::Fail
+                        };
+                    tracing::info!(
+                        "verifying credentials: username={}, password=({} bytes) | result={:?}",
+                        username,
+                        password.len(),
+                        authen_status
+                    );
+                    Ok(Packet {
+                        header: generate_response_header(&request_packet.header),
+                        body: Body::AuthenticationReply {
+                            status: authen_status,
+                            flags: AuthenticationReplyFlags { no_echo: false },
+                            server_msg: b"".to_vec(),
+                            data: b"".to_vec(),
+                        },
+                    })
+                }
             } else {
                 map.write().await.insert(
                     CLIENT_MAP_KEY_USERNAME.to_string(),
@@ -310,7 +327,7 @@ pub async fn process_tacacs_packet(
                     .get(&username)
                     .unwrap()
                     .clone();
-                for arg in &args {
+                for arg in args {
                     tracing::debug!("arg: {}", String::from_utf8_lossy(&arg));
                 }
                 let args_map = process_args(&args).await?;
@@ -342,7 +359,7 @@ pub async fn process_tacacs_packet(
                         },
                     }),
                     AuthorizationStatus::AuthForwardUpstream => {
-                        process_proxy_request(shared_state.clone(), request_bytes).await
+                        process_proxy_request(shared_state.clone(), addr, request_bytes).await
                     }
                     _ => Ok(Packet {
                         header: generate_response_header(&request_packet.header),
@@ -786,6 +803,31 @@ pub async fn verify_acl(
     (AclResult::Reject, None)
 }
 
+pub async fn user_needs_forwarding(
+    shared_state: Arc<RwLock<State>>,
+    username: &str,
+) -> Result<bool, Report> {
+    let user = match shared_state.read().await.users.get(username) {
+        Some(u) => u.clone(),
+        None => {
+            tracing::info!("user {} not found in config", username);
+            return Ok(false);
+        }
+    };
+
+    // TODO: Refactor to avoid the need for dummy SocketAddr
+    let (auth_status, _) = verify_authorization(
+        shared_state.clone(),
+        &user,
+        &SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+        &vec![],
+        PacketArgs::default(),
+    )
+    .await;
+
+    Ok(auth_status == AuthorizationStatus::AuthForwardUpstream)
+}
+
 pub async fn verify_user_credentials(
     shared_state: Arc<RwLock<State>>,
     username: &str,
@@ -827,6 +869,7 @@ pub async fn verify_user_credentials(
 
 pub async fn process_proxy_request(
     shared_state: Arc<RwLock<State>>,
+    client_addr: &SocketAddr,
     request_bytes: &[u8],
 ) -> Result<Packet, Report> {
     tracing::info!("forwarding requested for the tacacs packet");
@@ -836,29 +879,72 @@ pub async fn process_proxy_request(
             "upstream tacacs server not specified in config",
         ));
     }
-    tracing::info!("forwarding packet to {}", upstream_tacacs_server);
+    tracing::info!(
+        "forwarding {} bytes to {}",
+        request_bytes.len(),
+        upstream_tacacs_server
+    );
+
+    let upstream_connection = match shared_state
+        .read()
+        .await
+        .upstream_tacacs_connections
+        .get(client_addr)
+    {
+        Some(c) => c.clone(),
+        None => {
+            let parsed_addr = upstream_tacacs_server.parse::<SocketAddr>()?;
+            let connection_result = tokio::task::spawn_blocking(move || {
+                TcpStream::connect_timeout(&parsed_addr, Duration::from_secs(1))
+            })
+            .await?;
+            match connection_result {
+                Ok(c) => Arc::new(std::sync::RwLock::new(c)),
+                Err(_) => return Err(Report::msg("error connecting to upstream server")),
+            }
+        }
+    };
+
+    if !shared_state
+        .read()
+        .await
+        .upstream_tacacs_connections
+        .contains_key(client_addr)
+    {
+        shared_state
+            .write()
+            .await
+            .upstream_tacacs_connections
+            .insert(*client_addr, upstream_connection.clone());
+    }
 
     let request_vec = request_bytes.to_vec();
     let response = tokio::task::spawn_blocking(move || {
-        let mut server = match TcpStream::connect(upstream_tacacs_server) {
-            Ok(c) => c,
-            Err(_) => return Err(Report::msg("error connecting to upstream server")),
-        };
-        server.write_all(&request_vec).unwrap();
-        server.flush().unwrap();
+        upstream_connection
+            .write()
+            .unwrap()
+            .write_all(&request_vec)
+            .unwrap();
+        upstream_connection.write().unwrap().flush().unwrap();
         tracing::info!("forwarded {} bytes to upstream server", &request_vec.len());
         let mut final_buffer = Vec::new();
         let mut wire_buffer: [u8; 4096] = [0; 4096];
-        loop {
-            let bytes_read = server.read(&mut wire_buffer).unwrap_or(0);
+        for _ in 0..5
+        /* otherwise this can loop endlessly */
+        {
+            let bytes_read = upstream_connection
+                .write()
+                .unwrap()
+                .read(&mut wire_buffer)
+                .unwrap_or(0);
             if bytes_read > 0 {
                 final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
                 break;
             }
         }
-        Ok(final_buffer)
+        final_buffer
     })
-    .await??;
+    .await?;
     tracing::info!("read {} bytes from upstream server", &response.len());
 
     let (_request_key, request_packet) = decrypt_request(&response, shared_state.clone()).await?;
