@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
+use std::time::Duration;
 use tacrust::{
     parser, serializer, AccountingReplyStatus, AuthenticationReplyFlags, AuthenticationStatus,
     AuthenticationType, AuthorizationStatus, Body, Header, Packet,
@@ -891,10 +892,15 @@ pub async fn process_proxy_request(
         .get(client_addr)
     {
         Some(c) => c.clone(),
-        None => match TcpStream::connect(upstream_tacacs_server) {
-            Ok(c) => Arc::new(std::sync::RwLock::new(c)),
-            Err(_) => return Err(Report::msg("error connecting to upstream server")),
-        },
+        None => {
+            match TcpStream::connect_timeout(
+                &upstream_tacacs_server.parse::<SocketAddr>()?,
+                Duration::from_secs(1),
+            ) {
+                Ok(c) => Arc::new(std::sync::RwLock::new(c)),
+                Err(_) => return Err(Report::msg("error connecting to upstream server")),
+            }
+        }
     };
 
     if !shared_state
