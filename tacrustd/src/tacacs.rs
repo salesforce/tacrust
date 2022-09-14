@@ -183,11 +183,10 @@ pub async fn process_tacacs_packet(
 
                 if authen_type == AuthenticationType::Pap as u8 {
                     let username = map
-                        .read()
+                        .write()
                         .await
-                        .get(CLIENT_MAP_KEY_USERNAME)
-                        .unwrap_or(&String::new())
-                        .clone();
+                        .remove(CLIENT_MAP_KEY_USERNAME)
+                        .unwrap_or(String::new());
                     let password = String::from_utf8_lossy(&data).to_string();
                     let authen_status =
                         if verify_user_credentials(shared_state.clone(), &username, &password)
@@ -242,12 +241,11 @@ pub async fn process_tacacs_packet(
             user,
             data: _,
         } => {
-            let username = {
-                let map = map.read().await;
-                map.get(CLIENT_MAP_KEY_USERNAME)
-                    .unwrap_or(&String::new())
-                    .clone()
-            };
+            let username = map
+                .write()
+                .await
+                .remove(CLIENT_MAP_KEY_USERNAME)
+                .unwrap_or(String::new());
             if username.len() > 0 {
                 let password = String::from_utf8_lossy(&user).to_string();
                 let authen_status =
