@@ -929,7 +929,9 @@ pub async fn process_proxy_request(
         tracing::info!("forwarded {} bytes to upstream server", &request_vec.len());
         let mut final_buffer = Vec::new();
         let mut wire_buffer: [u8; 4096] = [0; 4096];
-        loop {
+        for _ in 0..5
+        /* otherwise this can loop endlessly */
+        {
             let bytes_read = upstream_connection
                 .write()
                 .unwrap()
