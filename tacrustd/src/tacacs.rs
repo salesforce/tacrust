@@ -893,10 +893,12 @@ pub async fn process_proxy_request(
     {
         Some(c) => c.clone(),
         None => {
-            match TcpStream::connect_timeout(
-                &upstream_tacacs_server.parse::<SocketAddr>()?,
-                Duration::from_secs(1),
-            ) {
+            let parsed_addr = upstream_tacacs_server.parse::<SocketAddr>()?;
+            let connection_result = tokio::task::spawn_blocking(move || {
+                TcpStream::connect_timeout(&parsed_addr, Duration::from_secs(1))
+            })
+            .await?;
+            match connection_result {
                 Ok(c) => Arc::new(std::sync::RwLock::new(c)),
                 Err(_) => return Err(Report::msg("error connecting to upstream server")),
             }
