@@ -652,7 +652,51 @@ fn test_extra_keys() {
 }
 
 #[test]
-fn test_proxy_forwarding_for_user() {
+fn test_proxy_forwarding_for_user_authen() {
+    let key = b"tackey";
+    let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    tracing::info!(
+        "downstream_port: {}, upstream_port: {}",
+        downstream_port,
+        upstream_port
+    );
+    std::env::set_var(
+        "TACRUST_UPSTREAM_TACACS_SERVER",
+        format!("127.0.0.1:{}", upstream_port),
+    );
+    test_server(
+        downstream_port,
+        Duration::from_secs(5),
+        |downstream_server_address: &str| {
+            std::env::set_var("TACRUST_UPSTREAM_TACACS_SERVER", "");
+            test_server(
+                upstream_port,
+                Duration::from_secs(5),
+                |_upstream_server_address: &str| {
+                    let packet = include_bytes!("../packets/faramir_authen_start.tacacs");
+                    test_authen_packet(
+                        downstream_server_address,
+                        packet,
+                        key,
+                        AuthenticationStatus::GetPass,
+                    );
+
+                    let packet = include_bytes!("../packets/faramir_authen_cont.tacacs");
+                    test_authen_packet(
+                        downstream_server_address,
+                        packet,
+                        key,
+                        AuthenticationStatus::Pass,
+                    );
+                },
+            );
+        },
+    );
+}
+
+#[test]
+fn test_proxy_forwarding_for_user_author() {
     let key = b"tackey";
     let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
     let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
