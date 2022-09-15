@@ -887,13 +887,15 @@ pub async fn process_proxy_request(
         upstream_tacacs_server
     );
 
-    let upstream_connection = match shared_state
-        .read()
+    let mut upstream_connection = match shared_state
+        .write()
         .await
         .upstream_tacacs_connections
         .get(client_addr)
     {
-        Some(c) => c.clone(),
+        Some(c) => c
+            .try_clone()
+            .expect("could not clone upstream tcp connection"),
         None => {
             let parsed_addr = upstream_tacacs_server.parse::<SocketAddr>()?;
             let connection_result = tokio::task::spawn_blocking(move || {
@@ -901,7 +903,7 @@ pub async fn process_proxy_request(
             })
             .await?;
             match connection_result {
-                Ok(c) => Arc::new(std::sync::RwLock::new(c)),
+                Ok(c) => c,
                 Err(_) => return Err(Report::msg("error connecting to upstream server")),
             }
         }
@@ -917,28 +919,25 @@ pub async fn process_proxy_request(
             .write()
             .await
             .upstream_tacacs_connections
-            .insert(*client_addr, upstream_connection.clone());
+            .insert(
+                *client_addr,
+                upstream_connection
+                    .try_clone()
+                    .expect("could not close upstream tcp connection"),
+            );
     }
 
     let request_vec = request_bytes.to_vec();
     let response = tokio::task::spawn_blocking(move || {
-        upstream_connection
-            .write()
-            .unwrap()
-            .write_all(&request_vec)
-            .unwrap();
-        upstream_connection.write().unwrap().flush().unwrap();
+        upstream_connection.write_all(&request_vec).unwrap();
+        upstream_connection.flush().unwrap();
         tracing::info!("forwarded {} bytes to upstream server", &request_vec.len());
         let mut final_buffer = Vec::new();
         let mut wire_buffer: [u8; 4096] = [0; 4096];
         for _ in 0..5
         /* otherwise this can loop endlessly */
         {
-            let bytes_read = upstream_connection
-                .write()
-                .unwrap()
-                .read(&mut wire_buffer)
-                .unwrap_or(0);
+            let bytes_read = upstream_connection.read(&mut wire_buffer).unwrap_or(0);
             if bytes_read > 0 {
                 final_buffer.extend_from_slice(&wire_buffer[..bytes_read]);
                 break;

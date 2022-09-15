@@ -8,13 +8,13 @@ use crate::{Acl, Group, User};
 pub type Tx = mpsc::UnboundedSender<Vec<u8>>;
 pub type Rx = mpsc::UnboundedReceiver<Vec<u8>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct State {
     pub key: Vec<u8>,
     pub extra_keys: Vec<Vec<u8>>,
     pub pam_service: String,
     pub upstream_tacacs_server: String,
-    pub upstream_tacacs_connections: HashMap<SocketAddr, Arc<std::sync::RwLock<TcpStream>>>,
+    pub upstream_tacacs_connections: HashMap<SocketAddr, TcpStream>,
     pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<IpAddr, Arc<RwLock<HashMap<String, String>>>>,
     pub regexes: HashMap<String, Arc<Regex>>,
