@@ -1,9 +1,11 @@
 use crate::start_server;
 use base64::display::Base64Display;
+use lazy_static::lazy_static;
 use rand::Rng;
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::{SocketAddr, TcpStream};
-use std::sync::Once;
+use std::sync::{Arc, Once, RwLock};
 use std::thread;
 use std::time::Duration;
 use tacrust::{AuthenticationStatus, AuthorizationStatus, Body};
@@ -11,6 +13,10 @@ use tokio::runtime::Runtime;
 use tracing_subscriber::EnvFilter;
 
 static INIT: Once = Once::new();
+lazy_static! {
+    static ref CONNECTIONS: Arc<RwLock<HashMap<SocketAddr, TcpStream>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+}
 
 fn setup() {
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
@@ -62,13 +68,17 @@ fn get_tacacs_response(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let server_address: SocketAddr = server_address.parse()?;
     tracing::info!("connecting to server at {}", server_address);
-    let mut stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(5)).unwrap();
-    stream
-        .set_write_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
+    let mut conn_map = CONNECTIONS.write().unwrap();
+    let stream = conn_map.entry(server_address.clone()).or_insert_with(|| {
+        let stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(5)).unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        stream
+    });
     tracing::info!(
         "sending packet: {}",
         Base64Display::with_config(packet, base64::STANDARD)
