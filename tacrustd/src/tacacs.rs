@@ -161,7 +161,7 @@ pub async fn process_tacacs_packet(
         .write()
         .await
         .maps
-        .entry(addr.ip())
+        .entry(*addr)
         .or_insert_with(|| Arc::new(RwLock::new(HashMap::new())))
         .clone();
     let (request_key, request_packet) =
