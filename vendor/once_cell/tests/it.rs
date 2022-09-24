@@ -18,6 +18,13 @@ mod unsync {
     }
 
     #[test]
+    fn once_cell_with_value() {
+        const CELL: OnceCell<i32> = OnceCell::with_value(12);
+        let cell = CELL;
+        assert_eq!(cell.get(), Some(&12));
+    }
+
+    #[test]
     fn once_cell_get_mut() {
         let mut c = OnceCell::new();
         assert!(c.get_mut().is_none());
@@ -131,6 +138,41 @@ mod unsync {
     }
 
     #[test]
+    fn lazy_force_mut() {
+        let called = Cell::new(0);
+        let mut x = Lazy::new(|| {
+            called.set(called.get() + 1);
+            92
+        });
+        assert_eq!(called.get(), 0);
+        let v = Lazy::force_mut(&mut x);
+        assert_eq!(called.get(), 1);
+
+        *v /= 2;
+        assert_eq!(*x, 46);
+        assert_eq!(called.get(), 1);
+    }
+
+    #[test]
+    fn lazy_get_mut() {
+        let called = Cell::new(0);
+        let mut x: Lazy<u32, _> = Lazy::new(|| {
+            called.set(called.get() + 1);
+            92
+        });
+
+        assert_eq!(called.get(), 0);
+        assert_eq!(*x, 92);
+
+        let mut_ref: &mut u32 = Lazy::get_mut(&mut x).unwrap();
+        assert_eq!(called.get(), 1);
+
+        *mut_ref /= 2;
+        assert_eq!(*x, 46);
+        assert_eq!(called.get(), 1);
+    }
+
+    #[test]
     fn lazy_default() {
         static CALLED: AtomicUsize = AtomicUsize::new(0);
 
@@ -231,6 +273,12 @@ mod sync {
     }
 
     #[test]
+    fn once_cell_with_value() {
+        static CELL: OnceCell<i32> = OnceCell::with_value(12);
+        assert_eq!(CELL.get(), Some(&12));
+    }
+
+    #[test]
     fn once_cell_get_mut() {
         let mut c = OnceCell::new();
         assert!(c.get_mut().is_none());
@@ -304,6 +352,40 @@ mod sync {
             Ok(&"hello".to_string())
         );
         assert_eq!(cell.get(), Some(&"hello".to_string()));
+    }
+
+    #[test]
+    fn wait() {
+        let cell: OnceCell<String> = OnceCell::new();
+        scope(|s| {
+            s.spawn(|_| cell.set("hello".to_string()));
+            let greeting = cell.wait();
+            assert_eq!(greeting, "hello")
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn get_or_init_stress() {
+        use std::sync::Barrier;
+        let n_threads = if cfg!(miri) { 30 } else { 1_000 };
+        let n_cells = if cfg!(miri) { 30 } else { 1_000 };
+        let cells: Vec<_> = std::iter::repeat_with(|| (Barrier::new(n_threads), OnceCell::new()))
+            .take(n_cells)
+            .collect();
+        scope(|s| {
+            for t in 0..n_threads {
+                let cells = &cells;
+                s.spawn(move |_| {
+                    for (i, (b, s)) in cells.iter().enumerate() {
+                        b.wait();
+                        let j = if t % 2 == 0 { s.wait() } else { s.get_or_init(|| i) };
+                        assert_eq!(*j, i);
+                    }
+                });
+            }
+        })
+        .unwrap();
     }
 
     #[test]
@@ -529,9 +611,8 @@ mod sync {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // FIXME: deadlocks, likely caused by https://github.com/rust-lang/miri/issues/1388
     fn once_cell_does_not_leak_partially_constructed_boxes() {
-        let n_tries = 100;
+        let n_tries = if cfg!(miri) { 10 } else { 100 };
         let n_readers = 10;
         let n_writers = 3;
         const MSG: &str = "Hello, World";
@@ -556,7 +637,6 @@ mod sync {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // miri doesn't support Barrier
     fn get_does_not_block() {
         use std::sync::Barrier;
 
