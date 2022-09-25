@@ -161,7 +161,7 @@ pub async fn process_tacacs_packet(
         .write()
         .await
         .maps
-        .entry(addr.ip())
+        .entry(*addr)
         .or_insert_with(|| Arc::new(RwLock::new(HashMap::new())))
         .clone();
     let (request_key, request_packet) =
@@ -292,17 +292,12 @@ pub async fn process_tacacs_packet(
                     })
                 }
             } else {
-                map.write().await.insert(
-                    CLIENT_MAP_KEY_USERNAME.to_string(),
-                    String::from_utf8_lossy(&user).to_string(),
-                );
-
                 Ok(Packet {
                     header: generate_response_header(&request_packet.header),
                     body: Body::AuthenticationReply {
-                        status: AuthenticationStatus::GetPass,
-                        flags: AuthenticationReplyFlags { no_echo: true },
-                        server_msg: b"Password: ".to_vec(),
+                        status: AuthenticationStatus::GetUser,
+                        flags: AuthenticationReplyFlags { no_echo: false },
+                        server_msg: b"User: ".to_vec(),
                         data: b"".to_vec(),
                     },
                 })
