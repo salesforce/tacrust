@@ -16,7 +16,7 @@ pub struct State {
     pub upstream_tacacs_server: String,
     pub upstream_tacacs_connections: HashMap<SocketAddr, TcpStream>,
     pub sockets: HashMap<SocketAddr, Tx>,
-    pub maps: HashMap<SocketAddr, Arc<RwLock<HashMap<String, String>>>>,
+    pub maps: HashMap<(SocketAddr, u32), Arc<RwLock<HashMap<String, String>>>>,
     pub regexes: HashMap<String, Arc<Regex>>,
     pub acls: HashMap<String, Arc<Acl>>,
     pub users: HashMap<String, Arc<User>>,

@@ -157,15 +157,16 @@ pub async fn process_tacacs_packet(
     addr: &SocketAddr,
     request_bytes: &[u8],
 ) -> Result<Vec<u8>, Report> {
+    let (request_key, request_packet) =
+        decrypt_request(request_bytes, shared_state.clone()).await?;
+
     let map = shared_state
         .write()
         .await
         .maps
-        .entry(*addr)
+        .entry((*addr, request_packet.header.session_id))
         .or_insert_with(|| Arc::new(RwLock::new(HashMap::new())))
         .clone();
-    let (request_key, request_packet) =
-        decrypt_request(request_bytes, shared_state.clone()).await?;
 
     let response_packet = match &request_packet.body {
         Body::AuthenticationStart {
