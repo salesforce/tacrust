@@ -109,6 +109,12 @@ fn test_authen_packet(
                 break;
             }
         } else {
+            let server_address: SocketAddr = server_address.parse().unwrap();
+            CONNECTIONS
+                .write()
+                .unwrap()
+                .remove(&server_address)
+                .unwrap();
             thread::sleep(Duration::from_millis(100));
         }
     }
@@ -148,6 +154,12 @@ fn test_author_packet(
                 break;
             }
         } else {
+            let server_address: SocketAddr = server_address.parse().unwrap();
+            CONNECTIONS
+                .write()
+                .unwrap()
+                .remove(&server_address)
+                .unwrap();
             thread::sleep(Duration::from_millis(100));
         }
     }
