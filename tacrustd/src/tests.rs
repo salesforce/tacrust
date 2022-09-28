@@ -190,23 +190,6 @@ fn test_java_author() {
 }
 
 #[test]
-fn test_golang_authen() {
-    let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
-    test_server(port, Duration::from_secs(5), |server_address: &str| {
-        {
-            let packet = include_bytes!("../packets/golang-authen-1.tacacs");
-            test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
-        }
-
-        {
-            let packet = include_bytes!("../packets/golang-authen-2.tacacs");
-            test_authen_packet(server_address, packet, key, AuthenticationStatus::Pass);
-        }
-    });
-}
-
-#[test]
 fn test_cisco_nexus_9000() {
     let key = b"tackey";
     let port: u16 = rand::thread_rng().gen_range(10000..30000);
@@ -771,10 +754,31 @@ fn test_proxy_forwarding_for_group() {
                         packet,
                         key,
                         AuthorizationStatus::AuthPassAdd,
-                        vec![],
+                        vec![b"vendor=brownbear".to_vec()],
                     );
                 },
             );
         },
     );
+}
+
+#[test]
+fn test_golang_emulate_wda_authen() {
+    let key = b"tackey";
+    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
+        let packet =
+            include_bytes!("../packets/golang-emulate-wda/golang-authen-start-no-username.tacacs");
+        test_authen_packet(server_address, packet, key, AuthenticationStatus::GetUser);
+
+        let packet = include_bytes!(
+            "../packets/golang-emulate-wda/golang-authen-cont-username-kamran.tacacs"
+        );
+        test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
+
+        let packet = include_bytes!(
+            "../packets/golang-emulate-wda/golang-authen-cont-password-kamran.tacacs"
+        );
+        test_authen_packet(server_address, packet, key, AuthenticationStatus::Pass);
+    });
 }
