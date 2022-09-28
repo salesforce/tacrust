@@ -17,6 +17,7 @@ use tacrust::{
 use tokio::sync::RwLock;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
+const CLIENT_MAP_REQUESTED_AUTH_CONT_DATA: &str = "requested_auth_continue_data";
 
 #[derive(Clone, Debug, Default)]
 pub struct PacketArgs {
@@ -237,6 +238,11 @@ pub async fn process_tacacs_packet(
                     }
                 }
             } else {
+                tracing::info!("no username provided in authen start packet, requesting username");
+                map.write().await.insert(
+                    CLIENT_MAP_REQUESTED_AUTH_CONT_DATA.to_string(),
+                    CLIENT_MAP_KEY_USERNAME.to_string(),
+                );
                 Ok(Packet {
                     header: generate_response_header(&request_packet.header),
                     body: Body::AuthenticationReply {
@@ -253,55 +259,78 @@ pub async fn process_tacacs_packet(
             user,
             data: _,
         } => {
-            let password = String::from_utf8_lossy(&user).to_string();
-            let username = map
+            let requested_data = map
                 .write()
                 .await
-                .remove(CLIENT_MAP_KEY_USERNAME)
-                .unwrap_or(String::new());
-            if username.len() > 0 {
-                if user_needs_forwarding(shared_state.clone(), &username).await? {
-                    tracing::info!(
-                        "forwarding authentication request for user {} to upstream tacacs server",
-                        username
-                    );
-                    process_proxy_request(shared_state.clone(), addr, &request_bytes).await
+                .remove(CLIENT_MAP_REQUESTED_AUTH_CONT_DATA)
+                .unwrap_or_default();
+            if requested_data == CLIENT_MAP_KEY_USERNAME {
+                tracing::info!("received username in authen cont packet, requesting password");
+                let username = String::from_utf8_lossy(&user).to_string();
+                map.write()
+                    .await
+                    .insert(CLIENT_MAP_KEY_USERNAME.to_string(), username.to_string());
+                Ok(Packet {
+                    header: generate_response_header(&request_packet.header),
+                    body: Body::AuthenticationReply {
+                        status: AuthenticationStatus::GetPass,
+                        flags: AuthenticationReplyFlags { no_echo: false },
+                        server_msg: b"Password: ".to_vec(),
+                        data: b"".to_vec(),
+                    },
+                })
+            } else {
+                let password = String::from_utf8_lossy(&user).to_string();
+                let username = map
+                    .write()
+                    .await
+                    .remove(CLIENT_MAP_KEY_USERNAME)
+                    .unwrap_or(String::new());
+                if username.len() > 0 {
+                    if user_needs_forwarding(shared_state.clone(), &username).await? {
+                        tracing::info!(
+                            "forwarding authentication request for user {} to upstream tacacs server",
+                            username
+                        );
+                        process_proxy_request(shared_state.clone(), addr, &request_bytes).await
+                    } else {
+                        let authen_status =
+                            if verify_user_credentials(shared_state.clone(), &username, &password)
+                                .await
+                                .unwrap_or(false)
+                            {
+                                AuthenticationStatus::Pass
+                            } else {
+                                AuthenticationStatus::Fail
+                            };
+                        tracing::info!(
+                            "verifying credentials: username={}, password=({} bytes) | result={:?}",
+                            username,
+                            password.len(),
+                            authen_status
+                        );
+                        Ok(Packet {
+                            header: generate_response_header(&request_packet.header),
+                            body: Body::AuthenticationReply {
+                                status: authen_status,
+                                flags: AuthenticationReplyFlags { no_echo: false },
+                                server_msg: b"".to_vec(),
+                                data: b"".to_vec(),
+                            },
+                        })
+                    }
                 } else {
-                    let authen_status =
-                        if verify_user_credentials(shared_state.clone(), &username, &password)
-                            .await
-                            .unwrap_or(false)
-                        {
-                            AuthenticationStatus::Pass
-                        } else {
-                            AuthenticationStatus::Fail
-                        };
-                    tracing::info!(
-                        "verifying credentials: username={}, password=({} bytes) | result={:?}",
-                        username,
-                        password.len(),
-                        authen_status
-                    );
+                    tracing::info!("no valid username found for this session, requesting username");
                     Ok(Packet {
                         header: generate_response_header(&request_packet.header),
                         body: Body::AuthenticationReply {
-                            status: authen_status,
+                            status: AuthenticationStatus::GetUser,
                             flags: AuthenticationReplyFlags { no_echo: false },
-                            server_msg: b"".to_vec(),
+                            server_msg: b"User: ".to_vec(),
                             data: b"".to_vec(),
                         },
                     })
                 }
-            } else {
-                Ok(Packet {
-                    header: generate_response_header(&request_packet.header),
-                    body: Body::AuthenticationReply {
-                        status: AuthenticationStatus::GetUser,
-                        flags: AuthenticationReplyFlags { no_echo: false },
-                        server_msg: b"User: ".to_vec(),
-                        data: b"".to_vec(),
-                    },
-                })
             }
         }
 
