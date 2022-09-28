@@ -321,6 +321,10 @@ pub async fn process_tacacs_packet(
                     }
                 } else {
                     tracing::info!("no valid username found for this session, requesting username");
+                    map.write().await.insert(
+                        CLIENT_MAP_REQUESTED_AUTH_CONT_DATA.to_string(),
+                        CLIENT_MAP_KEY_USERNAME.to_string(),
+                    );
                     Ok(Packet {
                         header: generate_response_header(&request_packet.header),
                         body: Body::AuthenticationReply {
