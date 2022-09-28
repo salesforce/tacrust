@@ -559,7 +559,7 @@ pub async fn verify_authorization(
     if user.member.is_none() {
         if _authz_override_found {
             tracing::info!("user is not member of any groups but authz override found at user level, returning success");
-            return (AuthorizationStatus::AuthPassAdd, vec![]);
+            return (AuthorizationStatus::AuthPassAdd, auth_result);
         } else {
             tracing::info!(
                 "user is not member of any groups and no authz override found, returning failure"
@@ -661,7 +661,7 @@ pub async fn verify_authorization(
 
     if _authz_override_found {
         tracing::info!("authz override found at group level, returning success");
-        return (AuthorizationStatus::AuthPassAdd, vec![]);
+        return (AuthorizationStatus::AuthPassAdd, auth_result);
     }
 
     let auth_status = if auth_result.len() > 0 {

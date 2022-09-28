@@ -754,7 +754,7 @@ fn test_proxy_forwarding_for_group() {
                         packet,
                         key,
                         AuthorizationStatus::AuthPassAdd,
-                        vec![],
+                        vec![b"vendor=brownbear".to_vec()],
                     );
                 },
             );
