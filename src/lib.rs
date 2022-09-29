@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub mod hash;
 pub mod parser;
 mod pseudo_pad;
@@ -174,6 +176,105 @@ pub enum Body {
         server_msg: Vec<u8>,
         data: Vec<u8>,
     },
+}
+
+impl Display for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Body::AuthenticationStart {
+                action: _,
+                priv_lvl: _,
+                authen_type: _,
+                authen_service: _,
+                user,
+                port: _,
+                rem_addr: _,
+                data: _,
+            } => {
+                write!(f, "AuthenticationStart {{ ")?;
+                write!(f, "user: \"{}\"", String::from_utf8_lossy(user))?;
+                write!(f, " }}")
+            }
+            Body::AuthenticationReply {
+                status,
+                flags,
+                server_msg,
+                data: _,
+            } => {
+                write!(f, "AuthenticationReply {{ ")?;
+                write!(f, "status: {:?}, ", status)?;
+                write!(f, "flags: {:?}, ", flags)?;
+                write!(f, "server_msg: {:?}", String::from_utf8_lossy(server_msg))?;
+                write!(f, " }}")
+            }
+            Body::AuthenticationContinue {
+                flags,
+                user,
+                data: _,
+            } => {
+                write!(f, "AuthenticationContinue {{ ")?;
+                write!(f, "flags: {:?}, ", flags)?;
+                write!(f, "username/password: \"({} bytes)\", ", user.len())?;
+                write!(f, " }}")
+            }
+            Body::AuthorizationRequest {
+                auth_method: _,
+                priv_lvl: _,
+                authen_type: _,
+                authen_service: _,
+                user,
+                port: _,
+                rem_address: _,
+                args,
+            } => {
+                write!(f, "AuthorizationRequest {{ ")?;
+                write!(f, "user: \"{}\", ", String::from_utf8_lossy(user))?;
+                let args: Vec<String> = args
+                    .iter()
+                    .map(|arg| format!("\"{}\"", String::from_utf8_lossy(arg)))
+                    .collect();
+                write!(f, "args: [{}]", args.join(", "))?;
+                write!(f, " }}")
+            }
+            Body::AuthorizationReply {
+                status,
+                data: _,
+                server_msg: _,
+                args,
+            } => {
+                write!(f, "AuthorizationReply {{ ")?;
+                write!(f, "status: {:?}, ", status)?;
+                let args: Vec<String> = args
+                    .iter()
+                    .map(|arg| format!("\"{}\"", String::from_utf8_lossy(arg)))
+                    .collect();
+                write!(f, "args: [{}]", args.join(", "))?;
+                write!(f, " }}")
+            }
+            Body::AccountingRequest {
+                flags: _,
+                authen_method: _,
+                priv_lvl: _,
+                authen_type: _,
+                authen_service: _,
+                user: _,
+                port: _,
+                rem_addr: _,
+                args: _,
+            } => {
+                write!(f, "AccountingRequest {{ ")?;
+                write!(f, " }}")
+            }
+            Body::AccountingReply {
+                status: _,
+                server_msg: _,
+                data: _,
+            } => {
+                write!(f, "AccountingReply {{ ")?;
+                write!(f, " }}")
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

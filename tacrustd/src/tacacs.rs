@@ -131,7 +131,6 @@ pub(crate) async fn decrypt_request(
     match parser::parse_packet(request_bytes, &(shared_state_read.key)) {
         Ok((_, p)) => {
             tracing::debug!("packet parsed with primary key");
-            tracing::debug!("packet: {:?}", p);
             Ok((primary_key.to_vec(), p))
         }
         Err(e) => {
@@ -140,7 +139,6 @@ pub(crate) async fn decrypt_request(
                 match parser::parse_packet(request_bytes, &extra_key) {
                     Ok((_, p)) => {
                         tracing::debug!("packet parsed with extra key");
-                        tracing::debug!("packet: {:?}", p);
                         return Ok((extra_key.to_vec(), p));
                     }
                     Err(e) => {
@@ -160,6 +158,12 @@ pub async fn process_tacacs_packet(
 ) -> Result<Vec<u8>, Report> {
     let (request_key, request_packet) =
         decrypt_request(request_bytes, shared_state.clone()).await?;
+
+    tracing::info!(
+        "request: {:?} | {}",
+        request_packet.header,
+        request_packet.body
+    );
 
     let map = shared_state
         .write()
@@ -441,6 +445,12 @@ pub async fn process_tacacs_packet(
         }),
         _ => Err(Report::msg("not supported yet")),
     }?;
+
+    tracing::info!(
+        "response: {:?} | {}",
+        response_packet.header,
+        response_packet.body
+    );
 
     let response_bytes = match serializer::serialize_packet(&response_packet, &request_key) {
         Ok(b) => b,
