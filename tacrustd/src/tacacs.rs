@@ -159,8 +159,8 @@ pub async fn process_tacacs_packet(
     let (request_key, request_packet) =
         decrypt_request(request_bytes, shared_state.clone()).await?;
 
-    tracing::debug!("request header: {:?}", request_packet.header);
-    tracing::info!("request: {}", request_packet.body);
+    tracing::debug!("request: {:?}", request_packet.header);
+    tracing::info!("{}", request_packet.body);
 
     let map = shared_state
         .write()
@@ -443,8 +443,8 @@ pub async fn process_tacacs_packet(
         _ => Err(Report::msg("not supported yet")),
     }?;
 
-    tracing::debug!("response header: {:?}", response_packet.header);
-    tracing::info!("response: {}", response_packet.body);
+    tracing::debug!("response: {:?}", response_packet.header);
+    tracing::info!("{}", response_packet.body);
 
     let response_bytes = match serializer::serialize_packet(&response_packet, &request_key) {
         Ok(b) => b,
