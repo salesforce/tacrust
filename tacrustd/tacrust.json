@@ -2,10 +2,13 @@
   "listen_address": "0.0.0.0:49",
   "upstream_tacacs_server": "",
   "key": "tackey",
+  "debug_traffic_from_ip_addrs": [
+    "127.0.0.1"
+  ],
   "extra_keys": [
-      "tackey1",
-      "tackey2",
-      "tackey3"
+    "tackey1",
+    "tackey2",
+    "tackey3"
   ],
   "acls": [
     {

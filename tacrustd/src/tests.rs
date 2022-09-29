@@ -50,7 +50,7 @@ where
     let tacrust_server_address = format!("127.0.0.1:{}", port);
     let test_config =
         include_str!("../tacrust.json").replace("0.0.0.0:49", &tacrust_server_address);
-    tracing::info!("starting test server at: {}", &tacrust_server_address);
+    tracing::debug!("starting test server at: {}", &tacrust_server_address);
     let running_server = runtime
         .block_on(start_server(Some(test_config.as_bytes())))
         .unwrap();
@@ -67,7 +67,7 @@ fn get_tacacs_response(
     packet: &[u8],
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let server_address: SocketAddr = server_address.parse()?;
-    tracing::info!("connecting to server at {}", server_address);
+    tracing::debug!("connecting to server at {}", server_address);
     let mut conn_map = CONNECTIONS.write().unwrap();
     let stream = conn_map.entry(server_address.clone()).or_insert_with(|| {
         let stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(5)).unwrap();
@@ -79,7 +79,7 @@ fn get_tacacs_response(
             .unwrap();
         stream
     });
-    tracing::info!(
+    tracing::debug!(
         "sending packet: {}",
         Base64Display::with_config(packet, base64::STANDARD)
     );
@@ -90,7 +90,7 @@ fn get_tacacs_response(
         stream.flush()?;
     }
     let mut response = [0; 4096];
-    tracing::info!("receiving response");
+    tracing::debug!("receiving response");
     let len = stream.read(&mut response)?;
     Ok(response[..len].to_vec())
 }
@@ -118,12 +118,12 @@ fn test_authen_packet(
             thread::sleep(Duration::from_millis(100));
         }
     }
-    tracing::info!(
+    tracing::debug!(
         "received response: {}",
         Base64Display::with_config(&response, base64::STANDARD)
     );
     let (_, parsed_response) = tacrust::parser::parse_packet(&response, key).unwrap();
-    tracing::info!("parsed: {:?}", parsed_response);
+    tracing::debug!("parsed: {:?}", parsed_response);
     assert!(matches!(
         parsed_response.body,
         Body::AuthenticationReply { .. }
@@ -163,12 +163,12 @@ fn test_author_packet(
             thread::sleep(Duration::from_millis(100));
         }
     }
-    tracing::info!(
+    tracing::debug!(
         "received response: {}",
         Base64Display::with_config(&response, base64::STANDARD)
     );
     let (_, parsed_response) = tacrust::parser::parse_packet(&response, key).unwrap();
-    tracing::info!("parsed: {:?}", parsed_response);
+    tracing::debug!("parsed: {:?}", parsed_response);
     assert!(matches!(
         parsed_response.body,
         Body::AuthorizationReply { .. }
@@ -661,7 +661,7 @@ fn test_proxy_forwarding_for_user_authen() {
     let key = b"tackey";
     let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
     let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
-    tracing::info!(
+    tracing::debug!(
         "downstream_port: {}, upstream_port: {}",
         downstream_port,
         upstream_port
@@ -705,7 +705,7 @@ fn test_proxy_forwarding_for_user_author() {
     let key = b"tackey";
     let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
     let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
-    tracing::info!(
+    tracing::debug!(
         "downstream_port: {}, upstream_port: {}",
         downstream_port,
         upstream_port
@@ -742,7 +742,7 @@ fn test_proxy_forwarding_for_group() {
     let key = b"tackey";
     let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
     let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
-    tracing::info!(
+    tracing::debug!(
         "downstream_port: {}, upstream_port: {}",
         downstream_port,
         upstream_port

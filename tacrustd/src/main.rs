@@ -5,12 +5,13 @@ use clap_rs as clap;
 use color_eyre::Report;
 use futures::SinkExt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::{path::Path, sync::Arc};
 use tacrust::tacacs_codec::TacacsCodec;
 use tempfile::NamedTempFile;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::oneshot::Sender;
 use tokio::sync::Semaphore;
 use tokio::task::JoinHandle;
 use tokio::{
@@ -24,7 +25,9 @@ use tracing_appender::non_blocking::WorkerGuard;
 #[allow(unused_imports)]
 use tracing_subscriber::prelude::*;
 #[allow(unused_imports)]
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{
+    filter, filter::LevelFilter, fmt, prelude::*, reload, EnvFilter, Registry,
+};
 use twelf::{config, Layer};
 
 mod client;
@@ -89,6 +92,7 @@ pub struct Acl {
 
 // TACACS+ server in Rust
 #[config]
+#[allow(dead_code)]
 #[derive(Clone, Default, Debug)]
 pub struct Config {
     // Address to bind on
@@ -120,6 +124,9 @@ pub struct Config {
 
     // PAM service to use for authentication
     pam_service: Option<String>,
+
+    // Clients to enable debug logging for
+    debug_traffic_from_ip_addrs: Option<HashSet<String>>,
 }
 
 pub struct RunningServer {
@@ -128,7 +135,7 @@ pub struct RunningServer {
 
     // Send unit type to this channel to shutdown the server
     #[allow(dead_code)]
-    cancel_channel: UnboundedSender<()>,
+    cancel_channel: Sender<()>,
 
     // Logging guard which will flush the logs when it goes out of scope
     // This is None unless tracing is redirected to a file via --log-dir option
@@ -155,29 +162,42 @@ async fn main() -> Result<(), Report> {
 }
 
 #[cfg(test)]
-fn setup_logging(_log_dir: &Option<String>) -> Option<WorkerGuard> {
-    None
+fn setup_logging(
+    _log_dir: &Option<String>,
+) -> (
+    Option<WorkerGuard>,
+    Option<reload::Handle<LevelFilter, Registry>>,
+) {
+    (None, None)
 }
 
 #[cfg(not(test))]
-fn setup_logging(log_dir: &Option<String>) -> Option<WorkerGuard> {
+fn setup_logging(
+    log_dir: &Option<String>,
+) -> (
+    Option<WorkerGuard>,
+    Option<reload::Handle<LevelFilter, Registry>>,
+) {
+    let default_env_filter = EnvFilter::from_default_env().max_level_hint().unwrap();
     if let Some(dir) = log_dir {
         println!("Setting up logging in {}", dir);
         let file_appender = tracing_appender::rolling::never(dir, "tacrustd.log");
         let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .finish()
+        let (reload_filter, reload_handle) = reload::Layer::new(default_env_filter);
+        tracing_subscriber::registry()
+            .with(reload_filter)
+            .with(fmt::Layer::default())
             .with(tracing_subscriber::fmt::Layer::default().with_writer(non_blocking))
             .init();
-        Some(guard)
+        (Some(guard), Some(reload_handle))
     } else {
         println!("Setting up logging for stdout");
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .finish()
+        let (reload_filter, reload_handle) = reload::Layer::new(default_env_filter);
+        tracing_subscriber::registry()
+            .with(reload_filter)
+            .with(fmt::Layer::default())
             .init();
-        None
+        (None, Some(reload_handle))
     }
 }
 
@@ -235,18 +255,23 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
     tracing::debug!("state: {:?}", state.read().await);
 
     if config.immediately_exit {
-        tracing::info!("no errors found in config, exiting immediately");
+        tracing::debug!("no errors found in config, exiting immediately");
         std::process::exit(0);
     }
 
-    let logging_guard = setup_logging(&config.log_dir);
+    #[allow(unused_variables)]
+    let (logging_guard, logging_reload_handle) = setup_logging(&config.log_dir);
+    #[allow(unused_variables)]
+    let default_env_filter = EnvFilter::from_default_env().max_level_hint().unwrap();
+    let (override_off_tx, mut override_off_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
 
-    tracing::info!("commit: {}", env!("GIT_HASH"));
-    tracing::info!("version: {}", env!("FULL_VERSION"));
-    tracing::info!("listening on {}", &config.listen_address);
+    tracing::debug!("commit: {}", env!("GIT_HASH"));
+    tracing::debug!("version: {}", env!("FULL_VERSION"));
+    tracing::debug!("listening on {}", &config.listen_address);
 
+    let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
     let listener = TcpListener::bind(&config.listen_address).await?;
-    let (cancel_channel, mut cancel_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+
     let join_handle = tokio::spawn(async move {
         let connection_counter = Arc::new(Semaphore::new(10000));
         loop {
@@ -255,31 +280,53 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
                     let (stream, addr) = match result {
                         Ok(v) => v,
                         Err(e) => {
-                            tracing::info!("error accepting connection; error = {}", e);
+                            tracing::debug!("error accepting connection; error = {}", e);
                             continue
                         },
                     };
+
+                    #[cfg(not(test))]
+                    if let Some(ref debug_map) = &config.debug_traffic_from_ip_addrs {
+                        if debug_map.contains(&addr.ip().to_string()) {
+                            logging_reload_handle
+                                .as_ref()
+                                .unwrap()
+                                .modify(|filter| *filter = LevelFilter::DEBUG)
+                                .unwrap();
+                        }
+                    }
+
                     let state = Arc::clone(&state);
                     let span = tracing::span!(tracing::Level::INFO, "tacacs_request", ?addr);
                     let spawn_tcp_counter = Arc::clone(&connection_counter);
+                    let override_off_tx = override_off_tx.clone();
                     tokio::spawn(async move {
                         let acquire_counter = spawn_tcp_counter.try_acquire();
                         if let Ok(_guard) = acquire_counter {
                             tracing::debug!("accepted connection");
                             if let Err(e) = process_tacacs_client(state, stream, addr).await {
-                                tracing::info!("error occurred processing tacacs packet: {}", e);
+                                tracing::debug!("error occurred processing tacacs packet: {}", e);
                             }
                         } else {
-                            tracing::info!("connection limit exceeded, rejecting connection");
+                            tracing::debug!("connection limit exceeded, rejecting connection");
                         }
+                        override_off_tx.send(()).unwrap();
                     }.instrument(span));
                 }
-                _ = cancel_rx.recv() => {
-                    tracing::info!("received channel req to shutdown, exiting");
+                _ = override_off_rx.recv() => {
+                    #[cfg(not(test))]
+                    logging_reload_handle
+                        .as_ref()
+                        .unwrap()
+                        .modify(|filter| *filter = default_env_filter)
+                        .unwrap();
+                }
+                _ = &mut cancel_rx => {
+                    tracing::debug!("received channel req to shutdown, exiting");
                     break;
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    tracing::info!("received ctrl-c, exiting");
+                    tracing::debug!("received ctrl-c, exiting");
                     break;
                 }
             }
@@ -287,7 +334,7 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
     });
     Ok(RunningServer {
         join_handle,
-        cancel_channel,
+        cancel_channel: cancel_tx,
         logging_guard,
     })
 }
@@ -346,12 +393,12 @@ async fn process_tacacs_client(
     loop {
         tokio::select! {
             Some(msg) = client.rx.recv() => {
-                tracing::info!("sending {} bytes to {}", msg.len(), addr);
+                tracing::debug!("sending {} bytes to {}", msg.len(), addr);
                 client.pipe.send(msg.into()).await?;
             }
             result = client.pipe.next() => match result {
                 Some(Ok(msg)) => {
-                    tracing::info!("received {} bytes from {}", msg.len(), addr);
+                    tracing::debug!("received {} bytes from {}", msg.len(), addr);
                     let response = tacacs::process_tacacs_packet(shared_state.clone(), &addr, &msg).await?;
                     shared_state.read().await.unicast(addr, response).await;
                 }
@@ -373,6 +420,6 @@ async fn process_tacacs_client(
         .upstream_tacacs_connections
         .remove(&addr);
     shared_state.write().await.sockets.remove(&addr);
-    tracing::info!("connection from {} terminated", addr);
+    tracing::debug!("connection from {} terminated", addr);
     Ok(())
 }
