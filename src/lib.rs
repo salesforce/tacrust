@@ -214,7 +214,7 @@ impl Display for Body {
             } => {
                 write!(f, "AuthenticationContinue {{ ")?;
                 write!(f, "flags: {:?}, ", flags)?;
-                write!(f, "username/password: \"({} bytes)\", ", user.len())?;
+                write!(f, "username/password: \"({} bytes)\"", user.len())?;
                 write!(f, " }}")
             }
             Body::AuthorizationRequest {
