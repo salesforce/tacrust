@@ -2,7 +2,7 @@ use crate::start_server;
 use base64::display::Base64Display;
 use lazy_static::lazy_static;
 use rand::Rng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, Once, RwLock};
@@ -16,6 +16,17 @@ static INIT: Once = Once::new();
 lazy_static! {
     static ref CONNECTIONS: Arc<RwLock<HashMap<SocketAddr, TcpStream>>> =
         Arc::new(RwLock::new(HashMap::new()));
+    static ref USED_PORTS: Arc<RwLock<HashSet<u16>>> = Arc::new(RwLock::new(HashSet::new()));
+}
+
+fn select_new_port() -> u16 {
+    loop {
+        let new_port = rand::thread_rng().gen_range(10000..30000);
+        if !USED_PORTS.read().unwrap().contains(&new_port) {
+            USED_PORTS.write().unwrap().insert(new_port);
+            return new_port;
+        }
+    }
 }
 
 fn setup() {
@@ -188,7 +199,7 @@ fn test_author_packet(
 #[test]
 fn test_java_author() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/java-author-1.tacacs");
         test_author_packet(
@@ -204,7 +215,7 @@ fn test_java_author() {
 #[test]
 fn test_cisco_nexus_9000() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet =
             include_bytes!("../packets/cisco-nexus-9000/aditya/01.a-authen-start-bad.tacacs");
@@ -413,7 +424,7 @@ fn test_cisco_nexus_9000() {
 #[test]
 fn test_f5_lb() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/f5-lb/01-authen-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::Pass);
@@ -432,7 +443,7 @@ fn test_f5_lb() {
 #[test]
 fn test_juniper_firewall() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/juniper-firewall/01-author-good.tacacs");
         test_author_packet(
@@ -451,7 +462,7 @@ fn test_juniper_firewall() {
 #[test]
 fn test_mrv_lx() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/mrv-lx/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
@@ -473,7 +484,7 @@ fn test_mrv_lx() {
 #[test]
 fn test_ciena_waveserver() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/ciena-waveserver/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
@@ -505,7 +516,7 @@ fn test_ciena_waveserver() {
 #[test]
 fn test_opengear_console() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/opengear-console/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
@@ -527,7 +538,7 @@ fn test_opengear_console() {
 #[test]
 fn test_fortigate_firewall() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/fortigate-firewall/01.a-authen-start-good.tacacs");
         test_authen_packet(server_address, packet, key, AuthenticationStatus::GetPass);
@@ -552,7 +563,7 @@ fn test_fortigate_firewall() {
 #[test]
 fn test_acl_present_but_not_matched() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/johndoe_author_some_service.tacacs");
         test_author_packet(
@@ -568,7 +579,7 @@ fn test_acl_present_but_not_matched() {
 #[test]
 fn test_acl_not_present() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/janedoe_author_some_service.tacacs");
         test_author_packet(
@@ -584,7 +595,7 @@ fn test_acl_not_present() {
 #[test]
 fn test_multiple_group_memberships() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/jackdoe_author_raccess.tacacs");
         test_author_packet(
@@ -600,7 +611,7 @@ fn test_multiple_group_memberships() {
 #[test]
 fn test_always_permit_authz_flag() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/alexdelarge_author_raccess.tacacs");
         test_author_packet(
@@ -643,7 +654,7 @@ fn test_always_permit_authz_flag() {
 #[test]
 fn test_extra_keys() {
     let key = b"tackey2";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/faramir_author_carwash_tackey2.tacacs");
         test_author_packet(
@@ -659,8 +670,8 @@ fn test_extra_keys() {
 #[test]
 fn test_proxy_forwarding_for_user_authen() {
     let key = b"tackey";
-    let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
-    let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let downstream_port: u16 = select_new_port();
+    let upstream_port: u16 = select_new_port();
     tracing::debug!(
         "downstream_port: {}, upstream_port: {}",
         downstream_port,
@@ -703,8 +714,8 @@ fn test_proxy_forwarding_for_user_authen() {
 #[test]
 fn test_proxy_forwarding_for_user_author() {
     let key = b"tackey";
-    let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
-    let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let downstream_port: u16 = select_new_port();
+    let upstream_port: u16 = select_new_port();
     tracing::debug!(
         "downstream_port: {}, upstream_port: {}",
         downstream_port,
@@ -740,8 +751,8 @@ fn test_proxy_forwarding_for_user_author() {
 #[test]
 fn test_proxy_forwarding_for_group() {
     let key = b"tackey";
-    let downstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
-    let upstream_port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let downstream_port: u16 = select_new_port();
+    let upstream_port: u16 = select_new_port();
     tracing::debug!(
         "downstream_port: {}, upstream_port: {}",
         downstream_port,
@@ -777,7 +788,7 @@ fn test_proxy_forwarding_for_group() {
 #[test]
 fn test_golang_emulate_wda_authen() {
     let key = b"tackey";
-    let port: u16 = rand::thread_rng().gen_range(10000..30000);
+    let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet =
             include_bytes!("../packets/golang-emulate-wda/golang-authen-start-no-username.tacacs");
