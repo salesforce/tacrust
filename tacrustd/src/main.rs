@@ -68,20 +68,21 @@ pub struct Group {
     always_permit_authorization: Option<bool>,
     forward_upstream: Option<bool>,
     acl: Option<String>,
-    pap: Option<String>,
-    member: Option<String>,
     service: Option<Vec<Service>>,
     cmds: Option<Vec<Cmd>>,
+    member: Option<Vec<String>>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct User {
     name: String,
     credentials: Credentials,
-    member: Option<Vec<String>>,
     always_permit_authorization: Option<bool>,
     forward_upstream: Option<bool>,
     acl: Option<String>,
+    service: Option<Vec<Service>>,
+    cmds: Option<Vec<Cmd>>,
+    member: Option<Vec<String>>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]

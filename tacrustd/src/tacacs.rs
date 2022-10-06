@@ -22,6 +22,7 @@ const CLIENT_MAP_REQUESTED_AUTH_CONT_DATA: &str = "requested_auth_continue_data"
 #[derive(Clone, Debug, Default)]
 pub struct PacketArgs {
     service: Vec<String>,
+    service_args: Vec<String>,
     cmd: Vec<String>,
     cmd_args: Vec<String>,
 }
@@ -33,12 +34,12 @@ pub enum AclResult {
 }
 
 fn normalized_match(s1: &str, s2: &str) -> bool {
-    if s1.len() == 0 || s2.len() == 0 {
+    if s1.is_empty() || s2.is_empty() {
         return true;
     }
     let s1_match = s1 == "shell" || s1 == "exec";
     let s2_match = s2 == "shell" || s2 == "exec";
-    return (s1_match && s2_match) || (s1 == s2);
+    (s1_match && s2_match) || (s1 == s2)
 }
 
 pub trait ConfigAvPair {
@@ -47,15 +48,9 @@ pub trait ConfigAvPair {
     fn subargs(&self) -> Vec<String>;
     fn compare(&self, packet_avpairs: &Vec<String>) -> Vec<String> {
         let mut result_args: Vec<String> = Vec::new();
-        tracing::debug!(
-            "\tcomparing config=<{}={}> with packet=<{:?}>",
-            self.key(),
-            self.value(),
-            packet_avpairs
-        );
         for packet_avpair in packet_avpairs {
             let self_value = self.value();
-            let packet_avpair_split: Vec<&str> = (&packet_avpair).split(&"=").collect();
+            let packet_avpair_split: Vec<&str> = packet_avpair.split(&"=").collect();
             if packet_avpair_split.len() != 2 {
                 tracing::debug!("\t\tinvalid arguments in packet [{:?}]", packet_avpair);
                 continue;
@@ -72,6 +67,8 @@ pub trait ConfigAvPair {
                     packet_avpair_value
                 );
                 let args = &mut self.subargs();
+                tracing::debug!("\t\tmatch produced args: {:?}", args);
+                result_args.push(format!("{}={}", self.key(), self.value()));
                 result_args.append(args);
             } else {
                 tracing::debug!(
@@ -136,7 +133,7 @@ pub(crate) async fn decrypt_request(
         Err(e) => {
             tracing::debug!("unable to parse packet using primary key: {:?}", e);
             for extra_key in &(shared_state_read.extra_keys) {
-                match parser::parse_packet(request_bytes, &extra_key) {
+                match parser::parse_packet(request_bytes, extra_key) {
                     Ok((_, p)) => {
                         tracing::debug!("packet parsed with extra key");
                         return Ok((extra_key.to_vec(), p));
@@ -181,8 +178,8 @@ pub async fn process_tacacs_packet(
             rem_addr: _,
             data,
         } => {
-            if user.len() > 0 {
-                let username = String::from_utf8_lossy(&user).to_string();
+            if !user.is_empty() {
+                let username = String::from_utf8_lossy(user).to_string();
                 map.write()
                     .await
                     .insert(CLIENT_MAP_KEY_USERNAME.to_string(), username.to_string());
@@ -192,51 +189,49 @@ pub async fn process_tacacs_packet(
                         username
                     );
                     process_proxy_request(shared_state.clone(), addr, request_bytes).await
-                } else {
-                    if *authen_type == AuthenticationType::Pap as u8 {
-                        let username = map
-                            .write()
+                } else if *authen_type == AuthenticationType::Pap as u8 {
+                    let username = map
+                        .write()
+                        .await
+                        .remove(CLIENT_MAP_KEY_USERNAME)
+                        .unwrap_or_default();
+
+                    let password = String::from_utf8_lossy(data).to_string();
+                    let authen_status =
+                        if verify_user_credentials(shared_state.clone(), &username, &password)
                             .await
-                            .remove(CLIENT_MAP_KEY_USERNAME)
-                            .unwrap_or(String::new());
+                            .unwrap_or(false)
+                        {
+                            AuthenticationStatus::Pass
+                        } else {
+                            AuthenticationStatus::Fail
+                        };
+                    tracing::debug!(
+                        "verifying credentials: username={}, password=({} bytes) | result={:?}",
+                        username,
+                        password.len(),
+                        authen_status
+                    );
 
-                        let password = String::from_utf8_lossy(&data).to_string();
-                        let authen_status =
-                            if verify_user_credentials(shared_state.clone(), &username, &password)
-                                .await
-                                .unwrap_or(false)
-                            {
-                                AuthenticationStatus::Pass
-                            } else {
-                                AuthenticationStatus::Fail
-                            };
-                        tracing::debug!(
-                            "verifying credentials: username={}, password=({} bytes) | result={:?}",
-                            username,
-                            password.len(),
-                            authen_status
-                        );
-
-                        Ok(Packet {
-                            header: generate_response_header(&request_packet.header),
-                            body: Body::AuthenticationReply {
-                                status: authen_status,
-                                flags: AuthenticationReplyFlags { no_echo: true },
-                                server_msg: b"".to_vec(),
-                                data: b"".to_vec(),
-                            },
-                        })
-                    } else {
-                        Ok(Packet {
-                            header: generate_response_header(&request_packet.header),
-                            body: Body::AuthenticationReply {
-                                status: AuthenticationStatus::GetPass,
-                                flags: AuthenticationReplyFlags { no_echo: true },
-                                server_msg: b"Password: ".to_vec(),
-                                data: b"".to_vec(),
-                            },
-                        })
-                    }
+                    Ok(Packet {
+                        header: generate_response_header(&request_packet.header),
+                        body: Body::AuthenticationReply {
+                            status: authen_status,
+                            flags: AuthenticationReplyFlags { no_echo: true },
+                            server_msg: b"".to_vec(),
+                            data: b"".to_vec(),
+                        },
+                    })
+                } else {
+                    Ok(Packet {
+                        header: generate_response_header(&request_packet.header),
+                        body: Body::AuthenticationReply {
+                            status: AuthenticationStatus::GetPass,
+                            flags: AuthenticationReplyFlags { no_echo: true },
+                            server_msg: b"Password: ".to_vec(),
+                            data: b"".to_vec(),
+                        },
+                    })
                 }
             } else {
                 tracing::debug!("no username provided in authen start packet, requesting username");
@@ -267,7 +262,7 @@ pub async fn process_tacacs_packet(
                 .unwrap_or_default();
             if requested_data == CLIENT_MAP_KEY_USERNAME {
                 tracing::debug!("received username in authen cont packet, requesting password");
-                let username = String::from_utf8_lossy(&user).to_string();
+                let username = String::from_utf8_lossy(user).to_string();
                 map.write()
                     .await
                     .insert(CLIENT_MAP_KEY_USERNAME.to_string(), username.to_string());
@@ -281,19 +276,19 @@ pub async fn process_tacacs_packet(
                     },
                 })
             } else {
-                let password = String::from_utf8_lossy(&user).to_string();
+                let password = String::from_utf8_lossy(user).to_string();
                 let username = map
                     .write()
                     .await
                     .remove(CLIENT_MAP_KEY_USERNAME)
-                    .unwrap_or(String::new());
-                if username.len() > 0 {
+                    .unwrap_or_default();
+                if !username.is_empty() {
                     if user_needs_forwarding(shared_state.clone(), &username).await? {
                         tracing::debug!(
                             "forwarding authentication request for user {} to upstream tacacs server",
                             username
                         );
-                        process_proxy_request(shared_state.clone(), addr, &request_bytes).await
+                        process_proxy_request(shared_state.clone(), addr, request_bytes).await
                     } else {
                         let authen_status =
                             if verify_user_credentials(shared_state.clone(), &username, &password)
@@ -351,7 +346,7 @@ pub async fn process_tacacs_packet(
             rem_address,
             args,
         } => {
-            let username = String::from_utf8_lossy(&user).to_string();
+            let username = String::from_utf8_lossy(user).to_string();
             let user_found = shared_state.read().await.users.contains_key(&username);
             if user_found {
                 let user = shared_state
@@ -362,34 +357,38 @@ pub async fn process_tacacs_packet(
                     .unwrap()
                     .clone();
                 for arg in args {
-                    tracing::debug!("arg: {}", String::from_utf8_lossy(&arg));
+                    tracing::debug!("arg: {}", String::from_utf8_lossy(arg));
                 }
-                let args_map = process_args(&args).await?;
-                let (auth_status, auth_result) = verify_authorization(
-                    shared_state.clone(),
-                    &user,
-                    &addr,
-                    &rem_address,
-                    args_map,
-                )
-                .await;
+                let args_map = process_args(args).await?;
+                let (authz_status, authz_result) =
+                    verify_authorization(shared_state.clone(), &user, addr, rem_address, args_map)
+                        .await;
                 tracing::debug!(
                     "final authorization result: ({:?}, {:?})",
-                    auth_status,
-                    auth_result
+                    authz_status,
+                    authz_result
                 );
-                let mut auth_result_bytes: Vec<Vec<u8>> = Vec::new();
-                for value in auth_result {
-                    auth_result_bytes.push(value.as_bytes().to_vec());
+                let mut authz_results_as_bytes: Vec<Vec<u8>> = Vec::new();
+                for value in authz_result {
+                    authz_results_as_bytes.push(value.as_bytes().to_vec());
                 }
-                match auth_status {
+                match authz_status {
                     AuthorizationStatus::AuthPassAdd => Ok(Packet {
                         header: generate_response_header(&request_packet.header),
                         body: Body::AuthorizationReply {
                             status: AuthorizationStatus::AuthPassAdd,
                             data: vec![],
                             server_msg: vec![],
-                            args: auth_result_bytes,
+                            args: authz_results_as_bytes,
+                        },
+                    }),
+                    AuthorizationStatus::AuthPassRepl => Ok(Packet {
+                        header: generate_response_header(&request_packet.header),
+                        body: Body::AuthorizationReply {
+                            status: AuthorizationStatus::AuthPassRepl,
+                            data: vec![],
+                            server_msg: vec![],
+                            args: authz_results_as_bytes,
                         },
                     }),
                     AuthorizationStatus::AuthForwardUpstream => {
@@ -453,44 +452,48 @@ pub async fn process_tacacs_packet(
     Ok(response_bytes)
 }
 
-pub async fn process_args(args: &Vec<Vec<u8>>) -> Result<PacketArgs, Report> {
+pub async fn process_args(args: &[Vec<u8>]) -> Result<PacketArgs, Report> {
     let mut packet_args = PacketArgs {
         service: vec![],
+        service_args: vec![],
         cmd: vec![],
         cmd_args: vec![],
     };
 
     for args in args.iter() {
         let val = String::from_utf8_lossy(args.clone().as_slice()).to_string();
-        if val.starts_with(&"service=".to_string()) {
+        if val.starts_with("service=") {
             packet_args.service.push(val);
-        } else if val.starts_with(&"cmd=".to_string()) {
+        } else if val.starts_with("cmd=") {
             packet_args.cmd.push(val);
-        } else if val.starts_with(&"cmdarg=".to_string())
-            || val.starts_with(&"cmd-arg=".to_string())
-        {
+        } else if val.starts_with("cmdarg=") || val.starts_with("cmd-arg=") {
             packet_args.cmd_args.push(val);
         } else {
-            continue;
+            packet_args.service_args.push(val);
         }
     }
     Ok(packet_args)
 }
 
-async fn verify_authorization_helper(
+async fn collect_service_and_cmd_authz_results(
     shared_state: Arc<RwLock<State>>,
     args: PacketArgs,
-    service: &Option<Vec<Service>>,
+    services: &Option<Vec<Service>>,
     cmds: &Option<Vec<Cmd>>,
-) -> Vec<String> {
-    let mut auth_result: Vec<String> = Vec::new();
+) -> (Vec<String>, bool) {
+    let mut authz_result: Vec<String> = Vec::new();
+    let mut authz_result_replaced = false;
 
-    let service_match_results = &mut verify_service(service, &args).await;
-    tracing::debug!(
-        "service authorization results: {:?}",
-        &service_match_results
-    );
+    tracing::debug!("performing service authorization");
+    let mut service_match_results = verify_service(services, &args).await;
+    tracing::debug!("service authorization results: {:?}", service_match_results);
 
+    if service_match_results != args.service_args {
+        tracing::debug!("request contains avpairs which need to be replaced");
+        authz_result_replaced = true;
+    }
+
+    tracing::debug!("performing cmd authorization");
     let cmd_match_results = &mut verify_cmd(shared_state.clone(), cmds, &args).await;
     tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
 
@@ -499,10 +502,13 @@ async fn verify_authorization_helper(
         service_match_results.len(),
         cmd_match_results.len()
     );
-    auth_result.append(service_match_results);
-    auth_result.append(cmd_match_results);
+    authz_result.append(&mut service_match_results);
+    authz_result.append(cmd_match_results);
 
-    return auth_result.into_iter().unique().collect();
+    (
+        authz_result.into_iter().unique().collect(),
+        authz_result_replaced,
+    )
 }
 
 pub async fn verify_authorization(
@@ -515,10 +521,28 @@ pub async fn verify_authorization(
     tracing::debug!("packet args: {:?}", packet_args);
     tracing::debug!("rem address: {}", String::from_utf8_lossy(rem_address));
     tracing::debug!("verifying authorization for {}", user.name);
-    let mut auth_result: Vec<String> = Vec::new();
+    let mut authz_result: Vec<String> = Vec::new();
     let mut acl_results: Vec<(AclResult, Option<String>)> = Vec::new();
     let mut _acl_found = false;
     let mut _authz_override_found = false;
+    let mut _authz_result_replaced = false;
+
+    match user.forward_upstream {
+        Some(v) => {
+            tracing::debug!("forward_upstream set to {} for user {}", v, user.name);
+            if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
+                tracing::debug!("upstream tacacs server available, requesting forwarding");
+                return (AuthorizationStatus::AuthForwardUpstream, vec![]);
+            } else {
+                tracing::debug!(
+                    "no upstream tacacs server available, proceeding without forwarding"
+                )
+            }
+        }
+        _ => {
+            tracing::debug!("forward_upstream not set for user {}", user.name);
+        }
+    }
 
     if user.acl.is_some() {
         _acl_found = true;
@@ -547,32 +571,15 @@ pub async fn verify_authorization(
         }
     }
 
-    match user.forward_upstream {
-        Some(v) => {
-            tracing::debug!("forward_upstream set to {} for user {}", v, user.name);
-            if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
-                tracing::debug!("upstream tacacs server available, requesting forwarding");
-                return (AuthorizationStatus::AuthForwardUpstream, vec![]);
-            } else {
-                tracing::debug!(
-                    "no upstream tacacs server available, proceeding without forwarding"
-                )
-            }
-        }
-        _ => {
-            tracing::debug!("forward_upstream not set for user {}", user.name);
-        }
-    }
-
     if user.member.is_none() {
         if _authz_override_found {
             tracing::debug!("user is not member of any groups but authz override found at user level, returning success");
-            return (AuthorizationStatus::AuthPassAdd, auth_result);
+            return (AuthorizationStatus::AuthPassAdd, authz_result);
         } else {
             tracing::debug!(
                 "user is not member of any groups and no authz override found, returning failure"
             );
-            return (AuthorizationStatus::AuthStatusFail, auth_result);
+            return (AuthorizationStatus::AuthStatusFail, authz_result);
         }
     }
 
@@ -584,7 +591,7 @@ pub async fn verify_authorization(
     while let Some(next_group) = groups_pending.pop() {
         tracing::debug!("pending groups: {:?}", groups_pending);
         tracing::debug!("processed groups: {:?}", groups_processed);
-        tracing::debug!("authorization result so far: {:?}", auth_result);
+        tracing::debug!("authorization result so far: {:?}", authz_result);
         tracing::debug!("next group: {}", &next_group);
 
         let group = match shared_state.read().await.groups.get(&next_group) {
@@ -597,31 +604,16 @@ pub async fn verify_authorization(
 
         tracing::debug!("group {} was found in config", next_group);
 
-        let auth_results_for_group = verify_authorization_helper(
-            shared_state.clone(),
-            packet_args.clone(),
-            &group.service,
-            &group.cmds,
-        )
-        .await;
-        auth_result.extend(auth_results_for_group);
-
-        match group.always_permit_authorization {
-            Some(v) => {
-                tracing::debug!(
-                    "always_permit_authorization set to {} for group {}",
-                    v,
-                    group.name
-                );
-                _authz_override_found = v;
-            }
-            _ => {
-                tracing::debug!(
-                    "always_permit_authorization not set for group {}",
-                    group.name
-                );
-            }
-        }
+        let (authz_results_for_group, authz_results_replaced_for_group) =
+            collect_service_and_cmd_authz_results(
+                shared_state.clone(),
+                packet_args.clone(),
+                &group.service,
+                &group.cmds,
+            )
+            .await;
+        authz_result.extend(authz_results_for_group);
+        _authz_result_replaced = authz_results_replaced_for_group;
 
         match group.forward_upstream {
             Some(v) => {
@@ -653,27 +645,49 @@ pub async fn verify_authorization(
             acl_results.push((acl_result, matching_acl));
         }
 
+        match group.always_permit_authorization {
+            Some(v) => {
+                tracing::debug!(
+                    "always_permit_authorization set to {} for group {}",
+                    v,
+                    group.name
+                );
+                _authz_override_found = v;
+            }
+            _ => {
+                tracing::debug!(
+                    "always_permit_authorization not set for group {}",
+                    group.name
+                );
+            }
+        }
+
         groups_processed.push(group.name.clone());
 
         if group.member.is_none() {
             continue;
         }
-        let next_group = group.member.as_ref().unwrap().to_string();
-        if groups_processed.contains(&next_group) {
-            continue;
+        for next_group in group.member.as_ref().unwrap() {
+            if groups_processed.contains(next_group) {
+                continue;
+            }
+            groups_pending.push(next_group.to_string());
         }
-        groups_pending.push(next_group);
     }
 
-    tracing::debug!("authorization result so far: {:?}", auth_result);
+    tracing::debug!("authorization result so far: {:?}", authz_result);
 
     if _authz_override_found {
         tracing::debug!("authz override found at group level, returning success");
-        return (AuthorizationStatus::AuthPassAdd, auth_result);
+        return (AuthorizationStatus::AuthPassAdd, authz_result);
     }
 
-    let auth_status = if auth_result.len() > 0 {
-        AuthorizationStatus::AuthPassAdd
+    let authz_status = if !authz_result.is_empty() {
+        if _authz_result_replaced {
+            AuthorizationStatus::AuthPassRepl
+        } else {
+            AuthorizationStatus::AuthPassAdd
+        }
     } else {
         AuthorizationStatus::AuthStatusFail
     };
@@ -688,7 +702,7 @@ pub async fn verify_authorization(
             match acl_result {
                 AclResult::Pass => {
                     tracing::debug!("acl matched, request accepted");
-                    return (auth_status, auth_result.into_iter().unique().collect());
+                    return (authz_status, authz_result.into_iter().unique().collect());
                 }
                 AclResult::Reject => {
                     tracing::debug!("acl matched, request rejected");
@@ -706,7 +720,7 @@ pub async fn verify_authorization(
     }
 
     tracing::debug!("no acls found applicable to the user");
-    return (auth_status, auth_result.into_iter().unique().collect());
+    (authz_status, authz_result.into_iter().unique().collect())
 }
 
 pub async fn verify_service(
@@ -716,6 +730,7 @@ pub async fn verify_service(
     let mut service_result: Vec<String> = Vec::new();
     if let Some(services) = service {
         for service in services {
+            tracing::debug!("\tcomparing {:?}", service);
             let config_service_args = &mut service.compare(&packet_args.service);
             service_result.append(config_service_args);
         }
@@ -731,16 +746,16 @@ pub async fn verify_cmd_args(
     let mut matching_args_result: Vec<String> = Vec::new();
     let mut packet_cmd_args_joined = String::new();
     for packet_cmd_arg in &packet_args.cmd_args {
-        let split_args: Vec<&str> = packet_cmd_arg.split("=").collect();
+        let split_args: Vec<&str> = packet_cmd_arg.split('=').collect();
         if split_args.len() != 2 {
             continue;
         }
         packet_cmd_args_joined.push_str(split_args[1]);
-        packet_cmd_args_joined.push_str(" ");
+        packet_cmd_args_joined.push(' ');
     }
-    tracing::debug!("packet_cmd_args_joined: {}", packet_cmd_args_joined);
+    tracing::debug!("\t\tpacket_cmd_args_joined: {}", packet_cmd_args_joined);
     for config_cmd_arg in config_cmd_args {
-        tracing::debug!("config_cmd_arg: {}", config_cmd_arg);
+        tracing::debug!("\t\tconfig_cmd_arg: {}", config_cmd_arg);
         if config_cmd_arg == "deny" {
             return matching_args_result;
         } else if config_cmd_arg == "permit" {
@@ -759,7 +774,7 @@ pub async fn verify_cmd_args(
             config_cmd_arg.to_string()
         };
 
-        tracing::debug!("cmd_arg_regex: {}", cmd_arg_regex);
+        tracing::debug!("\t\tconfig_cmd_arg_regex: {}", cmd_arg_regex);
 
         let regex_compiled = shared_state
             .write()
@@ -771,8 +786,19 @@ pub async fn verify_cmd_args(
             })
             .clone();
         if regex_compiled.is_match(&packet_cmd_args_joined) {
+            tracing::debug!("\t\tregex match successful");
+            tracing::debug!(
+                "\t\tappending packet_args.cmd to the result: {:?}",
+                packet_args.cmd
+            );
+            tracing::debug!(
+                "\t\tappending packet_args.cmd_args to the result: {:?}",
+                packet_args.cmd_args
+            );
             matching_args_result.extend(packet_args.cmd.clone());
             matching_args_result.extend(packet_args.cmd_args.clone());
+        } else {
+            tracing::debug!("\t\tregex match failed");
         }
     }
     matching_args_result
@@ -786,11 +812,17 @@ pub async fn verify_cmd(
     let mut cmd_result: Vec<String> = Vec::new();
     if let Some(cmds) = cmd {
         for cmd in cmds {
+            tracing::debug!("\tcomparing {:?}", cmd);
             let config_cmd_args = &mut cmd.compare(&packet_args.cmd);
-            if packet_args.cmd_args.len() > 0 {
-                cmd_result.append(
-                    &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await,
+            if !packet_args.cmd_args.is_empty() {
+                tracing::debug!("\t\tpacket cmd-args: {:?}", packet_args.cmd_args);
+                let matching_cmd_args =
+                    &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await;
+                tracing::debug!(
+                    "\tappending cmd args match to cmd result: {:?}",
+                    matching_cmd_args
                 );
+                cmd_result.append(matching_cmd_args);
             }
         }
     }
@@ -817,7 +849,7 @@ pub async fn verify_acl(
         }
     };
     for acl_expr in &(acl.list) {
-        let acl_expr_split: Vec<&str> = acl_expr.split("=").collect();
+        let acl_expr_split: Vec<&str> = acl_expr.split('=').collect();
         if acl_expr_split.len() != 2 {
             continue;
         }
@@ -856,16 +888,16 @@ pub async fn user_needs_forwarding(
     };
 
     // TODO: Refactor to avoid the need for dummy SocketAddr
-    let (auth_status, _) = verify_authorization(
+    let (authz_status, _) = verify_authorization(
         shared_state.clone(),
         &user,
         &SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-        &vec![],
+        &[],
         PacketArgs::default(),
     )
     .await;
 
-    Ok(auth_status == AuthorizationStatus::AuthForwardUpstream)
+    Ok(authz_status == AuthorizationStatus::AuthForwardUpstream)
 }
 
 pub async fn verify_user_credentials(
@@ -887,7 +919,7 @@ pub async fn verify_user_credentials(
                 "verifying password for {} against the hash specified in config",
                 username
             );
-            if tacrust::hash::verify_hash(password.as_bytes(), &hash).unwrap_or(false) {
+            if tacrust::hash::verify_hash(password.as_bytes(), hash).unwrap_or(false) {
                 return Ok(true);
             }
         }

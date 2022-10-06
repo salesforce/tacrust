@@ -152,7 +152,7 @@
     {
       "name": "group-superuser",
       "acl": "testacl_permit_all_deny_none",
-      "member": "group-user",
+      "member": ["group-user"],
       "service": [
         {
           "name": "exec",
@@ -205,7 +205,8 @@
           "name": "fortigate",
           "args": [
             "memberof=FGT_admin",
-            "admin_prof=super_admin"
+            "admin_prof=super_admin",
+            "extra_arg=redundant_value"
           ]
         }
       ],

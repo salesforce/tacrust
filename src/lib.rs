@@ -55,6 +55,12 @@ pub enum AuthorizationStatus {
     AuthForwardUpstream = 0xdead,
 }
 
+impl Default for AuthorizationStatus {
+    fn default() -> Self {
+        Self::AuthStatusFail
+    }
+}
+
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 pub enum AuthenticationMethod {
     AuthNotSet = 0x00,

@@ -81,7 +81,7 @@ fn get_tacacs_response(
     let server_address: SocketAddr = server_address.parse()?;
     tracing::debug!("connecting to server at {}", server_address);
     let mut conn_map = CONNECTIONS.write().unwrap();
-    let stream = conn_map.entry(server_address.clone()).or_insert_with(|| {
+    let stream = conn_map.entry(server_address).or_insert_with(|| {
         let stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(5)).unwrap();
         stream
             .set_write_timeout(Some(Duration::from_secs(5)))
@@ -98,7 +98,7 @@ fn get_tacacs_response(
     let chunk_size: usize = rand::thread_rng().gen_range(2..6);
     let chunks: Vec<&[u8]> = packet.chunks(chunk_size).collect();
     for chunk in chunks {
-        stream.write(chunk)?;
+        stream.write_all(chunk)?;
         stream.flush()?;
     }
     let mut response = [0; 4096];
@@ -163,7 +163,7 @@ fn compare_reference_daemon_authz_results(
     };
 
     let mut stream = TcpStream::connect(server_address).unwrap();
-    stream.write(packet).unwrap();
+    stream.write_all(packet).unwrap();
     let mut response = [0; 4096];
     tracing::debug!("receiving response");
     let len = stream.read(&mut response).unwrap();
@@ -277,8 +277,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -288,8 +288,9 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=exec".to_vec(),
                 b"priv-lvl=15".to_vec(),
                 b"cmd=show".to_vec(),
                 b"cmd-arg=running-config".to_vec(),
@@ -304,8 +305,9 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=exec".to_vec(),
                 b"priv-lvl=15".to_vec(),
                 b"cmd=show".to_vec(),
                 b"cmd-arg=version".to_vec(),
@@ -320,8 +322,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -333,8 +335,9 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=exec".to_vec(),
                 b"priv-lvl=15".to_vec(),
                 b"cmd=show".to_vec(),
                 b"cmd-arg=clock".to_vec(),
@@ -349,8 +352,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -360,8 +363,9 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=exec".to_vec(),
                 b"priv-lvl=15".to_vec(),
                 b"cmd=dir".to_vec(),
                 b"cmd-arg=bootflash:/home".to_vec(),
@@ -383,8 +387,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -394,8 +398,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -405,8 +409,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -416,8 +420,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -427,8 +431,9 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=exec".to_vec(),
                 b"priv-lvl=15".to_vec(),
                 b"cmd=show".to_vec(),
                 b"cmd-arg=clock".to_vec(),
@@ -443,8 +448,8 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet = include_bytes!(
@@ -454,8 +459,9 @@ fn test_cisco_nexus_9000() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=exec".to_vec(),
                 b"priv-lvl=15".to_vec(),
                 b"cmd=dir".to_vec(),
                 b"cmd-arg=bootflash:/home".to_vec(),
@@ -478,8 +484,11 @@ fn test_f5_lb() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"F5-LTM-User-Info-1=admin".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"F5-LTM-User-Info-1=admin".to_vec(),
+            ],
         );
     });
 }
@@ -494,8 +503,9 @@ fn test_juniper_firewall() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=junos-exec".to_vec(),
                 b"allow-commands=\"^.*\"".to_vec(),
                 b"allow-configuration=\"^.*\"".to_vec(),
             ],
@@ -519,8 +529,8 @@ fn test_mrv_lx() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
     });
 }
@@ -541,8 +551,8 @@ fn test_ciena_waveserver() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=exec".to_vec(), b"priv-lvl=15".to_vec()],
         );
 
         let packet =
@@ -551,8 +561,9 @@ fn test_ciena_waveserver() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=exec".to_vec(),
                 b"priv-lvl=15".to_vec(),
                 b"cmd=file".to_vec(),
                 b"cmd-arg=ls".to_vec(),
@@ -577,8 +588,8 @@ fn test_opengear_console() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"groupname=admin".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![b"service=raccess".to_vec(), b"groupname=admin".to_vec()],
         );
     });
 }
@@ -599,10 +610,12 @@ fn test_fortigate_firewall() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=fortigate".to_vec(),
                 b"memberof=FGT_admin".to_vec(),
                 b"admin_prof=super_admin".to_vec(),
+                b"extra_arg=redundant_value".to_vec(),
             ],
         );
     });
@@ -634,8 +647,11 @@ fn test_acl_not_present() {
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"some_arg=some_value".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=some_service".to_vec(),
+                b"some_arg=some_value".to_vec(),
+            ],
         );
     });
 }
@@ -651,7 +667,7 @@ fn test_multiple_group_memberships() {
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![b"groupname=admin".to_vec()],
+            vec![b"service=raccess".to_vec(), b"groupname=admin".to_vec()],
         );
     });
 }
@@ -825,7 +841,7 @@ fn test_proxy_forwarding_for_group() {
                         packet,
                         key,
                         AuthorizationStatus::AuthPassAdd,
-                        vec![b"vendor=brownbear".to_vec()],
+                        vec![b"service=carwash".to_vec(), b"vendor=brownbear".to_vec()],
                     );
                 },
             );
