@@ -771,7 +771,8 @@ pub async fn verify_cmd_args(
             })
             .clone();
         if regex_compiled.is_match(&packet_cmd_args_joined) {
-            matching_args_result.extend(packet_args.cmd_args.clone())
+            matching_args_result.extend(packet_args.cmd.clone());
+            matching_args_result.extend(packet_args.cmd_args.clone());
         }
     }
     matching_args_result

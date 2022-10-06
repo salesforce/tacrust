@@ -291,6 +291,7 @@ fn test_cisco_nexus_9000() {
             AuthorizationStatus::AuthPassAdd,
             vec![
                 b"priv-lvl=15".to_vec(),
+                b"cmd=show".to_vec(),
                 b"cmd-arg=running-config".to_vec(),
                 b"cmd-arg=<cr>".to_vec(),
             ],
@@ -306,6 +307,7 @@ fn test_cisco_nexus_9000() {
             AuthorizationStatus::AuthPassAdd,
             vec![
                 b"priv-lvl=15".to_vec(),
+                b"cmd=show".to_vec(),
                 b"cmd-arg=version".to_vec(),
                 b"cmd-arg=<cr>".to_vec(),
             ],
@@ -334,6 +336,7 @@ fn test_cisco_nexus_9000() {
             AuthorizationStatus::AuthPassAdd,
             vec![
                 b"priv-lvl=15".to_vec(),
+                b"cmd=show".to_vec(),
                 b"cmd-arg=clock".to_vec(),
                 b"cmd-arg=<cr>".to_vec(),
             ],
@@ -360,6 +363,7 @@ fn test_cisco_nexus_9000() {
             AuthorizationStatus::AuthPassAdd,
             vec![
                 b"priv-lvl=15".to_vec(),
+                b"cmd=dir".to_vec(),
                 b"cmd-arg=bootflash:/home".to_vec(),
                 b"cmd-arg=<cr>".to_vec(),
             ],
@@ -426,6 +430,7 @@ fn test_cisco_nexus_9000() {
             AuthorizationStatus::AuthPassAdd,
             vec![
                 b"priv-lvl=15".to_vec(),
+                b"cmd=show".to_vec(),
                 b"cmd-arg=clock".to_vec(),
                 b"cmd-arg=<cr>".to_vec(),
             ],
@@ -452,6 +457,7 @@ fn test_cisco_nexus_9000() {
             AuthorizationStatus::AuthPassAdd,
             vec![
                 b"priv-lvl=15".to_vec(),
+                b"cmd=dir".to_vec(),
                 b"cmd-arg=bootflash:/home".to_vec(),
                 b"cmd-arg=<cr>".to_vec(),
             ],
@@ -546,7 +552,11 @@ fn test_ciena_waveserver() {
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec(), b"cmd-arg=ls".to_vec()],
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"cmd=file".to_vec(),
+                b"cmd-arg=ls".to_vec(),
+            ],
         );
     });
 }
