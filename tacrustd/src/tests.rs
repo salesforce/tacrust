@@ -13,6 +13,7 @@ use tokio::runtime::Runtime;
 use tracing_subscriber::EnvFilter;
 
 static INIT: Once = Once::new();
+
 lazy_static! {
     static ref CONNECTIONS: Arc<RwLock<HashMap<SocketAddr, TcpStream>>> =
         Arc::new(RwLock::new(HashMap::new()));
@@ -150,6 +151,42 @@ fn test_authen_packet(
     }
 }
 
+fn compare_reference_daemon_authz_results(
+    packet: &[u8],
+    key: &[u8],
+    status: AuthorizationStatus,
+    args: Vec<Vec<u8>>,
+) {
+    let server_address = match std::env::var("REFERENCE_TACACS_DAEMON") {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
+    let mut stream = TcpStream::connect(server_address).unwrap();
+    stream.write(packet).unwrap();
+    let mut response = [0; 4096];
+    tracing::debug!("receiving response");
+    let len = stream.read(&mut response).unwrap();
+    let response = response[..len].to_vec();
+
+    tracing::debug!(
+        "received response: {}",
+        Base64Display::with_config(&response, base64::STANDARD)
+    );
+    let (_, parsed_ref_response) = tacrust::parser::parse_packet(&response, key).unwrap();
+
+    if let Body::AuthorizationReply {
+        status: ref_status,
+        data: _,
+        server_msg: _,
+        args: ref_args,
+    } = parsed_ref_response.body
+    {
+        assert_eq!(status, ref_status);
+        assert_eq!(args, ref_args);
+    }
+}
+
 fn test_author_packet(
     server_address: &str,
     packet: &[u8],
@@ -193,6 +230,7 @@ fn test_author_packet(
     {
         assert_eq!(status, expected_status);
         assert_eq!(args, expected_avpairs);
+        compare_reference_daemon_authz_results(packet, key, status, args);
     }
 }
 
