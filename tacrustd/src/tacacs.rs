@@ -1,11 +1,12 @@
-use crate::state::State;
-use crate::{Cmd, Credentials, Service, User};
+use crate::state::{ServiceArgValues, ServiceArgs, State};
+use crate::{Credentials, Principal, Service, User};
 use color_eyre::Report;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use simple_error::bail;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
@@ -15,18 +16,12 @@ use tacrust::{
     AuthenticationType, AuthorizationStatus, Body, Header, Packet,
 };
 use tokio::sync::RwLock;
+use tracing::Instrument;
 
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 const CLIENT_MAP_REQUESTED_AUTH_CONT_DATA: &str = "requested_auth_continue_data";
 
-#[derive(Clone, Debug, Default)]
-pub struct PacketArgs {
-    service: Vec<String>,
-    service_args: Vec<String>,
-    cmd: Vec<String>,
-    cmd_args: Vec<String>,
-}
-
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum AclResult {
     Pass,
@@ -40,76 +35,6 @@ fn normalized_match(s1: &str, s2: &str) -> bool {
     let s1_match = s1 == "shell" || s1 == "exec";
     let s2_match = s2 == "shell" || s2 == "exec";
     (s1_match && s2_match) || (s1 == s2)
-}
-
-pub trait ConfigAvPair {
-    fn key(&self) -> &'static str;
-    fn value(&self) -> String;
-    fn subargs(&self) -> Vec<String>;
-    fn compare(&self, packet_avpairs: &Vec<String>) -> Vec<String> {
-        let mut result_args: Vec<String> = Vec::new();
-        for packet_avpair in packet_avpairs {
-            let self_value = self.value();
-            let packet_avpair_split: Vec<&str> = packet_avpair.split(&"=").collect();
-            if packet_avpair_split.len() != 2 {
-                tracing::debug!("\t\tinvalid arguments in packet [{:?}]", packet_avpair);
-                continue;
-            }
-            let (packet_avpair_key, packet_avpair_value) =
-                (packet_avpair_split[0], packet_avpair_split[1]);
-            if packet_avpair_key == self.key() && normalized_match(packet_avpair_value, &self_value)
-            {
-                tracing::debug!(
-                    "\t\tconfig <{}={}> == packet<{}={}> ✓",
-                    self.key(),
-                    &self_value,
-                    packet_avpair_key,
-                    packet_avpair_value
-                );
-                let args = &mut self.subargs();
-                tracing::debug!("\t\tmatch produced args: {:?}", args);
-                result_args.push(format!("{}={}", self.key(), self.value()));
-                result_args.append(args);
-            } else {
-                tracing::debug!(
-                    "\t\tconfig <{}={}> != packet<{}={}> ✘",
-                    self.key(),
-                    &self_value,
-                    packet_avpair_key,
-                    packet_avpair_value
-                );
-            }
-        }
-        result_args
-    }
-}
-
-impl ConfigAvPair for Service {
-    fn value(&self) -> String {
-        self.name.clone()
-    }
-    fn subargs(&self) -> Vec<String> {
-        if self.args.is_none() {
-            return vec![];
-        }
-        self.args.as_ref().unwrap().clone()
-    }
-
-    fn key(&self) -> &'static str {
-        "service"
-    }
-}
-impl ConfigAvPair for Cmd {
-    fn value(&self) -> String {
-        self.name.clone()
-    }
-    fn subargs(&self) -> Vec<String> {
-        self.list.clone()
-    }
-
-    fn key(&self) -> &'static str {
-        "cmd"
-    }
 }
 
 fn generate_response_header(request_header: &Header) -> Header {
@@ -156,7 +81,7 @@ pub async fn process_tacacs_packet(
     let (request_key, request_packet) =
         decrypt_request(request_bytes, shared_state.clone()).await?;
 
-    tracing::debug!("request: {:?}", request_packet.header);
+    tracing::debug!(request_header = ?request_packet.header);
     tracing::info!("{}", request_packet.body);
 
     let map = shared_state
@@ -357,17 +282,12 @@ pub async fn process_tacacs_packet(
                     .unwrap()
                     .clone();
                 for arg in args {
-                    tracing::debug!("arg: {}", String::from_utf8_lossy(arg));
+                    tracing::debug!(arg = ?String::from_utf8_lossy(arg));
                 }
-                let args_map = process_args(args).await?;
                 let (authz_status, authz_result) =
-                    verify_authorization(shared_state.clone(), &user, addr, rem_address, args_map)
+                    verify_authorization(shared_state.clone(), &user, addr, rem_address, args)
                         .await;
-                tracing::debug!(
-                    "final authorization result: ({:?}, {:?})",
-                    authz_status,
-                    authz_result
-                );
+                tracing::debug!(?authz_status, ?authz_result);
                 let mut authz_results_as_bytes: Vec<Vec<u8>> = Vec::new();
                 for value in authz_result {
                     authz_results_as_bytes.push(value.as_bytes().to_vec());
@@ -442,7 +362,7 @@ pub async fn process_tacacs_packet(
         _ => Err(Report::msg("not supported yet")),
     }?;
 
-    tracing::debug!("response: {:?}", response_packet.header);
+    tracing::debug!(response_header = ?response_packet.header);
     tracing::info!("{}", response_packet.body);
 
     let response_bytes = match serializer::serialize_packet(&response_packet, &request_key) {
@@ -452,63 +372,553 @@ pub async fn process_tacacs_packet(
     Ok(response_bytes)
 }
 
-pub async fn process_args(args: &[Vec<u8>]) -> Result<PacketArgs, Report> {
-    let mut packet_args = PacketArgs {
-        service: vec![],
-        service_args: vec![],
-        cmd: vec![],
-        cmd_args: vec![],
-    };
-
-    for args in args.iter() {
-        let val = String::from_utf8_lossy(args.clone().as_slice()).to_string();
-        if val.starts_with("service=") {
-            packet_args.service.push(val);
-        } else if val.starts_with("cmd=") {
-            packet_args.cmd.push(val);
-        } else if val.starts_with("cmdarg=") || val.starts_with("cmd-arg=") {
-            packet_args.cmd_args.push(val);
-        } else {
-            packet_args.service_args.push(val);
-        }
-    }
-    Ok(packet_args)
+lazy_static! {
+    static ref RE_SERVICE: Regex =
+        Regex::new(r"service\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
+    static ref RE_CMD: Regex =
+        Regex::new(r"cmd\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
+    static ref RE_CMD_ARG: Regex =
+        Regex::new(r"cmd.arg\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
+    static ref RE_MATCHER_ARG: Regex =
+        Regex::new(r"(\S*)\p{White_Space}*?==\p{White_Space}*?(.*)").unwrap();
+    static ref RE_OTHER: Regex =
+        Regex::new(r"(\S*)\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
 }
 
-async fn collect_service_and_cmd_authz_results(
-    shared_state: Arc<RwLock<State>>,
-    args: PacketArgs,
-    services: &Option<Vec<Service>>,
-    cmds: &Option<Vec<Cmd>>,
-) -> (Vec<String>, bool) {
-    let mut authz_result: Vec<String> = Vec::new();
-    let mut authz_result_replaced = false;
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum AvPair {
+    Service {
+        mandatory: bool,
+        value: String,
+    },
+    Cmd {
+        mandatory: bool,
+        value: String,
+    },
+    CmdArg {
+        mandatory: bool,
+        value: String,
+    },
+    MatcherArg {
+        key: String,
+        value: String,
+    },
+    Other {
+        mandatory: bool,
+        key: String,
+        value: String,
+    },
+}
 
-    tracing::debug!("performing service authorization");
-    let mut service_match_results = verify_service(services, &args).await;
-    tracing::debug!("service authorization results: {:?}", service_match_results);
-
-    if service_match_results != args.service_args {
-        tracing::debug!("request contains avpairs which need to be replaced");
-        authz_result_replaced = true;
+fn parse_avpair(avpair: &str) -> Option<AvPair> {
+    if let Some(captures) = RE_SERVICE.captures(avpair) {
+        return Some(AvPair::Service {
+            mandatory: &captures[1] == "=",
+            value: captures[2].to_string(),
+        });
     }
 
-    tracing::debug!("performing cmd authorization");
-    let cmd_match_results = &mut verify_cmd(shared_state.clone(), cmds, &args).await;
-    tracing::debug!("cmd authorization results: {:?}", &cmd_match_results);
+    if let Some(captures) = RE_CMD.captures(avpair) {
+        return Some(AvPair::Cmd {
+            mandatory: &captures[1] == "=",
+            value: captures[2].to_string(),
+        });
+    }
 
-    tracing::debug!(
-        "{} matches found for service, {} matches found for cmd",
-        service_match_results.len(),
-        cmd_match_results.len()
+    if let Some(captures) = RE_CMD_ARG.captures(avpair) {
+        return Some(AvPair::CmdArg {
+            mandatory: &captures[1] == "=",
+            value: captures[2].to_string(),
+        });
+    }
+
+    if let Some(captures) = RE_MATCHER_ARG.captures(avpair) {
+        return Some(AvPair::MatcherArg {
+            key: captures[1].to_string(),
+            value: captures[2].to_string(),
+        });
+    }
+
+    if let Some(captures) = RE_OTHER.captures(avpair) {
+        return Some(AvPair::Other {
+            mandatory: &captures[2] == "=",
+            key: captures[1].to_string(),
+            value: captures[3].to_string(),
+        });
+    }
+
+    None
+}
+
+struct IntermediateAuthZResults {
+    authz_results: Vec<(AuthorizationStatus, String)>,
+    acl_results: Vec<(AclResult, String)>,
+}
+
+async fn parse_args_for_config_service(service: &Service) -> Arc<RwLock<ServiceArgs>> {
+    let service_args = Arc::new(RwLock::new(ServiceArgs::default()));
+    let args = match &service.args {
+        Some(a) => a,
+        None => return service_args,
+    };
+    for arg in args {
+        let parsed_arg = match parse_avpair(arg) {
+            Some(a) => a,
+            None => continue,
+        };
+        match &parsed_arg {
+            AvPair::MatcherArg { key, value } => {
+                service_args
+                    .write()
+                    .await
+                    .matcher_args
+                    .entry(key.to_string())
+                    .or_insert_with(|| value.to_string());
+            }
+            AvPair::Other {
+                mandatory,
+                key,
+                value,
+            } => {
+                if *mandatory {
+                    service_args
+                        .write()
+                        .await
+                        .mandatory_args
+                        .entry(key.to_string())
+                        .or_insert_with(|| ServiceArgValues {
+                            default_value: value.to_string(),
+                            allowed_values: HashSet::new(),
+                        })
+                        .allowed_values
+                        .insert(value.to_string());
+                } else {
+                    service_args
+                        .write()
+                        .await
+                        .optional_args
+                        .entry(key.to_string())
+                        .or_insert_with(|| ServiceArgValues {
+                            default_value: value.to_string(),
+                            allowed_values: HashSet::new(),
+                        })
+                        .allowed_values
+                        .insert(value.to_string());
+                }
+            }
+            _ => {}
+        }
+        tracing::debug!(?parsed_arg);
+    }
+    service_args
+}
+
+async fn authorize_svc(
+    shared_state: Arc<RwLock<State>>,
+    requested_service: &str,
+    request_uses_cmd_authz: bool,
+    principal: &(dyn Principal + Sync),
+    request_avpairs: &[AvPair],
+) -> IntermediateAuthZResults {
+    tracing::debug!(?request_avpairs);
+
+    let mut processed_avpairs: IndexMap<String, String> = IndexMap::new();
+    let mut results = IntermediateAuthZResults {
+        authz_results: vec![],
+        acl_results: vec![],
+    };
+
+    let services = match principal.services() {
+        Some(s) => {
+            tracing::debug!(
+                "{} services found for principal {}",
+                s.len(),
+                principal.name()
+            );
+            s
+        }
+        None => {
+            tracing::debug!("no services found for principal {}", principal.name());
+            return results;
+        }
+    };
+
+    for service in services {
+        if !normalized_match(&service.name, requested_service) {
+            tracing::debug!(
+                "{} != {} (the requested service)",
+                &service.name,
+                requested_service
+            );
+            continue;
+        }
+        let config_service_args = match shared_state
+            .write()
+            .await
+            .service_args
+            .entry((principal.name().to_string(), service.name.to_string()))
+        {
+            std::collections::hash_map::Entry::Occupied(o) => o.get().clone(),
+            std::collections::hash_map::Entry::Vacant(_) => {
+                parse_args_for_config_service(service).await
+            }
+        };
+        let config_service_args_read = config_service_args.read().await;
+        tracing::debug!(config_service_args=?*config_service_args_read);
+
+        for request_avpair in request_avpairs {
+            tracing::debug!(?request_avpair);
+
+            let (mandatory, key, value) = match request_avpair {
+                AvPair::Service { mandatory, value } => (*mandatory, "service", value.as_str()),
+                AvPair::Cmd { mandatory, value } => (*mandatory, "cmd", value.as_str()),
+                AvPair::CmdArg { mandatory, value } => (*mandatory, "cmd-arg", value.as_str()),
+                AvPair::MatcherArg { key, value } => (true, key.as_str(), value.as_str()),
+                AvPair::Other {
+                    mandatory,
+                    key,
+                    value,
+                } => (*mandatory, key.as_str(), value.as_str()),
+            };
+
+            let mut final_value = format!("{}{}{}", key, if mandatory { "=" } else { "*" }, value);
+            if config_service_args_read.matcher_args.contains_key(key) {
+                if config_service_args_read.matcher_args[key] == value {
+                    tracing::debug!("request avpair mapped to config matcher arg, key: {}, value: {} | PASS_ADD", key, value);
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                } else {
+                    tracing::debug!(
+                        "request avpair mapped to config matcher arg, key: {}, value: {} | FAIL",
+                        key,
+                        value
+                    );
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthStatusFail, String::new()));
+                    return results;
+                }
+                processed_avpairs.insert(key.to_string(), final_value.to_string());
+            } else if config_service_args_read.mandatory_args.contains_key(key) {
+                if config_service_args_read.mandatory_args[key]
+                    .allowed_values
+                    .contains(value)
+                {
+                    tracing::debug!("request avpair mapped to config mandatory arg, key: {}, value: {} | PASS_ADD", key, value);
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                } else if mandatory {
+                    tracing::debug!("mandatory request avpair mapped to config mandatory arg, key: {}, value: {} | FAIL", key, value);
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthStatusFail, String::new()));
+                    return results;
+                } else {
+                    tracing::debug!("optional request avpair mapped to config mandatory arg, key: {}, value: {} | FAIL", key, value);
+                    final_value = format!(
+                        "{}={}",
+                        key, config_service_args_read.mandatory_args[key].default_value
+                    );
+                    results.authz_results.push((
+                        AuthorizationStatus::AuthPassRepl,
+                        format!("service={}", requested_service),
+                    ));
+                    for (_avpair_key, avpair_value) in processed_avpairs.iter() {
+                        results
+                            .authz_results
+                            .push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
+                    }
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthPassRepl, final_value.to_string()));
+                }
+                processed_avpairs.insert(key.to_string(), final_value.to_string());
+            } else if config_service_args_read.optional_args.contains_key(key) {
+                if config_service_args_read.optional_args[key]
+                    .allowed_values
+                    .contains(value)
+                {
+                    tracing::debug!("request avpair mapped to config optional arg, value found in allow list, key: {}, value: {} | PASS_ADD", key, value);
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                } else if mandatory {
+                    tracing::debug!("mandatory request avpair mapped to config optional arg, value not found in allow list, key: {}, value: {} | PASS_ADD", key, value);
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                } else {
+                    tracing::debug!("optional request avpair mapped to config optional arg, value not found in allow list, key: {}, value: {} | PASS_REPL", key, value);
+                    final_value = format!(
+                        "{}*{}",
+                        key, config_service_args_read.optional_args[key].default_value
+                    );
+                    results.authz_results.push((
+                        AuthorizationStatus::AuthPassRepl,
+                        format!("service={}", requested_service),
+                    ));
+                    for (_avpair_key, avpair_value) in processed_avpairs.iter() {
+                        results
+                            .authz_results
+                            .push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
+                    }
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthPassRepl, final_value.to_string()));
+                }
+                processed_avpairs.insert(key.to_string(), final_value.to_string());
+            } else if mandatory {
+                tracing::debug!(
+                    "mandatory request avpair not mapped to any config arg, key: {}, value: {}",
+                    key,
+                    value
+                );
+                processed_avpairs.insert(key.to_string(), final_value.to_string());
+            } else {
+                tracing::debug!(
+                    "optional request avpair not mapped to any config arg, key: {}, value: {}",
+                    key,
+                    value
+                );
+            }
+        }
+
+        for request_avpair in request_avpairs {
+            tracing::debug!(?request_avpair);
+            if let AvPair::Other {
+                mandatory,
+                key,
+                value,
+            } = request_avpair
+            {
+                if *mandatory {
+                    tracing::debug!("mandatory request avpair not mapped to any config arg, key: {}, value: {} | FAIL", key, value);
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthStatusFail, String::new()));
+                    return results;
+                } else {
+                    tracing::debug!("optional request avpair not mapped to any config arg, key: {}, value: {} | REPL", key, value);
+                    results.authz_results.push((
+                        AuthorizationStatus::AuthPassRepl,
+                        format!("service={}", requested_service),
+                    ));
+                    for (_avpair_key, avpair_value) in processed_avpairs.iter() {
+                        results
+                            .authz_results
+                            .push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
+                    }
+                }
+            }
+        }
+
+        tracing::debug!(?processed_avpairs);
+
+        for (mandatory_config_arg_key, mandatory_config_arg_values) in
+            config_service_args_read.mandatory_args.iter()
+        {
+            if processed_avpairs.contains_key(mandatory_config_arg_key) {
+                tracing::debug!(
+                    "mandtory config arg {} already processed from request",
+                    mandatory_config_arg_key
+                );
+            } else if !request_uses_cmd_authz {
+                let new_value = format!(
+                    "{}={}",
+                    mandatory_config_arg_key, mandatory_config_arg_values.default_value
+                );
+                tracing::debug!(
+                    "mandatory config arg {} not found in request, appending '{}' | PASS_ADD",
+                    mandatory_config_arg_key,
+                    new_value
+                );
+                results
+                    .authz_results
+                    .push((AuthorizationStatus::AuthPassAdd, new_value));
+            } else {
+                tracing::debug!("mandatory config arg {} not found in request but using cmd authz so not appending anything", mandatory_config_arg_key);
+            }
+        }
+    }
+
+    results
+}
+
+async fn authorize_cmd(
+    shared_state: Arc<RwLock<State>>,
+    principal: &(dyn Principal + Sync),
+    request_avpairs: &[AvPair],
+) -> IntermediateAuthZResults {
+    tracing::debug!(?request_avpairs);
+
+    let mut results = IntermediateAuthZResults {
+        authz_results: vec![],
+        acl_results: vec![],
+    };
+
+    let packet_cmd_args_joined = request_avpairs
+        .iter()
+        .filter_map(|avpair| match avpair {
+            AvPair::CmdArg {
+                mandatory: _,
+                value,
+            } => Some(value),
+            _ => None,
+        })
+        .join(" ");
+    tracing::debug!(?packet_cmd_args_joined);
+
+    let cmds = match principal.cmds() {
+        Some(c) => c,
+        None => return results,
+    };
+    for cmd in cmds {
+        for pattern in &cmd.list {
+            lazy_static! {
+                static ref RE_CMD_ARG_PATTERN: Regex =
+                    Regex::new(r#"(permit|deny)\p{White_Space}*(.*)"#).unwrap();
+            }
+            if let Some(captures) = RE_CMD_ARG_PATTERN.captures(pattern) {
+                let cmd_pattern_action = &captures[1];
+                let cmd_pattern_regex = captures[2].trim_matches('"');
+                tracing::debug!(?cmd_pattern_action, ?cmd_pattern_regex);
+
+                let regex_compiled = shared_state
+                    .write()
+                    .await
+                    .regexes
+                    .entry(cmd_pattern_regex.to_string())
+                    .or_insert_with(|| {
+                        Arc::new(
+                            Regex::new(cmd_pattern_regex)
+                                .unwrap_or_else(|_| Regex::new("$.").unwrap()),
+                        )
+                    })
+                    .clone();
+                if cmd_pattern_action == "permit"
+                    && regex_compiled.is_match(&packet_cmd_args_joined)
+                {
+                    results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                }
+            }
+        }
+    }
+    results
+}
+
+async fn authorize_exec(
+    _shared_state: Arc<RwLock<State>>,
+    principal: &(dyn Principal + Sync),
+    request_avpairs: &[AvPair],
+) -> IntermediateAuthZResults {
+    tracing::debug!(?request_avpairs);
+
+    let mut results = IntermediateAuthZResults {
+        authz_results: vec![],
+        acl_results: vec![],
+    };
+    let services = match principal.services() {
+        Some(s) => s,
+        None => return results,
+    };
+    for service in services {
+        if !normalized_match(&service.name, "shell") {
+            continue;
+        }
+        let service_args = match &service.args {
+            Some(a) => a,
+            None => continue,
+        };
+        for arg in service_args {
+            results
+                .authz_results
+                .push((AuthorizationStatus::AuthPassAdd, arg.to_string()));
+        }
+    }
+    results
+}
+
+async fn verify_authorization_against_principal(
+    shared_state: Arc<RwLock<State>>,
+    principal: &(dyn Principal + Sync),
+    client_address: &SocketAddr,
+    requested_service: &str,
+    request_avpairs: &[AvPair],
+) -> IntermediateAuthZResults {
+    let request_uses_cmd_authz = is_cmd_authz(request_avpairs).await;
+
+    tracing::debug!(name = ?principal.name());
+    tracing::debug!(?client_address);
+    tracing::debug!(?requested_service);
+    tracing::debug!(?request_avpairs);
+    tracing::debug!(?request_uses_cmd_authz);
+
+    let mut results = if normalized_match(requested_service, "shell") {
+        if request_uses_cmd_authz {
+            let span = tracing::span!(tracing::Level::DEBUG, "authorize_cmd", principal = ?principal.name());
+            authorize_cmd(shared_state.clone(), principal, request_avpairs)
+                .instrument(span)
+                .await
+        } else {
+            let span = tracing::span!(tracing::Level::DEBUG, "authorize_exec", principal = ?principal.name());
+            authorize_exec(shared_state.clone(), principal, request_avpairs)
+                .instrument(span)
+                .await
+        }
+    } else {
+        IntermediateAuthZResults {
+            authz_results: vec![],
+            acl_results: vec![],
+        }
+    };
+
+    let span =
+        tracing::span!(tracing::Level::DEBUG, "authorize_svc", principal = ?principal.name());
+    results.authz_results.extend_from_slice(
+        &authorize_svc(
+            shared_state.clone(),
+            requested_service,
+            request_uses_cmd_authz,
+            principal,
+            request_avpairs,
+        )
+        .instrument(span)
+        .await
+        .authz_results,
     );
-    authz_result.append(&mut service_match_results);
-    authz_result.append(cmd_match_results);
+    results
+}
 
-    (
-        authz_result.into_iter().unique().collect(),
-        authz_result_replaced,
-    )
+async fn is_cmd_authz(request_avpairs: &[AvPair]) -> bool {
+    for avpair in request_avpairs {
+        if let AvPair::Cmd {
+            mandatory: _,
+            value,
+        } = avpair
+        {
+            return !value.is_empty();
+        }
+    }
+
+    false
+}
+
+async fn find_service_requested_for_authz(request_avpairs: &[AvPair]) -> Option<String> {
+    for avpair in request_avpairs {
+        match avpair {
+            AvPair::Service {
+                mandatory: _,
+                value,
+            } => return Some(value.to_string()),
+            _ => continue,
+        }
+    }
+    None
 }
 
 pub async fn verify_authorization(
@@ -516,83 +926,53 @@ pub async fn verify_authorization(
     user: &User,
     client_address: &SocketAddr,
     rem_address: &[u8],
-    packet_args: PacketArgs,
+    request_args: &[Vec<u8>],
 ) -> (AuthorizationStatus, Vec<String>) {
-    tracing::debug!("packet args: {:?}", packet_args);
-    tracing::debug!("rem address: {}", String::from_utf8_lossy(rem_address));
-    tracing::debug!("verifying authorization for {}", user.name);
-    let mut authz_result: Vec<String> = Vec::new();
-    let mut acl_results: Vec<(AclResult, Option<String>)> = Vec::new();
-    let mut _acl_found = false;
-    let mut _authz_override_found = false;
-    let mut _authz_result_replaced = false;
+    let request_avpairs: Vec<AvPair> = request_args
+        .iter()
+        .map(|arg| String::from_utf8_lossy(arg))
+        .filter_map(|arg| parse_avpair(&arg))
+        .collect();
 
-    match user.forward_upstream {
-        Some(v) => {
-            tracing::debug!("forward_upstream set to {} for user {}", v, user.name);
-            if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
-                tracing::debug!("upstream tacacs server available, requesting forwarding");
-                return (AuthorizationStatus::AuthForwardUpstream, vec![]);
-            } else {
-                tracing::debug!(
-                    "no upstream tacacs server available, proceeding without forwarding"
-                )
-            }
+    let requested_service = match find_service_requested_for_authz(&request_avpairs).await {
+        Some(s) => s,
+        None => {
+            tracing::debug!("no service found in request args");
+            return (AuthorizationStatus::AuthStatusFail, vec![]);
         }
-        _ => {
-            tracing::debug!("forward_upstream not set for user {}", user.name);
-        }
-    }
+    };
 
-    if user.acl.is_some() {
-        _acl_found = true;
-        let (acl_result, matching_acl) =
-            verify_acl(shared_state.clone(), &user.acl, client_address).await;
-        tracing::debug!(
-            "verifying acl {} against client_ip {} | result={:?}",
-            user.acl.as_ref().unwrap_or(&"none".to_string()),
-            client_address.ip(),
-            acl_result
-        );
-        acl_results.push((acl_result, matching_acl));
-    }
+    tracing::debug!(rem_address=?String::from_utf8_lossy(rem_address));
+    tracing::debug!(user=?user.name);
+    tracing::debug!(?requested_service);
 
-    match user.always_permit_authorization {
-        Some(v) => {
-            tracing::debug!(
-                "always_permit_authorization set to {} for user {}",
-                v,
-                user.name
-            );
-            _authz_override_found = v;
-        }
-        _ => {
-            tracing::debug!("always_permit_authorization not set for user {}", user.name);
-        }
-    }
+    let span = tracing::span!(tracing::Level::DEBUG, "verify_author", user = ?user.name);
+    let intermediate_results = verify_authorization_against_principal(
+        shared_state.clone(),
+        user,
+        client_address,
+        &requested_service,
+        &request_avpairs,
+    )
+    .instrument(span)
+    .await;
 
-    if user.member.is_none() {
-        if _authz_override_found {
-            tracing::debug!("user is not member of any groups but authz override found at user level, returning success");
-            return (AuthorizationStatus::AuthPassAdd, authz_result);
-        } else {
-            tracing::debug!(
-                "user is not member of any groups and no authz override found, returning failure"
-            );
-            return (AuthorizationStatus::AuthStatusFail, authz_result);
-        }
-    }
+    let mut authz_results = intermediate_results.authz_results;
+    let mut acl_results = intermediate_results.acl_results;
 
-    let mut groups_pending = user.member.as_ref().unwrap().clone();
+    let empty_vec: Vec<String> = vec![];
+    let mut groups_pending = user.member.as_ref().unwrap_or(&empty_vec).clone();
     let mut groups_processed = vec![];
 
-    tracing::debug!("pending groups: {:?}", groups_pending);
+    tracing::debug!(?groups_pending);
 
     while let Some(next_group) = groups_pending.pop() {
-        tracing::debug!("pending groups: {:?}", groups_pending);
-        tracing::debug!("processed groups: {:?}", groups_processed);
-        tracing::debug!("authorization result so far: {:?}", authz_result);
-        tracing::debug!("next group: {}", &next_group);
+        tracing::debug!(?groups_pending);
+        tracing::debug!(?groups_processed);
+        tracing::debug!(?authz_results);
+        tracing::debug!(?acl_results);
+        tracing::debug!(?next_group);
+        tracing::debug!("processing group {}", next_group);
 
         let group = match shared_state.read().await.groups.get(&next_group) {
             Some(g) => g.clone(),
@@ -602,249 +982,78 @@ pub async fn verify_authorization(
             }
         };
 
-        tracing::debug!("group {} was found in config", next_group);
+        let span = tracing::span!(tracing::Level::DEBUG, "verify_author", group = ?group.name());
+        let mut intermediate_results = verify_authorization_against_principal(
+            shared_state.clone(),
+            &*group,
+            client_address,
+            &requested_service,
+            &request_avpairs,
+        )
+        .instrument(span)
+        .await;
 
-        let (authz_results_for_group, authz_results_replaced_for_group) =
-            collect_service_and_cmd_authz_results(
-                shared_state.clone(),
-                packet_args.clone(),
-                &group.service,
-                &group.cmds,
-            )
-            .await;
-        authz_result.extend(authz_results_for_group);
-        _authz_result_replaced = authz_results_replaced_for_group;
-
-        match group.forward_upstream {
-            Some(v) => {
-                tracing::debug!("forward_upstream set to {} for group {}", v, group.name);
-                if v && !shared_state.read().await.upstream_tacacs_server.is_empty() {
-                    tracing::debug!("upstream tacacs server available, requesting forwarding");
-                    return (AuthorizationStatus::AuthForwardUpstream, vec![]);
-                } else {
-                    tracing::debug!(
-                        "no upstream tacacs server available, proceeding without forwarding"
-                    )
-                }
-            }
-            _ => {
-                tracing::debug!("forward_upstream not set for group {}", group.name);
-            }
-        }
-
-        if group.acl.is_some() {
-            _acl_found = true;
-            let (acl_result, matching_acl) =
-                verify_acl(shared_state.clone(), &group.acl, client_address).await;
-            tracing::debug!(
-                "verifying acl {} against client_ip {} | result={:?}",
-                group.acl.as_ref().unwrap_or(&"none".to_string()),
-                client_address.ip(),
-                acl_result
-            );
-            acl_results.push((acl_result, matching_acl));
-        }
-
-        match group.always_permit_authorization {
-            Some(v) => {
-                tracing::debug!(
-                    "always_permit_authorization set to {} for group {}",
-                    v,
-                    group.name
-                );
-                _authz_override_found = v;
-            }
-            _ => {
-                tracing::debug!(
-                    "always_permit_authorization not set for group {}",
-                    group.name
-                );
-            }
-        }
+        authz_results.append(&mut intermediate_results.authz_results);
+        acl_results.append(&mut intermediate_results.acl_results);
 
         groups_processed.push(group.name.clone());
 
-        if group.member.is_none() {
-            continue;
-        }
-        for next_group in group.member.as_ref().unwrap() {
-            if groups_processed.contains(next_group) {
-                continue;
-            }
-            groups_pending.push(next_group.to_string());
-        }
-    }
-
-    tracing::debug!("authorization result so far: {:?}", authz_result);
-
-    if _authz_override_found {
-        tracing::debug!("authz override found at group level, returning success");
-        return (AuthorizationStatus::AuthPassAdd, authz_result);
-    }
-
-    let authz_status = if !authz_result.is_empty() {
-        if _authz_result_replaced {
-            AuthorizationStatus::AuthPassRepl
-        } else {
-            AuthorizationStatus::AuthPassAdd
-        }
-    } else {
-        AuthorizationStatus::AuthStatusFail
-    };
-
-    for (acl_result, matching_acl) in acl_results.into_iter() {
-        if matching_acl.is_some() {
-            tracing::debug!(
-                "an acl was matched: ({:?}, {:?})",
-                &acl_result,
-                matching_acl
-            );
-            match acl_result {
-                AclResult::Pass => {
-                    tracing::debug!("acl matched, request accepted");
-                    return (authz_status, authz_result.into_iter().unique().collect());
-                }
-                AclResult::Reject => {
-                    tracing::debug!("acl matched, request rejected");
-                    return (AuthorizationStatus::AuthStatusFail, vec![]);
-                }
+        for next_group in group.member.as_ref().unwrap_or(&empty_vec).clone() {
+            if !groups_processed.contains(&next_group) {
+                groups_pending.push(next_group.to_string());
             }
         }
     }
 
-    if _acl_found {
-        tracing::debug!(
-            "at least one acl was found to be applicable to the user, but none permitted the request",
-        );
+    tracing::debug!(?authz_results);
+
+    let authz_error = (
+        AuthorizationStatus::AuthStatusError,
+        "authz_error_no_results_found".to_string(),
+    );
+    let authz_status = authz_results
+        .iter()
+        .max_by(|first, second| ((*first).0 as u8).cmp(&(second.0 as u8)))
+        .unwrap_or(&authz_error)
+        .0;
+    let authz_results: Vec<String> = authz_results
+        .into_iter()
+        .map(|result| result.1)
+        .filter(|result| !result.is_empty())
+        .unique()
+        .collect();
+
+    tracing::debug!(?acl_results);
+
+    if let Some(result) = acl_results
+        .into_iter()
+        .find(|result| result.0 as u8 == AclResult::Reject as u8)
+    {
+        tracing::debug!("acl rejected by {:?}", result);
         return (AuthorizationStatus::AuthStatusFail, vec![]);
     }
 
-    tracing::debug!("no acls found applicable to the user");
-    (authz_status, authz_result.into_iter().unique().collect())
+    match authz_status {
+        AuthorizationStatus::AuthPassAdd | AuthorizationStatus::AuthPassRepl => {
+            (authz_status, authz_results)
+        }
+        _ => (authz_status, vec![]),
+    }
 }
 
-pub async fn verify_service(
-    service: &Option<Vec<Service>>,
-    packet_args: &PacketArgs,
-) -> Vec<String> {
-    let mut service_result: Vec<String> = Vec::new();
-    if let Some(services) = service {
-        for service in services {
-            tracing::debug!("\tcomparing {:?}", service);
-            let config_service_args = &mut service.compare(&packet_args.service);
-            service_result.append(config_service_args);
-        }
-    }
-    service_result
-}
-
-pub async fn verify_cmd_args(
-    shared_state: Arc<RwLock<State>>,
-    config_cmd_args: &Vec<String>,
-    packet_args: &PacketArgs,
-) -> Vec<String> {
-    let mut matching_args_result: Vec<String> = Vec::new();
-    let mut packet_cmd_args_joined = String::new();
-    for packet_cmd_arg in &packet_args.cmd_args {
-        let split_args: Vec<&str> = packet_cmd_arg.split('=').collect();
-        if split_args.len() != 2 {
-            continue;
-        }
-        packet_cmd_args_joined.push_str(split_args[1]);
-        packet_cmd_args_joined.push(' ');
-    }
-    tracing::debug!("\t\tpacket_cmd_args_joined: {}", packet_cmd_args_joined);
-    for config_cmd_arg in config_cmd_args {
-        tracing::debug!("\t\tconfig_cmd_arg: {}", config_cmd_arg);
-        if config_cmd_arg == "deny" {
-            return matching_args_result;
-        } else if config_cmd_arg == "permit" {
-            matching_args_result.extend(packet_args.cmd_args.clone());
-            return matching_args_result;
-        }
-
-        lazy_static! {
-            static ref RE_PERMIT: Regex = Regex::new(r#"permit\s+(.*)"#).unwrap();
-        }
-
-        let cmd_arg_regex = if let Some(matches) = RE_PERMIT.captures(config_cmd_arg) {
-            let config_cmd_arg_quoted = matches[1].to_string();
-            config_cmd_arg_quoted.trim_matches('"').to_string()
-        } else {
-            config_cmd_arg.to_string()
-        };
-
-        tracing::debug!("\t\tconfig_cmd_arg_regex: {}", cmd_arg_regex);
-
-        let regex_compiled = shared_state
-            .write()
-            .await
-            .regexes
-            .entry(cmd_arg_regex.to_string())
-            .or_insert_with(|| {
-                Arc::new(Regex::new(&cmd_arg_regex).unwrap_or_else(|_| Regex::new("$.").unwrap()))
-            })
-            .clone();
-        if regex_compiled.is_match(&packet_cmd_args_joined) {
-            tracing::debug!("\t\tregex match successful");
-            tracing::debug!(
-                "\t\tappending packet_args.cmd to the result: {:?}",
-                packet_args.cmd
-            );
-            tracing::debug!(
-                "\t\tappending packet_args.cmd_args to the result: {:?}",
-                packet_args.cmd_args
-            );
-            matching_args_result.extend(packet_args.cmd.clone());
-            matching_args_result.extend(packet_args.cmd_args.clone());
-        } else {
-            tracing::debug!("\t\tregex match failed");
-        }
-    }
-    matching_args_result
-}
-
-pub async fn verify_cmd(
-    shared_state: Arc<RwLock<State>>,
-    cmd: &Option<Vec<Cmd>>,
-    packet_args: &PacketArgs,
-) -> Vec<String> {
-    let mut cmd_result: Vec<String> = Vec::new();
-    if let Some(cmds) = cmd {
-        for cmd in cmds {
-            tracing::debug!("\tcomparing {:?}", cmd);
-            let config_cmd_args = &mut cmd.compare(&packet_args.cmd);
-            if !packet_args.cmd_args.is_empty() {
-                tracing::debug!("\t\tpacket cmd-args: {:?}", packet_args.cmd_args);
-                let matching_cmd_args =
-                    &mut verify_cmd_args(shared_state.clone(), config_cmd_args, packet_args).await;
-                tracing::debug!(
-                    "\tappending cmd args match to cmd result: {:?}",
-                    matching_cmd_args
-                );
-                cmd_result.append(matching_cmd_args);
-            }
-        }
-    }
-    cmd_result
-}
-
+#[allow(dead_code)]
 pub async fn verify_acl(
     shared_state: Arc<RwLock<State>>,
-    acl: &Option<String>,
+    acl: &str,
     client_address: &SocketAddr,
-) -> (AclResult, Option<String>) {
+) -> (AclResult, String) {
     let client_ip = client_address.ip().to_string();
-    if acl.is_none() {
-        tracing::debug!("acl is empty");
-        return (AclResult::Reject, None);
-    }
     let acl = {
-        match shared_state.read().await.acls.get(acl.as_ref().unwrap()) {
+        match shared_state.read().await.acls.get(acl) {
             Some(acl) => acl.clone(),
             None => {
-                tracing::debug!("acl {} not found in config", acl.as_ref().unwrap());
-                return (AclResult::Reject, None);
+                tracing::debug!("acl {} not found in config", acl);
+                return (AclResult::Reject, "acl_not_found".to_string());
             }
         }
     };
@@ -867,12 +1076,12 @@ pub async fn verify_acl(
             continue;
         }
         match acl_action {
-            "permit" => return (AclResult::Pass, Some(acl_expr.to_string())),
-            "deny" => return (AclResult::Reject, Some(acl_expr.to_string())),
+            "permit" => return (AclResult::Pass, acl_expr.to_string()),
+            "deny" => return (AclResult::Reject, acl_expr.to_string()),
             _ => continue,
         }
     }
-    (AclResult::Reject, None)
+    (AclResult::Reject, "acl_not_applicable".to_string())
 }
 
 pub async fn user_needs_forwarding(
@@ -893,7 +1102,7 @@ pub async fn user_needs_forwarding(
         &user,
         &SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         &[],
-        PacketArgs::default(),
+        &[],
     )
     .await;
 
