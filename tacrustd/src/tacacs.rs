@@ -515,14 +515,11 @@ async fn authorize_svc(
     request_uses_cmd_authz: bool,
     principal: &(dyn Principal + Sync),
     request_avpairs: &[AvPair],
-) -> IntermediateAuthZResults {
+) -> Vec<(AuthorizationStatus, String)> {
     tracing::debug!(?request_avpairs);
 
     let mut processed_avpairs: IndexMap<String, String> = IndexMap::new();
-    let mut results = IntermediateAuthZResults {
-        authz_results: vec![],
-        acl_results: vec![],
-    };
+    let mut results: Vec<(AuthorizationStatus, String)> = vec![];
 
     let services = match principal.services() {
         Some(s) => {
@@ -582,18 +579,14 @@ async fn authorize_svc(
             if config_service_args_read.matcher_args.contains_key(key) {
                 if config_service_args_read.matcher_args[key] == value {
                     tracing::debug!("request avpair mapped to config matcher arg, key: {}, value: {} | PASS_ADD", key, value);
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                    results.push((AuthorizationStatus::AuthPassAdd, String::new()));
                 } else {
                     tracing::debug!(
                         "request avpair mapped to config matcher arg, key: {}, value: {} | FAIL",
                         key,
                         value
                     );
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthStatusFail, String::new()));
+                    results.push((AuthorizationStatus::AuthStatusFail, String::new()));
                     return results;
                 }
                 processed_avpairs.insert(key.to_string(), final_value.to_string());
@@ -603,14 +596,10 @@ async fn authorize_svc(
                     .contains(value)
                 {
                     tracing::debug!("request avpair mapped to config mandatory arg, key: {}, value: {} | PASS_ADD", key, value);
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                    results.push((AuthorizationStatus::AuthPassAdd, String::new()));
                 } else if mandatory {
                     tracing::debug!("mandatory request avpair mapped to config mandatory arg, key: {}, value: {} | FAIL", key, value);
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthStatusFail, String::new()));
+                    results.push((AuthorizationStatus::AuthStatusFail, String::new()));
                     return results;
                 } else {
                     tracing::debug!("optional request avpair mapped to config mandatory arg, key: {}, value: {} | FAIL", key, value);
@@ -618,18 +607,14 @@ async fn authorize_svc(
                         "{}={}",
                         key, config_service_args_read.mandatory_args[key].default_value
                     );
-                    results.authz_results.push((
+                    results.push((
                         AuthorizationStatus::AuthPassRepl,
                         format!("service={}", requested_service),
                     ));
                     for (_avpair_key, avpair_value) in processed_avpairs.iter() {
-                        results
-                            .authz_results
-                            .push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
+                        results.push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
                     }
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthPassRepl, final_value.to_string()));
+                    results.push((AuthorizationStatus::AuthPassRepl, final_value.to_string()));
                 }
                 processed_avpairs.insert(key.to_string(), final_value.to_string());
             } else if config_service_args_read.optional_args.contains_key(key) {
@@ -638,32 +623,24 @@ async fn authorize_svc(
                     .contains(value)
                 {
                     tracing::debug!("request avpair mapped to config optional arg, value found in allow list, key: {}, value: {} | PASS_ADD", key, value);
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                    results.push((AuthorizationStatus::AuthPassAdd, String::new()));
                 } else if mandatory {
                     tracing::debug!("mandatory request avpair mapped to config optional arg, value not found in allow list, key: {}, value: {} | PASS_ADD", key, value);
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                    results.push((AuthorizationStatus::AuthPassAdd, String::new()));
                 } else {
                     tracing::debug!("optional request avpair mapped to config optional arg, value not found in allow list, key: {}, value: {} | PASS_REPL", key, value);
                     final_value = format!(
                         "{}*{}",
                         key, config_service_args_read.optional_args[key].default_value
                     );
-                    results.authz_results.push((
+                    results.push((
                         AuthorizationStatus::AuthPassRepl,
                         format!("service={}", requested_service),
                     ));
                     for (_avpair_key, avpair_value) in processed_avpairs.iter() {
-                        results
-                            .authz_results
-                            .push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
+                        results.push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
                     }
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthPassRepl, final_value.to_string()));
+                    results.push((AuthorizationStatus::AuthPassRepl, final_value.to_string()));
                 }
                 processed_avpairs.insert(key.to_string(), final_value.to_string());
             } else if mandatory {
@@ -695,20 +672,16 @@ async fn authorize_svc(
                 }
                 if *mandatory {
                     tracing::debug!("mandatory request avpair not mapped to any config arg, key: {}, value: {} | FAIL", key, value);
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthStatusFail, String::new()));
+                    results.push((AuthorizationStatus::AuthStatusFail, String::new()));
                     return results;
                 } else {
                     tracing::debug!("optional request avpair not mapped to any config arg, key: {}, value: {} | REPL", key, value);
-                    results.authz_results.push((
+                    results.push((
                         AuthorizationStatus::AuthPassRepl,
                         format!("service={}", requested_service),
                     ));
                     for (_avpair_key, avpair_value) in processed_avpairs.iter() {
-                        results
-                            .authz_results
-                            .push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
+                        results.push((AuthorizationStatus::AuthPassRepl, avpair_value.to_string()));
                     }
                 }
             }
@@ -734,9 +707,7 @@ async fn authorize_svc(
                     mandatory_config_arg_key,
                     new_value
                 );
-                results
-                    .authz_results
-                    .push((AuthorizationStatus::AuthPassAdd, new_value));
+                results.push((AuthorizationStatus::AuthPassAdd, new_value));
             } else {
                 tracing::debug!("mandatory config arg {} not found in request but using cmd authz so not appending anything", mandatory_config_arg_key);
             }
@@ -750,13 +721,10 @@ async fn authorize_cmd(
     shared_state: Arc<RwLock<State>>,
     principal: &(dyn Principal + Sync),
     request_avpairs: &[AvPair],
-) -> IntermediateAuthZResults {
+) -> Vec<(AuthorizationStatus, String)> {
     tracing::debug!(?request_avpairs);
 
-    let mut results = IntermediateAuthZResults {
-        authz_results: vec![],
-        acl_results: vec![],
-    };
+    let mut results: Vec<(AuthorizationStatus, String)> = vec![];
 
     let packet_cmd_args_joined = request_avpairs
         .iter()
@@ -800,9 +768,7 @@ async fn authorize_cmd(
                 if cmd_pattern_action == "permit"
                     && regex_compiled.is_match(&packet_cmd_args_joined)
                 {
-                    results
-                        .authz_results
-                        .push((AuthorizationStatus::AuthPassAdd, String::new()));
+                    results.push((AuthorizationStatus::AuthPassAdd, String::new()));
                 }
             }
         }
@@ -814,13 +780,10 @@ async fn authorize_exec(
     _shared_state: Arc<RwLock<State>>,
     principal: &(dyn Principal + Sync),
     request_avpairs: &[AvPair],
-) -> IntermediateAuthZResults {
+) -> Vec<(AuthorizationStatus, String)> {
     tracing::debug!(?request_avpairs);
 
-    let mut results = IntermediateAuthZResults {
-        authz_results: vec![],
-        acl_results: vec![],
-    };
+    let mut results: Vec<(AuthorizationStatus, String)> = vec![];
     let services = match principal.services() {
         Some(s) => s,
         None => return results,
@@ -834,9 +797,7 @@ async fn authorize_exec(
             None => continue,
         };
         for arg in service_args {
-            results
-                .authz_results
-                .push((AuthorizationStatus::AuthPassAdd, arg.to_string()));
+            results.push((AuthorizationStatus::AuthPassAdd, arg.to_string()));
         }
     }
     results
@@ -846,14 +807,11 @@ async fn authorize_acl(
     shared_state: Arc<RwLock<State>>,
     principal: &(dyn Principal + Sync),
     client_address: &SocketAddr,
-) -> IntermediateAuthZResults {
+) -> Option<(AclResult, String)> {
     let acl = match principal.acl() {
         Some(a) => a,
         None => {
-            return IntermediateAuthZResults {
-                authz_results: vec![],
-                acl_results: vec![],
-            }
+            return None;
         }
     };
     let (acl_result, matching_acl) = verify_acl(shared_state.clone(), acl, client_address).await;
@@ -863,19 +821,17 @@ async fn authorize_acl(
         client_address.ip(),
         acl_result
     );
-    IntermediateAuthZResults {
-        authz_results: vec![],
-        acl_results: vec![(acl_result, matching_acl)],
-    }
+    Some((acl_result, matching_acl))
 }
 
 async fn verify_authorization_against_principal(
     shared_state: Arc<RwLock<State>>,
+    intermediate_results: &mut IntermediateAuthZResults,
     principal: &(dyn Principal + Sync),
     client_address: &SocketAddr,
     requested_service: &str,
     request_avpairs: &[AvPair],
-) -> IntermediateAuthZResults {
+) {
     let request_uses_cmd_authz = is_cmd_authz(request_avpairs).await;
 
     tracing::debug!(principal_name = ?principal.name(), forward_upstream = principal.forward_upstream());
@@ -896,13 +852,10 @@ async fn verify_authorization_against_principal(
                     tracing::debug!("no upstream server available, proceeding without forwarding");
                 } else {
                     tracing::debug!("requesting forwarding for principal {}", principal.name());
-                    return IntermediateAuthZResults {
-                        authz_results: vec![(
-                            AuthorizationStatus::AuthForwardUpstream,
-                            String::new(),
-                        )],
-                        acl_results: vec![],
-                    };
+                    intermediate_results
+                        .authz_results
+                        .push((AuthorizationStatus::AuthForwardUpstream, String::new()));
+                    return;
                 }
             }
         }
@@ -914,29 +867,28 @@ async fn verify_authorization_against_principal(
         }
     }
 
-    let mut results = if normalized_match(requested_service, "shell") {
+    if normalized_match(requested_service, "shell") {
         if request_uses_cmd_authz {
             let span = tracing::span!(tracing::Level::DEBUG, "authorize_cmd", principal = ?principal.name());
-            authorize_cmd(shared_state.clone(), principal, request_avpairs)
-                .instrument(span)
-                .await
+            intermediate_results.authz_results.extend(
+                authorize_cmd(shared_state.clone(), principal, request_avpairs)
+                    .instrument(span)
+                    .await,
+            )
         } else {
             let span = tracing::span!(tracing::Level::DEBUG, "authorize_exec", principal = ?principal.name());
-            authorize_exec(shared_state.clone(), principal, request_avpairs)
-                .instrument(span)
-                .await
+            intermediate_results.authz_results.extend(
+                authorize_exec(shared_state.clone(), principal, request_avpairs)
+                    .instrument(span)
+                    .await,
+            )
         }
-    } else {
-        IntermediateAuthZResults {
-            authz_results: vec![],
-            acl_results: vec![],
-        }
-    };
+    }
 
     let span =
         tracing::span!(tracing::Level::DEBUG, "authorize_svc", principal = ?principal.name());
-    results.authz_results.extend_from_slice(
-        &authorize_svc(
+    intermediate_results.authz_results.extend(
+        authorize_svc(
             shared_state.clone(),
             requested_service,
             request_uses_cmd_authz,
@@ -944,8 +896,7 @@ async fn verify_authorization_against_principal(
             request_avpairs,
         )
         .instrument(span)
-        .await
-        .authz_results,
+        .await,
     );
 
     match principal.always_permit_authorization() {
@@ -956,7 +907,7 @@ async fn verify_authorization_against_principal(
                 principal.name()
             );
             if *v {
-                results
+                intermediate_results
                     .authz_results
                     .push((AuthorizationStatus::AuthPassAdd, String::new()));
             }
@@ -969,12 +920,9 @@ async fn verify_authorization_against_principal(
         }
     }
 
-    let acl_results = authorize_acl(shared_state.clone(), principal, client_address).await;
-    results
-        .acl_results
-        .extend_from_slice(&acl_results.acl_results);
-
-    results
+    if let Some(r) = authorize_acl(shared_state.clone(), principal, client_address).await {
+        intermediate_results.acl_results.push(r);
+    }
 }
 
 async fn is_cmd_authz(request_avpairs: &[AvPair]) -> bool {
@@ -1011,6 +959,8 @@ pub async fn verify_authorization(
     rem_address: &[u8],
     request_args: &[Vec<u8>],
 ) -> (AuthorizationStatus, Vec<String>) {
+    // authz behavior reference: https://sfdc.co/shrubbery-authz-matrix
+
     let request_avpairs: Vec<AvPair> = request_args
         .iter()
         .map(|arg| String::from_utf8_lossy(arg))
@@ -1029,9 +979,14 @@ pub async fn verify_authorization(
     tracing::debug!(user=?user.name);
     tracing::debug!(?requested_service);
 
-    let span = tracing::span!(tracing::Level::DEBUG, "verify_author", user = ?user.name);
-    let intermediate_results = verify_authorization_against_principal(
+    let span = tracing::span!(tracing::Level::DEBUG, "verify_author_for_user", user = ?user.name);
+    let mut intermediate_results = IntermediateAuthZResults {
+        authz_results: vec![],
+        acl_results: vec![],
+    };
+    verify_authorization_against_principal(
         shared_state.clone(),
+        &mut intermediate_results,
         user,
         client_address,
         &requested_service,
@@ -1048,9 +1003,6 @@ pub async fn verify_authorization(
         return (AuthorizationStatus::AuthForwardUpstream, vec![]);
     }
 
-    let mut authz_results = intermediate_results.authz_results;
-    let mut acl_results = intermediate_results.acl_results;
-
     let empty_vec: Vec<String> = vec![];
     let mut groups_pending = user.member.as_ref().unwrap_or(&empty_vec).clone();
     let mut groups_processed = vec![];
@@ -1060,8 +1012,8 @@ pub async fn verify_authorization(
     while let Some(next_group) = groups_pending.pop() {
         tracing::debug!(?groups_pending);
         tracing::debug!(?groups_processed);
-        tracing::debug!(?authz_results);
-        tracing::debug!(?acl_results);
+        tracing::debug!(authz_results=?intermediate_results.authz_results);
+        tracing::debug!(acl_results=?intermediate_results.acl_results);
         tracing::debug!(?next_group);
         tracing::debug!("processing group {}", next_group);
 
@@ -1073,9 +1025,11 @@ pub async fn verify_authorization(
             }
         };
 
-        let span = tracing::span!(tracing::Level::DEBUG, "verify_author", group = ?group.name());
-        let mut intermediate_results = verify_authorization_against_principal(
+        let span =
+            tracing::span!(tracing::Level::DEBUG, "verify_author_for_group", group = ?group.name());
+        verify_authorization_against_principal(
             shared_state.clone(),
+            &mut intermediate_results,
             &*group,
             client_address,
             &requested_service,
@@ -1092,9 +1046,6 @@ pub async fn verify_authorization(
             return (AuthorizationStatus::AuthForwardUpstream, vec![]);
         }
 
-        authz_results.append(&mut intermediate_results.authz_results);
-        acl_results.append(&mut intermediate_results.acl_results);
-
         groups_processed.push(group.name.clone());
 
         for next_group in group.member.as_ref().unwrap_or(&empty_vec).clone() {
@@ -1104,27 +1055,29 @@ pub async fn verify_authorization(
         }
     }
 
-    tracing::debug!(?authz_results);
+    tracing::debug!(authz_results=?intermediate_results.authz_results);
+    tracing::debug!(acl_results=?intermediate_results.acl_results);
 
     let authz_error = (
         AuthorizationStatus::AuthStatusError,
         "authz_error_no_results_found".to_string(),
     );
-    let authz_status = authz_results
+    let authz_status = intermediate_results
+        .authz_results
         .iter()
         .max_by(|first, second| ((*first).0 as u8).cmp(&(second.0 as u8)))
         .unwrap_or(&authz_error)
         .0;
-    let authz_results: Vec<String> = authz_results
+    let authz_results: Vec<String> = intermediate_results
+        .authz_results
         .into_iter()
         .map(|result| result.1)
         .filter(|result| !result.is_empty())
         .unique()
         .collect();
 
-    tracing::debug!(?acl_results);
-
-    if let Some(result) = acl_results
+    if let Some(result) = intermediate_results
+        .acl_results
         .into_iter()
         .find(|result| result.0 as u8 == AclResult::Reject as u8)
     {
