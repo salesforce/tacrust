@@ -553,6 +553,7 @@ async fn authorize_svc(
             );
             continue;
         }
+        tracing::debug!("service {} found in config", &service.name);
         let config_service_args = match shared_state
             .write()
             .await
@@ -694,6 +695,9 @@ async fn authorize_svc(
                 value,
             } = request_avpair
             {
+                if processed_avpairs.contains_key(key) {
+                    continue;
+                }
                 if *mandatory {
                     tracing::debug!("mandatory request avpair not mapped to any config arg, key: {}, value: {} | FAIL", key, value);
                     results
