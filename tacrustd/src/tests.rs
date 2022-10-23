@@ -664,9 +664,8 @@ fn test_acl_present_but_not_matched() {
     let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/johndoe_author_some_service.tacacs");
-        // TODO: Compare with Shrubbery's ACL behavior
         test_author_packet(
-            false,
+            true,
             server_address,
             packet,
             key,
@@ -682,9 +681,8 @@ fn test_acl_not_present() {
     let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/janedoe_author_some_service.tacacs");
-        // TODO: Compare with Shrubbery's ACL behavior
         test_author_packet(
-            false,
+            true,
             server_address,
             packet,
             key,
@@ -764,7 +762,7 @@ fn test_extra_keys() {
     let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/faramir_author_carwash_tackey2.tacacs");
-        // TODO: Shrubbery fails to parse packet for some reason, investigate later
+        // shrubbery by default does not have support for multiple keys, no need to compare
         test_author_packet(
             false,
             server_address,

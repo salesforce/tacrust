@@ -878,11 +878,41 @@ async fn verify_authorization_against_principal(
 ) -> IntermediateAuthZResults {
     let request_uses_cmd_authz = is_cmd_authz(request_avpairs).await;
 
-    tracing::debug!(name = ?principal.name());
+    tracing::debug!(principal_name = ?principal.name(), forward_upstream = principal.forward_upstream());
     tracing::debug!(?client_address);
     tracing::debug!(?requested_service);
     tracing::debug!(?request_avpairs);
     tracing::debug!(?request_uses_cmd_authz);
+
+    match principal.forward_upstream() {
+        Some(v) => {
+            tracing::debug!(
+                "forward_upstream set to {} for principal {}",
+                v,
+                principal.name()
+            );
+            if *v {
+                if shared_state.read().await.upstream_tacacs_server.is_empty() {
+                    tracing::debug!("no upstream server available, proceeding without forwarding");
+                } else {
+                    tracing::debug!("requesting forwarding for principal {}", principal.name());
+                    return IntermediateAuthZResults {
+                        authz_results: vec![(
+                            AuthorizationStatus::AuthForwardUpstream,
+                            String::new(),
+                        )],
+                        acl_results: vec![],
+                    };
+                }
+            }
+        }
+        None => {
+            tracing::debug!(
+                "forward_upstream not set for principal {}",
+                principal.name()
+            );
+        }
+    }
 
     let mut results = if normalized_match(requested_service, "shell") {
         if request_uses_cmd_authz {
@@ -1010,6 +1040,14 @@ pub async fn verify_authorization(
     .instrument(span)
     .await;
 
+    if intermediate_results
+        .authz_results
+        .iter()
+        .any(|result| result.0 == AuthorizationStatus::AuthForwardUpstream)
+    {
+        return (AuthorizationStatus::AuthForwardUpstream, vec![]);
+    }
+
     let mut authz_results = intermediate_results.authz_results;
     let mut acl_results = intermediate_results.acl_results;
 
@@ -1045,6 +1083,14 @@ pub async fn verify_authorization(
         )
         .instrument(span)
         .await;
+
+        if intermediate_results
+            .authz_results
+            .iter()
+            .any(|result| result.0 == AuthorizationStatus::AuthForwardUpstream)
+        {
+            return (AuthorizationStatus::AuthForwardUpstream, vec![]);
+        }
 
         authz_results.append(&mut intermediate_results.authz_results);
         acl_results.append(&mut intermediate_results.acl_results);
