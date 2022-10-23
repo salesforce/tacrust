@@ -842,7 +842,6 @@ async fn authorize_exec(
     results
 }
 
-#[allow(dead_code)]
 async fn authorize_acl(
     shared_state: Arc<RwLock<State>>,
     principal: &(dyn Principal + Sync),
@@ -939,6 +938,11 @@ async fn verify_authorization_against_principal(
             );
         }
     }
+
+    let acl_results = authorize_acl(shared_state.clone(), principal, client_address).await;
+    results
+        .acl_results
+        .extend_from_slice(&acl_results.acl_results);
 
     results
 }

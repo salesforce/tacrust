@@ -376,8 +376,9 @@ fn test_cisco_nexus_9000() {
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/06-author-shell-show-clock-bad.tacacs"
         );
-        // Todo: This actually fails in Shrubbery daemon which stops recursing through parent
-        // groups when it hits a match. Need to decide whether we should do the same
+        // TODO: This actually fails in Shrubbery daemon which stops recursing through parent
+        // groups when it hits a match (even if it's a failure). Need to decide whether we shoulddo
+        // do the same.
         // For now, we skip the reference daemon comparison
         test_author_packet(
             false,
@@ -657,14 +658,15 @@ fn test_fortigate_firewall() {
     });
 }
 
-// TODO: FIX TEST
+#[test]
 fn test_acl_present_but_not_matched() {
     let key = b"tackey";
     let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/johndoe_author_some_service.tacacs");
+        // TODO: Compare with Shrubbery's ACL behavior
         test_author_packet(
-            true,
+            false,
             server_address,
             packet,
             key,
@@ -674,14 +676,15 @@ fn test_acl_present_but_not_matched() {
     });
 }
 
-// TODO: FIX TEST
+#[test]
 fn test_acl_not_present() {
     let key = b"tackey";
     let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/janedoe_author_some_service.tacacs");
+        // TODO: Compare with Shrubbery's ACL behavior
         test_author_packet(
-            true,
+            false,
             server_address,
             packet,
             key,
