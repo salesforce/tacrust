@@ -842,6 +842,34 @@ async fn authorize_exec(
     results
 }
 
+#[allow(dead_code)]
+async fn authorize_acl(
+    shared_state: Arc<RwLock<State>>,
+    principal: &(dyn Principal + Sync),
+    client_address: &SocketAddr,
+) -> IntermediateAuthZResults {
+    let acl = match principal.acl() {
+        Some(a) => a,
+        None => {
+            return IntermediateAuthZResults {
+                authz_results: vec![],
+                acl_results: vec![],
+            }
+        }
+    };
+    let (acl_result, matching_acl) = verify_acl(shared_state.clone(), acl, client_address).await;
+    tracing::debug!(
+        "verifying acl {} against client_ip {} | result={:?}",
+        acl,
+        client_address.ip(),
+        acl_result
+    );
+    IntermediateAuthZResults {
+        authz_results: vec![],
+        acl_results: vec![(acl_result, matching_acl)],
+    }
+}
+
 async fn verify_authorization_against_principal(
     shared_state: Arc<RwLock<State>>,
     principal: &(dyn Principal + Sync),
@@ -890,6 +918,28 @@ async fn verify_authorization_against_principal(
         .await
         .authz_results,
     );
+
+    match principal.always_permit_authorization() {
+        Some(v) => {
+            tracing::debug!(
+                "always_permit_authorization set to {} for principal {}",
+                v,
+                principal.name()
+            );
+            if *v {
+                results
+                    .authz_results
+                    .push((AuthorizationStatus::AuthPassAdd, String::new()));
+            }
+        }
+        None => {
+            tracing::debug!(
+                "always_permit_authorization not set for principal {}",
+                principal.name()
+            );
+        }
+    }
+
     results
 }
 
