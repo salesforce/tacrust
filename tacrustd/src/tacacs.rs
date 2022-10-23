@@ -373,16 +373,11 @@ pub async fn process_tacacs_packet(
 }
 
 lazy_static! {
-    static ref RE_SERVICE: Regex =
-        Regex::new(r"service\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
-    static ref RE_CMD: Regex =
-        Regex::new(r"cmd\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
-    static ref RE_CMD_ARG: Regex =
-        Regex::new(r"cmd.arg\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
-    static ref RE_MATCHER_ARG: Regex =
-        Regex::new(r"(\S*)\p{White_Space}*?==\p{White_Space}*?(.*)").unwrap();
-    static ref RE_OTHER: Regex =
-        Regex::new(r"(\S*)\p{White_Space}*?(=|\*)\p{White_Space}*?(.*)").unwrap();
+    static ref RE_SERVICE: Regex = Regex::new(r"service\s*(=|\*)\s*(.*)").unwrap();
+    static ref RE_CMD: Regex = Regex::new(r"cmd\s*(=|\*)\s*(.*)").unwrap();
+    static ref RE_CMD_ARG: Regex = Regex::new(r"cmd.arg\s*(=|\*)\s*(.*)").unwrap();
+    static ref RE_MATCHER_ARG: Regex = Regex::new(r"(\S*?)\s*==\s*(.*)").unwrap();
+    static ref RE_OTHER: Regex = Regex::new(r#"(\S*?)\s*(=|\*)\s*(.*)"#).unwrap();
 }
 
 #[allow(dead_code)]
@@ -415,28 +410,28 @@ fn parse_avpair(avpair: &str) -> Option<AvPair> {
     if let Some(captures) = RE_SERVICE.captures(avpair) {
         return Some(AvPair::Service {
             mandatory: &captures[1] == "=",
-            value: captures[2].to_string(),
+            value: captures[2].trim_matches('"').to_string(),
         });
     }
 
     if let Some(captures) = RE_CMD.captures(avpair) {
         return Some(AvPair::Cmd {
             mandatory: &captures[1] == "=",
-            value: captures[2].to_string(),
+            value: captures[2].trim_matches('"').to_string(),
         });
     }
 
     if let Some(captures) = RE_CMD_ARG.captures(avpair) {
         return Some(AvPair::CmdArg {
             mandatory: &captures[1] == "=",
-            value: captures[2].to_string(),
+            value: captures[2].trim_matches('"').to_string(),
         });
     }
 
     if let Some(captures) = RE_MATCHER_ARG.captures(avpair) {
         return Some(AvPair::MatcherArg {
             key: captures[1].to_string(),
-            value: captures[2].to_string(),
+            value: captures[2].trim_matches('"').to_string(),
         });
     }
 
@@ -444,7 +439,7 @@ fn parse_avpair(avpair: &str) -> Option<AvPair> {
         return Some(AvPair::Other {
             mandatory: &captures[2] == "=",
             key: captures[1].to_string(),
-            value: captures[3].to_string(),
+            value: captures[3].trim_matches('"').to_string(),
         });
     }
 
@@ -783,7 +778,7 @@ async fn authorize_cmd(
         for pattern in &cmd.list {
             lazy_static! {
                 static ref RE_CMD_ARG_PATTERN: Regex =
-                    Regex::new(r#"(permit|deny)\p{White_Space}*(.*)"#).unwrap();
+                    Regex::new(r#"(permit|deny)\s*(.*)"#).unwrap();
             }
             if let Some(captures) = RE_CMD_ARG_PATTERN.captures(pattern) {
                 let cmd_pattern_action = &captures[1];

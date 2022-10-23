@@ -542,8 +542,8 @@ fn test_juniper_firewall() {
             key,
             AuthorizationStatus::AuthPassAdd,
             vec![
-                b"allow-commands=\"^.*\"".to_vec(),
-                b"allow-configuration=\"^.*\"".to_vec(),
+                b"allow-commands=^.*".to_vec(),
+                b"allow-configuration=^.*".to_vec(),
             ],
         );
     });
