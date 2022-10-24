@@ -915,6 +915,7 @@ fn test_golang_emulate_wda_authen() {
     });
 }
 
+// https://sfdc.co/shrubbery-authz-matrix
 #[test]
 fn test_shrubbery_matrix() {
     let key = b"tackey";
@@ -926,9 +927,9 @@ fn test_shrubbery_matrix() {
             key,
             reference_packet,
             b"mithrandir".to_vec(),
-            vec![b"service=ppp".to_vec(), b"protocol=ip".to_vec()],
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"addr=1.2.3.4".to_vec(), b"favorite_weapon=staff".to_vec()],
+            vec![b"service=ppp".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
         );
     });
 }

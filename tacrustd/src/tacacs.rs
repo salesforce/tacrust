@@ -712,6 +712,13 @@ async fn authorize_svc(
                 tracing::debug!("mandatory config arg {} not found in request but using cmd authz so not appending anything", mandatory_config_arg_key);
             }
         }
+
+        for (matcher_arg_key, _) in config_service_args_read.matcher_args.iter() {
+            if !processed_avpairs.contains_key(matcher_arg_key) {
+                results.push((AuthorizationStatus::AuthStatusFail, String::new()));
+                return results;
+            }
+        }
     }
 
     results
