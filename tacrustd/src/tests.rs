@@ -1138,5 +1138,110 @@ fn test_shrubbery_matrix() {
             AuthorizationStatus::AuthStatusFail,
             vec![],
         );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec(), b"cmd=".to_vec()],
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec(), b"cmd=show".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=cards".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=running".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
     });
 }
