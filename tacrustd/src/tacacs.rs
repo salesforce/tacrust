@@ -859,7 +859,10 @@ async fn verify_authorization_against_principal(
     requested_service: &str,
     request_avpairs: &[AvPair],
 ) {
-    let request_uses_cmd_authz = is_cmd_authz(request_avpairs).await;
+    let request_uses_cmd_authz = match is_cmd_authz(request_avpairs).await {
+        Some(v) => v,
+        None => requested_service == "shell",
+    };
 
     tracing::debug!(principal_name = ?principal.name(), forward_upstream = principal.forward_upstream());
     tracing::debug!(?client_address);
@@ -952,18 +955,18 @@ async fn verify_authorization_against_principal(
     }
 }
 
-async fn is_cmd_authz(request_avpairs: &[AvPair]) -> bool {
+async fn is_cmd_authz(request_avpairs: &[AvPair]) -> Option<bool> {
     for avpair in request_avpairs {
         if let AvPair::Cmd {
             mandatory: _,
             value,
         } = avpair
         {
-            return !value.is_empty();
+            return Some(!value.is_empty());
         }
     }
 
-    false
+    None
 }
 
 async fn find_service_requested_for_authz(request_avpairs: &[AvPair]) -> Option<String> {

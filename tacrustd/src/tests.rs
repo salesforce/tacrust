@@ -182,7 +182,18 @@ fn compare_reference_daemon_authz_results(
         args: ref_args,
     } = parsed_ref_response.body
     {
-        assert_eq!(status, ref_status);
+        let mut failure_statuses: HashSet<AuthorizationStatus> = HashSet::new();
+        failure_statuses.insert(AuthorizationStatus::AuthStatusFail);
+        failure_statuses.insert(AuthorizationStatus::AuthStatusError);
+        if failure_statuses.contains(&status) && failure_statuses.contains(&ref_status) {
+            tracing::debug!(
+                "status {:?} and ref status {:?} match as failure",
+                status,
+                ref_status
+            );
+        } else {
+            assert_eq!(status, ref_status);
+        }
         let mut args_set: HashSet<Vec<u8>> = HashSet::new();
         for arg in &args {
             args_set.insert(arg.to_vec());
@@ -1115,6 +1126,16 @@ fn test_shrubbery_matrix() {
                 b"favorite_color=white".to_vec(),
             ],
             AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
             vec![],
         );
     });
