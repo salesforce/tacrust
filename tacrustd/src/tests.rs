@@ -277,7 +277,15 @@ fn test_author_packet(
     } = parsed_response.body
     {
         assert_eq!(status, expected_status);
-        assert_eq!(args, expected_avpairs);
+        let mut args_set: HashSet<Vec<u8>> = HashSet::new();
+        for arg in &args {
+            args_set.insert(arg.to_vec());
+        }
+        let mut ref_args_set: HashSet<Vec<u8>> = HashSet::new();
+        for ref_arg in &expected_avpairs {
+            ref_args_set.insert(ref_arg.to_vec());
+        }
+        assert_eq!(args_set, ref_args_set);
         if compare_with_reference_daemon {
             compare_reference_daemon_authz_results(packet, key, status, args);
         }
@@ -1035,6 +1043,63 @@ fn test_shrubbery_matrix() {
             ],
             AuthorizationStatus::AuthStatusFail,
             vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color*".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color*grey".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+            ],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=bow".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color*white".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+                b"favorite_color*white".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+            ],
         );
     });
 }

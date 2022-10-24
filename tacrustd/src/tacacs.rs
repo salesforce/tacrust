@@ -618,21 +618,29 @@ async fn authorize_svc(
                 }
                 processed_avpairs.insert(key.to_string(), final_value.to_string());
             } else if config_service_args_read.optional_args.contains_key(key) {
-                if config_service_args_read.optional_args[key]
-                    .allowed_values
-                    .contains(value)
-                {
-                    tracing::debug!("request avpair mapped to config optional arg, value found in allow list, key: {}, value: {} | PASS_ADD", key, value);
-                    results.push((AuthorizationStatus::AuthPassAdd, String::new()));
-                } else if mandatory {
-                    tracing::debug!("mandatory request avpair mapped to config optional arg, value not found in allow list, key: {}, value: {} | PASS_ADD", key, value);
-                    results.push((AuthorizationStatus::AuthPassAdd, String::new()));
+                if mandatory {
+                    tracing::debug!("mandatory request avpair mapped to config optional arg, key: {}, value: {} | NOP", key, value);
                 } else {
-                    tracing::debug!("optional request avpair mapped to config optional arg, value not found in allow list, key: {}, value: {} | PASS_REPL", key, value);
-                    final_value = format!(
-                        "{}*{}",
-                        key, config_service_args_read.optional_args[key].default_value
-                    );
+                    tracing::debug!("optional request avpair mapped to config optional arg, key: {}, value: {} | NOP", key, value);
+                    final_value = match config_service_args_read.optional_args[key]
+                        .allowed_values
+                        .get(value)
+                    {
+                        Some(v) => {
+                            tracing::debug!(
+                                "optional request avpair {} has value that's allowed",
+                                key
+                            );
+                            v.to_string()
+                        }
+                        None => {
+                            tracing::debug!("optional request avpair {} has value that's not allowed, replacing with default value", key);
+                            config_service_args_read.optional_args[key]
+                                .default_value
+                                .to_string()
+                        }
+                    };
+                    final_value = format!("{}*{}", key, final_value);
                     results.push((
                         AuthorizationStatus::AuthPassRepl,
                         format!("service={}", requested_service),
