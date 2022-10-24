@@ -975,5 +975,19 @@ fn test_shrubbery_matrix() {
                 b"favorite_weapon=staff".to_vec(),
             ],
         );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
     });
 }
