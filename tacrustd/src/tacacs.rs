@@ -1132,7 +1132,7 @@ pub async fn verify_authorization(
     if let Some(result) = intermediate_results
         .acl_results
         .into_iter()
-        .find(|result| result.0 as u8 == AclResult::Reject as u8)
+        .find(|result| result.0.clone() as u8 == AclResult::Reject as u8)
     {
         tracing::debug!("acl rejected by {:?}", result);
         return (AuthorizationStatus::AuthStatusFail, vec![]);
