@@ -1118,7 +1118,7 @@ pub async fn verify_authorization(
     let authz_status = intermediate_results
         .authz_results
         .iter()
-        .max_by(|first, second| ((*first).0 as u8).cmp(&(second.0 as u8)))
+        .max_by(|first, second| (first.0 as u8).cmp(&(second.0 as u8)))
         .unwrap_or(&authz_error)
         .0;
     let authz_results: Vec<String> = intermediate_results
