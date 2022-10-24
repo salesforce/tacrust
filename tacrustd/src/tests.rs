@@ -989,5 +989,52 @@ fn test_shrubbery_matrix() {
             AuthorizationStatus::AuthStatusFail,
             vec![],
         );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr*".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=1.2.3.4".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+            ],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=3.4.5.6".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"favorite_weapon=staff".to_vec()],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=8.8.8.8".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
     });
 }
