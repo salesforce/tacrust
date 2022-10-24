@@ -644,15 +644,27 @@ async fn authorize_svc(
                 }
                 processed_avpairs.insert(key.to_string(), final_value.to_string());
             } else if mandatory {
-                tracing::debug!(
-                    "mandatory request avpair not mapped to any config arg, key: {}, value: {}",
-                    key,
-                    value
-                );
+                if !normalized_match(requested_service, "shell")
+                    && key != "service"
+                    && !value.is_empty()
+                {
+                    results.push((AuthorizationStatus::AuthStatusFail, String::new()));
+                    tracing::debug!(
+                        "mandatory request avpair not mapped to any config arg, key: {}, value: {} | FAIL",
+                        key,
+                        value
+                    );
+                } else {
+                    tracing::debug!(
+                        "mandatory request avpair not mapped to any config arg, key: {}, value: {} | NOP",
+                        key,
+                        value
+                    );
+                }
                 processed_avpairs.insert(key.to_string(), final_value.to_string());
             } else {
                 tracing::debug!(
-                    "optional request avpair not mapped to any config arg, key: {}, value: {}",
+                    "optional request avpair not mapped to any config arg, key: {}, value: {} | NOP",
                     key,
                     value
                 );

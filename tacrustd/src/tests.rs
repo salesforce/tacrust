@@ -922,12 +922,37 @@ fn test_shrubbery_matrix() {
     let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let reference_packet = include_bytes!("../packets/java-author-1.tacacs");
+
         test_author_avpairs(
             server_address,
             key,
             reference_packet,
             b"mithrandir".to_vec(),
             vec![b"service=ppp".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=ppp".to_vec(), b"protocol=ip".to_vec()],
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"addr=1.2.3.4".to_vec(), b"favorite_weapon=staff".to_vec()],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"hello=world".to_vec(),
+            ],
             AuthorizationStatus::AuthStatusFail,
             vec![],
         );

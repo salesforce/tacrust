@@ -224,6 +224,7 @@
         {
           "name": "ppp",
           "args": [
+            "protocol==ip",
             "F5-LTM-User-Info-1=admin"
           ]
         },
