@@ -1257,5 +1257,45 @@ fn test_shrubbery_matrix() {
             AuthorizationStatus::AuthStatusFail,
             vec![],
         );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=the".to_vec(),
+                b"cmd-arg=secrets".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec(), b"cmd-arg*courage".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+                b"cmd-arg=courage".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
     });
 }
