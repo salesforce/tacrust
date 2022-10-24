@@ -1243,5 +1243,19 @@ fn test_shrubbery_matrix() {
             AuthorizationStatus::AuthPassAdd,
             vec![],
         );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=hide".to_vec(),
+                b"cmd-arg=run".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
     });
 }

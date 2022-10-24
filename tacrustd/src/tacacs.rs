@@ -753,6 +753,21 @@ async fn authorize_cmd(
 
     let mut results: Vec<(AuthorizationStatus, String)> = vec![];
 
+    let request_cmd_name = request_avpairs
+        .iter()
+        .find_map(|avpair| {
+            if let AvPair::Cmd {
+                mandatory: _,
+                value,
+            } = avpair
+            {
+                Some(value.to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
     let packet_cmd_args_joined = request_avpairs
         .iter()
         .filter_map(|avpair| match avpair {
@@ -770,6 +785,14 @@ async fn authorize_cmd(
         None => return results,
     };
     for cmd in cmds {
+        if cmd.name != request_cmd_name {
+            tracing::debug!(
+                "cmd name {} does not match request cmd name {}",
+                cmd.name,
+                request_cmd_name
+            );
+            continue;
+        }
         for pattern in &cmd.list {
             lazy_static! {
                 static ref RE_CMD_ARG_PATTERN: Regex =
