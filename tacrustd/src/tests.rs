@@ -1101,5 +1101,21 @@ fn test_shrubbery_matrix() {
                 b"addr=4.5.6.7".to_vec(),
             ],
         );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color=white".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
     });
 }
