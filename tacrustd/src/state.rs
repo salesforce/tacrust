@@ -1,6 +1,7 @@
+use indexmap::IndexMap;
 use regex::Regex;
 use std::net::{SocketAddr, TcpStream};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, collections::HashSet, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
 
 use crate::{Acl, Group, User};
@@ -8,6 +9,20 @@ use crate::{Acl, Group, User};
 pub type Tx = mpsc::UnboundedSender<Vec<u8>>;
 pub type Rx = mpsc::UnboundedReceiver<Vec<u8>>;
 
+#[derive(Debug, Default)]
+pub struct ServiceArgValues {
+    pub default_value: String,
+    pub allowed_values: HashSet<String>,
+}
+
+#[derive(Debug, Default)]
+pub struct ServiceArgs {
+    pub matcher_args: IndexMap<String, String>,
+    pub mandatory_args: IndexMap<String, ServiceArgValues>,
+    pub optional_args: IndexMap<String, ServiceArgValues>,
+}
+
+#[allow(clippy::type_complexity)]
 #[derive(Debug)]
 pub struct State {
     pub key: Vec<u8>,
@@ -18,6 +33,7 @@ pub struct State {
     pub sockets: HashMap<SocketAddr, Tx>,
     pub maps: HashMap<(SocketAddr, u32), Arc<RwLock<HashMap<String, String>>>>,
     pub regexes: HashMap<String, Arc<Regex>>,
+    pub service_args: HashMap<(String, String), Arc<RwLock<ServiceArgs>>>,
     pub acls: HashMap<String, Arc<Acl>>,
     pub users: HashMap<String, Arc<User>>,
     pub groups: HashMap<String, Arc<Group>>,
@@ -39,6 +55,7 @@ impl State {
             sockets: HashMap::new(),
             maps: HashMap::new(),
             regexes: HashMap::new(),
+            service_args: HashMap::new(),
             acls: HashMap::new(),
             users: HashMap::new(),
             groups: HashMap::new(),
@@ -49,7 +66,7 @@ impl State {
         if !self.sockets.contains_key(&dest) {
             return;
         }
-        let _ = self.sockets.get(&dest).unwrap().send(message.into());
+        let _ = self.sockets.get(&dest).unwrap().send(message);
     }
 
     #[allow(dead_code)]

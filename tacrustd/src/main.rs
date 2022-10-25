@@ -62,26 +62,106 @@ pub struct Cmd {
     list: Vec<String>,
 }
 
+pub trait Principal {
+    fn kind(&self) -> &'static str;
+    fn name(&self) -> &String;
+    fn always_permit_authorization(&self) -> &Option<bool>;
+    fn forward_upstream(&self) -> &Option<bool>;
+    fn acl(&self) -> &Option<String>;
+    fn services(&self) -> &Option<Vec<Service>>;
+    fn cmds(&self) -> &Option<Vec<Cmd>>;
+    fn member_of(&self) -> &Option<Vec<String>>;
+}
+
 #[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Group {
     name: String,
     always_permit_authorization: Option<bool>,
     forward_upstream: Option<bool>,
     acl: Option<String>,
-    pap: Option<String>,
-    member: Option<String>,
     service: Option<Vec<Service>>,
     cmds: Option<Vec<Cmd>>,
+    member: Option<Vec<String>>,
+}
+
+impl Principal for Group {
+    fn kind(&self) -> &'static str {
+        "group"
+    }
+
+    fn name(&self) -> &String {
+        &self.name
+    }
+
+    fn always_permit_authorization(&self) -> &Option<bool> {
+        &self.always_permit_authorization
+    }
+
+    fn forward_upstream(&self) -> &Option<bool> {
+        &self.forward_upstream
+    }
+
+    fn acl(&self) -> &Option<String> {
+        &self.acl
+    }
+
+    fn services(&self) -> &Option<Vec<Service>> {
+        &self.service
+    }
+
+    fn cmds(&self) -> &Option<Vec<Cmd>> {
+        &self.cmds
+    }
+
+    fn member_of(&self) -> &Option<Vec<String>> {
+        &self.member
+    }
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct User {
     name: String,
     credentials: Credentials,
-    member: Option<Vec<String>>,
     always_permit_authorization: Option<bool>,
     forward_upstream: Option<bool>,
     acl: Option<String>,
+    service: Option<Vec<Service>>,
+    cmds: Option<Vec<Cmd>>,
+    member: Option<Vec<String>>,
+}
+
+impl Principal for User {
+    fn kind(&self) -> &'static str {
+        "user"
+    }
+
+    fn name(&self) -> &String {
+        &self.name
+    }
+
+    fn always_permit_authorization(&self) -> &Option<bool> {
+        &self.always_permit_authorization
+    }
+
+    fn forward_upstream(&self) -> &Option<bool> {
+        &self.forward_upstream
+    }
+
+    fn acl(&self) -> &Option<String> {
+        &self.acl
+    }
+
+    fn services(&self) -> &Option<Vec<Service>> {
+        &self.service
+    }
+
+    fn cmds(&self) -> &Option<Vec<Cmd>> {
+        &self.cmds
+    }
+
+    fn member_of(&self) -> &Option<Vec<String>> {
+        &self.member
+    }
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -251,8 +331,8 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
         }
     }
 
-    tracing::debug!("config: {:?}", config);
-    tracing::debug!("state: {:?}", state.read().await);
+    tracing::debug!(?config);
+    tracing::debug!(state=?state.read().await);
 
     if config.immediately_exit {
         tracing::debug!("no errors found in config, exiting immediately");
@@ -265,9 +345,9 @@ async fn start_server(config_override: Option<&[u8]>) -> Result<RunningServer, R
     let default_env_filter = EnvFilter::from_default_env().max_level_hint().unwrap();
     let (override_off_tx, mut override_off_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
 
-    tracing::debug!("commit: {}", env!("GIT_HASH"));
-    tracing::debug!("version: {}", env!("FULL_VERSION"));
-    tracing::debug!("listening on {}", &config.listen_address);
+    tracing::debug!(commit = env!("GIT_HASH"));
+    tracing::debug!(version = env!("FULL_VERSION"));
+    tracing::debug!(listen_address = ?&config.listen_address);
 
     let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
     let listener = TcpListener::bind(&config.listen_address).await?;

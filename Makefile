@@ -7,7 +7,7 @@ format:
 
 .PHONY: lint
 lint:
-	cargo clippy -- -D warnings
+	cargo clippy --all -- -D warnings
 
 .PHONY: clean
 clean:

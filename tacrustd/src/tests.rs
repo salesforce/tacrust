@@ -46,9 +46,9 @@ fn setup() {
     color_eyre::install().unwrap();
 }
 
-fn test_server<T>(port: u16, timeout: Duration, test: T) -> ()
+fn test_server<T>(port: u16, timeout: Duration, test: T)
 where
-    T: FnOnce(&str) -> (),
+    T: FnOnce(&str),
 {
     INIT.call_once(|| {
         setup();
@@ -81,7 +81,7 @@ fn get_tacacs_response(
     let server_address: SocketAddr = server_address.parse()?;
     tracing::debug!("connecting to server at {}", server_address);
     let mut conn_map = CONNECTIONS.write().unwrap();
-    let stream = conn_map.entry(server_address.clone()).or_insert_with(|| {
+    let stream = conn_map.entry(server_address).or_insert_with(|| {
         let stream = TcpStream::connect_timeout(&server_address, Duration::from_secs(5)).unwrap();
         stream
             .set_write_timeout(Some(Duration::from_secs(5)))
@@ -98,7 +98,7 @@ fn get_tacacs_response(
     let chunk_size: usize = rand::thread_rng().gen_range(2..6);
     let chunks: Vec<&[u8]> = packet.chunks(chunk_size).collect();
     for chunk in chunks {
-        stream.write(chunk)?;
+        stream.write_all(chunk)?;
         stream.flush()?;
     }
     let mut response = [0; 4096];
@@ -163,7 +163,7 @@ fn compare_reference_daemon_authz_results(
     };
 
     let mut stream = TcpStream::connect(server_address).unwrap();
-    stream.write(packet).unwrap();
+    stream.write_all(packet).unwrap();
     let mut response = [0; 4096];
     tracing::debug!("receiving response");
     let len = stream.read(&mut response).unwrap();
@@ -182,12 +182,71 @@ fn compare_reference_daemon_authz_results(
         args: ref_args,
     } = parsed_ref_response.body
     {
-        assert_eq!(status, ref_status);
-        assert_eq!(args, ref_args);
+        let mut failure_statuses: HashSet<AuthorizationStatus> = HashSet::new();
+        failure_statuses.insert(AuthorizationStatus::AuthStatusFail);
+        failure_statuses.insert(AuthorizationStatus::AuthStatusError);
+        if failure_statuses.contains(&status) && failure_statuses.contains(&ref_status) {
+            tracing::debug!(
+                "status {:?} and ref status {:?} match as failure",
+                status,
+                ref_status
+            );
+        } else {
+            assert_eq!(status, ref_status);
+        }
+        let mut args_set: HashSet<Vec<u8>> = HashSet::new();
+        for arg in &args {
+            args_set.insert(arg.to_vec());
+        }
+        let mut ref_args_set: HashSet<Vec<u8>> = HashSet::new();
+        for ref_arg in &ref_args {
+            ref_args_set.insert(ref_arg.to_vec());
+        }
+        assert_eq!(args_set, ref_args_set);
     }
 }
 
+fn test_author_avpairs(
+    server_address: &str,
+    key: &[u8],
+    reference_packet: &[u8],
+    authz_user: Vec<u8>,
+    authz_avpairs: Vec<Vec<u8>>,
+    expected_status: AuthorizationStatus,
+    expected_avpairs: Vec<Vec<u8>>,
+) {
+    let (_, mut reference_request) = tacrust::parser::parse_packet(reference_packet, key).unwrap();
+    match reference_request.body {
+        Body::AuthorizationRequest {
+            auth_method: _,
+            priv_lvl: _,
+            authen_type: _,
+            authen_service: _,
+            ref mut user,
+            port: _,
+            rem_address: _,
+            ref mut args,
+        } => {
+            *user = authz_user;
+            *args = authz_avpairs;
+        }
+        _ => {
+            panic!("incorrect reference packet");
+        }
+    }
+    let request = tacrust::serializer::serialize_packet(&reference_request, key).unwrap();
+    test_author_packet(
+        true,
+        server_address,
+        &request,
+        key,
+        expected_status,
+        expected_avpairs,
+    );
+}
+
 fn test_author_packet(
+    compare_with_reference_daemon: bool,
     server_address: &str,
     packet: &[u8],
     key: &[u8],
@@ -229,8 +288,18 @@ fn test_author_packet(
     } = parsed_response.body
     {
         assert_eq!(status, expected_status);
-        assert_eq!(args, expected_avpairs);
-        compare_reference_daemon_authz_results(packet, key, status, args);
+        let mut args_set: HashSet<Vec<u8>> = HashSet::new();
+        for arg in &args {
+            args_set.insert(arg.to_vec());
+        }
+        let mut ref_args_set: HashSet<Vec<u8>> = HashSet::new();
+        for ref_arg in &expected_avpairs {
+            ref_args_set.insert(ref_arg.to_vec());
+        }
+        assert_eq!(args_set, ref_args_set);
+        if compare_with_reference_daemon {
+            compare_reference_daemon_authz_results(packet, key, status, args);
+        }
     }
 }
 
@@ -241,6 +310,7 @@ fn test_java_author() {
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/java-author-1.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -274,99 +344,92 @@ fn test_cisco_nexus_9000() {
         let packet =
             include_bytes!("../packets/cisco-nexus-9000/aditya/03.a-author-shell-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"service=shell".to_vec(),
+                b"cmd=".to_vec(),
+            ],
         );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/03.b-author-shell-show-run-good.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![
-                b"priv-lvl=15".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=running-config".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
+            vec![],
         );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/04-author-shell-show-version-good.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![
-                b"priv-lvl=15".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=version".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
+            vec![],
         );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/05-author-shell-show-interface-good.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
         );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/06-author-shell-show-clock-bad.tacacs"
         );
-        // Todo: This actually fails in Shrubbery daemon which stops recursing through parent
-        // groups when it hits a match. Need to decide whether we should do the same
+        // TODO: This actually fails in Shrubbery daemon which stops recursing through parent
+        // groups when it hits a match (even if it's a failure). Need to decide whether we shoulddo
+        // do the same.
+        // For now, we skip the reference daemon comparison
         test_author_packet(
+            false,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![
-                b"priv-lvl=15".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=clock".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
+            vec![],
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/aditya/07-author-shell-dir-root-good.tacacs"
+            "../packets/cisco-nexus-9000/aditya/07-author-shell-dir-root-bad.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
         );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/aditya/08-author-shell-dir-home-good.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![
-                b"priv-lvl=15".to_vec(),
-                b"cmd=dir".to_vec(),
-                b"cmd-arg=bootflash:/home".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
+            vec![],
         );
 
         let packet =
@@ -380,87 +443,88 @@ fn test_cisco_nexus_9000() {
         let packet =
             include_bytes!("../packets/cisco-nexus-9000/kamran/02.a-author-shell-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"priv-lvl=15".to_vec(),
+                b"service=shell".to_vec(),
+                b"cmd=".to_vec(),
+            ],
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/02.b-author-shell-show-run-good.tacacs"
+            "../packets/cisco-nexus-9000/kamran/02.b-author-shell-show-run-bad.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/03-author-shell-show-version-good.tacacs"
+            "../packets/cisco-nexus-9000/kamran/03-author-shell-show-version-bad.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/04-author-shell-show-interface-good.tacacs"
+            "../packets/cisco-nexus-9000/kamran/04-author-shell-show-interface-bad.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
         );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/05-author-shell-show-clock-good.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![
-                b"priv-lvl=15".to_vec(),
-                b"cmd=show".to_vec(),
-                b"cmd-arg=clock".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
+            vec![],
         );
 
         let packet = include_bytes!(
-            "../packets/cisco-nexus-9000/kamran/06-author-shell-dir-root-good.tacacs"
+            "../packets/cisco-nexus-9000/kamran/06-author-shell-dir-root-bad.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
-            vec![b"priv-lvl=15".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
         );
 
         let packet = include_bytes!(
             "../packets/cisco-nexus-9000/kamran/07-author-shell-dir-home-good.tacacs"
         );
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![
-                b"priv-lvl=15".to_vec(),
-                b"cmd=dir".to_vec(),
-                b"cmd-arg=bootflash:/home".to_vec(),
-                b"cmd-arg=<cr>".to_vec(),
-            ],
+            vec![],
         );
     });
 }
@@ -475,6 +539,7 @@ fn test_f5_lb() {
 
         let packet = include_bytes!("../packets/f5-lb/02-author-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -491,13 +556,14 @@ fn test_juniper_firewall() {
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/juniper-firewall/01-author-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
             vec![
-                b"allow-commands=\"^.*\"".to_vec(),
-                b"allow-configuration=\"^.*\"".to_vec(),
+                b"allow-commands=^.*".to_vec(),
+                b"allow-configuration=^.*".to_vec(),
             ],
         );
     });
@@ -516,6 +582,7 @@ fn test_mrv_lx() {
 
         let packet = include_bytes!("../packets/mrv-lx/02-author-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -538,6 +605,7 @@ fn test_ciena_waveserver() {
 
         let packet = include_bytes!("../packets/ciena-waveserver/02.b-author-shell-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -548,15 +616,12 @@ fn test_ciena_waveserver() {
         let packet =
             include_bytes!("../packets/ciena-waveserver/02.a-author-shell-file-ls-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
             AuthorizationStatus::AuthPassAdd,
-            vec![
-                b"priv-lvl=15".to_vec(),
-                b"cmd=file".to_vec(),
-                b"cmd-arg=ls".to_vec(),
-            ],
+            vec![],
         );
     });
 }
@@ -574,6 +639,7 @@ fn test_opengear_console() {
 
         let packet = include_bytes!("../packets/opengear-console/02-author-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -596,13 +662,16 @@ fn test_fortigate_firewall() {
 
         let packet = include_bytes!("../packets/fortigate-firewall/02-author-good.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
-            AuthorizationStatus::AuthPassAdd,
+            AuthorizationStatus::AuthPassRepl,
             vec![
+                b"service=fortigate".to_vec(),
                 b"memberof=FGT_admin".to_vec(),
                 b"admin_prof=super_admin".to_vec(),
+                b"extra_arg=redundant_value".to_vec(),
             ],
         );
     });
@@ -615,6 +684,7 @@ fn test_acl_present_but_not_matched() {
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/johndoe_author_some_service.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -631,6 +701,7 @@ fn test_acl_not_present() {
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/janedoe_author_some_service.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -647,6 +718,7 @@ fn test_multiple_group_memberships() {
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/jackdoe_author_raccess.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -663,6 +735,7 @@ fn test_always_permit_authz_flag() {
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/alexdelarge_author_raccess.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -672,6 +745,7 @@ fn test_always_permit_authz_flag() {
 
         let packet = include_bytes!("../packets/faramir_author_carwash.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -681,6 +755,7 @@ fn test_always_permit_authz_flag() {
 
         let packet = include_bytes!("../packets/jacktorrance_author_carwash.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -690,6 +765,7 @@ fn test_always_permit_authz_flag() {
 
         let packet = include_bytes!("../packets/davebowman_author_carwash.tacacs");
         test_author_packet(
+            true,
             server_address,
             packet,
             key,
@@ -705,7 +781,9 @@ fn test_extra_keys() {
     let port: u16 = select_new_port();
     test_server(port, Duration::from_secs(5), |server_address: &str| {
         let packet = include_bytes!("../packets/faramir_author_carwash_tackey2.tacacs");
+        // shrubbery by default does not have support for multiple keys, no need to compare
         test_author_packet(
+            false,
             server_address,
             packet,
             key,
@@ -784,6 +862,7 @@ fn test_proxy_forwarding_for_user_author() {
                 |_upstream_server_address: &str| {
                     let packet = include_bytes!("../packets/faramir_author_carwash.tacacs");
                     test_author_packet(
+                        true,
                         downstream_server_address,
                         packet,
                         key,
@@ -821,6 +900,7 @@ fn test_proxy_forwarding_for_group() {
                 |_upstream_server_address: &str| {
                     let packet = include_bytes!("../packets/strider_author_carwash.tacacs");
                     test_author_packet(
+                        true,
                         downstream_server_address,
                         packet,
                         key,
@@ -851,5 +931,371 @@ fn test_golang_emulate_wda_authen() {
             "../packets/golang-emulate-wda/golang-authen-cont-password-kamran.tacacs"
         );
         test_authen_packet(server_address, packet, key, AuthenticationStatus::Pass);
+    });
+}
+
+// https://sfdc.co/shrubbery-authz-matrix
+#[test]
+fn test_shrubbery_matrix() {
+    let key = b"tackey";
+    let port: u16 = select_new_port();
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
+        let reference_packet = include_bytes!("../packets/java-author-1.tacacs");
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=ppp".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=ppp".to_vec(), b"protocol=ip".to_vec()],
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"addr=1.2.3.4".to_vec(), b"favorite_weapon=staff".to_vec()],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"hello=world".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"hello*world".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=1.2.3.4".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+            ],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr*".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=1.2.3.4".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+            ],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=3.4.5.6".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"favorite_weapon=staff".to_vec()],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=8.8.8.8".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color*".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color*grey".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+            ],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=bow".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color*white".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+                b"favorite_color*white".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+            ],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=ppp".to_vec(),
+                b"protocol=ip".to_vec(),
+                b"favorite_weapon=staff".to_vec(),
+                b"addr=4.5.6.7".to_vec(),
+                b"favorite_color=white".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec(), b"cmd=".to_vec()],
+            AuthorizationStatus::AuthPassAdd,
+            vec![b"priv-lvl=15".to_vec()],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec(), b"cmd=show".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+                b"cmd-arg=<cr>".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=cards".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=running".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=hide".to_vec(),
+                b"cmd-arg=run".to_vec(),
+            ],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=the".to_vec(),
+                b"cmd-arg=secrets".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![b"service=shell".to_vec(), b"cmd-arg*courage".to_vec()],
+            AuthorizationStatus::AuthStatusFail,
+            vec![],
+        );
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"mithrandir".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=show".to_vec(),
+                b"cmd-arg=run".to_vec(),
+                b"cmd-arg=courage".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassAdd,
+            vec![],
+        );
     });
 }

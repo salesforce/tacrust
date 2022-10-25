@@ -45,7 +45,7 @@ pub enum AuthenticationStatus {
     Follow = 0x21,
 }
 
-#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Hash)]
 pub enum AuthorizationStatus {
     AuthPassAdd = 0x01,
     AuthPassRepl = 0x02,
@@ -53,6 +53,12 @@ pub enum AuthorizationStatus {
     AuthStatusError = 0x11,
     AuthStatusFollow = 0x21,
     AuthForwardUpstream = 0xdead,
+}
+
+impl Default for AuthorizationStatus {
+    fn default() -> Self {
+        Self::AuthStatusFail
+    }
 }
 
 #[derive(Copy, Clone, FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]

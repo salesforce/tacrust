@@ -26,6 +26,45 @@
   ],
   "users": [
     {
+      "name": "mithrandir",
+      "credentials": {
+        "type": "Pam"
+      },
+      "service": [
+          {
+              "name": "ppp",
+              "args": [
+                  "protocol==ip",
+                  "addr=1.2.3.4",
+                  "addr=2.3.4.5",
+                  "addr=3.4.5.6",
+                  "addr=4.5.6.7",
+                  "favorite_color*grey",
+                  "favorite_color*white",
+                  "favorite_weapon=staff"
+              ]
+          },
+          {
+              "name": "exec",
+              "args": [
+                  "priv-lvl=15"
+              ]
+          }
+      ],
+      "cmds": [
+        {
+          "name": "show",
+          "list": [
+            "permit clock",
+            "permit run",
+            "permit version",
+            "permit \"the secrets\"",
+            "deny"
+          ]
+        }
+      ]
+    },
+    {
       "name": "k.khan",
       "credentials": {
         "type": "Pam"
@@ -152,7 +191,7 @@
     {
       "name": "group-superuser",
       "acl": "testacl_permit_all_deny_none",
-      "member": "group-user",
+      "member": ["group-user"],
       "service": [
         {
           "name": "exec",
@@ -185,6 +224,7 @@
         {
           "name": "ppp",
           "args": [
+            "protocol==ip",
             "F5-LTM-User-Info-1=admin"
           ]
         },
@@ -205,7 +245,8 @@
           "name": "fortigate",
           "args": [
             "memberof=FGT_admin",
-            "admin_prof=super_admin"
+            "admin_prof=super_admin",
+            "extra_arg=redundant_value"
           ]
         }
       ],
