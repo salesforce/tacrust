@@ -735,6 +735,7 @@ async fn authorize_svc(
 
         for (matcher_arg_key, _) in config_service_args_read.matcher_args.iter() {
             if !processed_avpairs.contains_key(matcher_arg_key) {
+                tracing::debug!("matcher arg {} not found in request", matcher_arg_key);
                 results.push((AuthorizationStatus::AuthStatusFail, String::new()));
                 return results;
             }
