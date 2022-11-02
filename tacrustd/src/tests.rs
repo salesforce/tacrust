@@ -1299,3 +1299,35 @@ fn test_shrubbery_matrix() {
         );
     });
 }
+
+#[test]
+fn test_double_quotes() {
+    let key = b"tackey";
+    let port: u16 = select_new_port();
+    test_server(port, Duration::from_secs(5), |server_address: &str| {
+        let reference_packet = include_bytes!("../packets/java-author-1.tacacs");
+
+        test_author_avpairs(
+            server_address,
+            key,
+            reference_packet,
+            b"saruman".to_vec(),
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=".to_vec(),
+                b"cisco-av-pair*".to_vec(),
+                b"shell:roles*".to_vec(),
+            ],
+            AuthorizationStatus::AuthPassRepl,
+            vec![
+                b"service=shell".to_vec(),
+                b"cmd=".to_vec(),
+                b"cisco-av-pair=shell:roles=network-admin vsan-admin".to_vec(),
+                b"priv-lvl=15".to_vec(),
+                b"brcd-role=Admin".to_vec(),
+                b"brcd-AV-Pair1=HomeLF=128;LFRoleList=admin:1-128".to_vec(),
+                b"brcd-AV-Pair2=ChassisRole=admin".to_vec(),
+            ],
+        );
+    });
+}

@@ -26,6 +26,24 @@
   ],
   "users": [
     {
+        "name": "saruman",
+        "credentials": {
+            "type": "Pam"
+        },
+        "service": [
+            {
+                "name": "exec",
+                "args": [
+                    "priv-lvl=15",
+                    "cisco-av-pair=\"shell:roles=network-admin vsan-admin\"",
+                    "brcd-role=\"Admin\"",
+                    "brcd-AV-Pair1=\"HomeLF=128;LFRoleList=admin:1-128\"",
+                    "brcd-AV-Pair2=\"ChassisRole=admin\""
+                ]
+            }
+        ]
+    },
+    {
       "name": "mithrandir",
       "credentials": {
         "type": "Pam"
@@ -41,7 +59,7 @@
                   "addr=4.5.6.7",
                   "favorite_color*grey",
                   "favorite_color*white",
-                  "favorite_weapon=staff"
+                  "favorite_weapon=\"staff\""
               ]
           },
           {
