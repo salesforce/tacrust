@@ -31,5 +31,5 @@ Hardware test matrix and instructions at: [sfdc.co/tacrust-testing](https://sfdc
   - [x] Support for [multiple keys](https://git.soma.salesforce.com/Kuleana/tacacs/pull/3)
   - [x] Support for [debug logging for specific clients](https://git.soma.salesforce.com/Kuleana/tacrust/pull/215)
   - [ ] Per client IP secret keys (groups are not known until packet is decrypted)
-  - [ ] Command and service definitions at user level (instead of requiring groups)
+  - [x] Command and service definitions at user level (instead of requiring groups)
 
