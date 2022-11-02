@@ -469,7 +469,7 @@ async fn parse_args_for_config_service(service: &Service) -> Arc<RwLock<ServiceA
                     .await
                     .matcher_args
                     .entry(key.to_string())
-                    .or_insert_with(|| value.to_string());
+                    .or_insert_with(|| value.trim_matches('"').to_string());
             }
             AvPair::Other {
                 mandatory,
@@ -483,11 +483,11 @@ async fn parse_args_for_config_service(service: &Service) -> Arc<RwLock<ServiceA
                         .mandatory_args
                         .entry(key.to_string())
                         .or_insert_with(|| ServiceArgValues {
-                            default_value: value.to_string(),
+                            default_value: value.trim_matches('"').to_string(),
                             allowed_values: HashSet::new(),
                         })
                         .allowed_values
-                        .insert(value.to_string());
+                        .insert(value.trim_matches('"').to_string());
                 } else {
                     service_args
                         .write()
@@ -499,7 +499,7 @@ async fn parse_args_for_config_service(service: &Service) -> Arc<RwLock<ServiceA
                             allowed_values: HashSet::new(),
                         })
                         .allowed_values
-                        .insert(value.to_string());
+                        .insert(value.trim_matches('"').to_string());
                 }
             }
             _ => {}
@@ -563,7 +563,7 @@ async fn authorize_svc(
         for request_avpair in request_avpairs {
             tracing::debug!(?request_avpair);
 
-            let (mandatory, key, value) = match request_avpair {
+            let (mandatory, key, mut value) = match request_avpair {
                 AvPair::Service { mandatory, value } => (*mandatory, "service", value.as_str()),
                 AvPair::Cmd { mandatory, value } => (*mandatory, "cmd", value.as_str()),
                 AvPair::CmdArg { mandatory, value } => (*mandatory, "cmd-arg", value.as_str()),
@@ -574,6 +574,7 @@ async fn authorize_svc(
                     value,
                 } => (*mandatory, key.as_str(), value.as_str()),
             };
+            value = value.trim_matches('"');
 
             let mut final_value = format!("{}{}{}", key, if mandatory { "=" } else { "*" }, value);
             if config_service_args_read.matcher_args.contains_key(key) {
@@ -605,7 +606,10 @@ async fn authorize_svc(
                     tracing::debug!("optional request avpair mapped to config mandatory arg, key: {}, value: {} | FAIL", key, value);
                     final_value = format!(
                         "{}={}",
-                        key, config_service_args_read.mandatory_args[key].default_value
+                        key,
+                        config_service_args_read.mandatory_args[key]
+                            .default_value
+                            .trim_matches('"')
                     );
                     results.push((
                         AuthorizationStatus::AuthPassRepl,
@@ -631,12 +635,13 @@ async fn authorize_svc(
                                 "optional request avpair {} has value that's allowed",
                                 key
                             );
-                            v.to_string()
+                            v.trim_matches('"').to_string()
                         }
                         None => {
                             tracing::debug!("optional request avpair {} has value that's not allowed, replacing with default value", key);
                             config_service_args_read.optional_args[key]
                                 .default_value
+                                .trim_matches('"')
                                 .to_string()
                         }
                     };
@@ -720,7 +725,8 @@ async fn authorize_svc(
             } else if !request_uses_cmd_authz {
                 let new_value = format!(
                     "{}={}",
-                    mandatory_config_arg_key, mandatory_config_arg_values.default_value
+                    mandatory_config_arg_key,
+                    mandatory_config_arg_values.default_value.trim_matches('"')
                 );
                 tracing::debug!(
                     "mandatory config arg {} not found in request, appending '{}' | PASS_ADD",
@@ -848,7 +854,29 @@ async fn authorize_exec(
             None => continue,
         };
         for arg in service_args {
-            results.push((AuthorizationStatus::AuthPassAdd, arg.to_string()));
+            let parsed_arg = match parse_avpair(arg) {
+                Some(avpair) => avpair,
+                None => {
+                    tracing::debug!("invalid arg: {}", arg);
+                    continue;
+                }
+            };
+
+            let (mandatory, key, mut value) = match &parsed_arg {
+                AvPair::Service { mandatory, value } => (*mandatory, "service", value.as_str()),
+                AvPair::Cmd { mandatory, value } => (*mandatory, "cmd", value.as_str()),
+                AvPair::CmdArg { mandatory, value } => (*mandatory, "cmd-arg", value.as_str()),
+                AvPair::MatcherArg { key, value } => (true, key.as_str(), value.as_str()),
+                AvPair::Other {
+                    mandatory,
+                    key,
+                    value,
+                } => (*mandatory, key.as_str(), value.as_str()),
+            };
+            value = value.trim_matches('"');
+            let final_value = format!("{}{}{}", key, if mandatory { "=" } else { "*" }, value);
+            tracing::debug!(?final_value);
+            results.push((AuthorizationStatus::AuthPassAdd, final_value));
         }
     }
     results
