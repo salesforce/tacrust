@@ -862,6 +862,8 @@ async fn authorize_exec(
                 }
             };
 
+            // TODO: authorize_svc uses a similar match logic that can be refactored to a helper
+            // function
             let (mandatory, key, mut value) = match &parsed_arg {
                 AvPair::Service { mandatory, value } => (*mandatory, "service", value.as_str()),
                 AvPair::Cmd { mandatory, value } => (*mandatory, "cmd", value.as_str()),

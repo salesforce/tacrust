@@ -1,5 +1,5 @@
 use pretty_hex::pretty_hex;
-use tacrust::{parser, serializer};
+use tacrust::{parser, serializer, AuthorizationStatus, Body};
 
 #[test]
 pub fn test_packet_authen_start() {
@@ -140,4 +140,34 @@ pub fn test_packet_accounting_reply() {
     println!("{}", pretty_hex(&serialized));
 
     assert_eq!(&reference_packet[..], serialized);
+}
+
+#[test]
+pub fn test_shrubbery_response_parsing() {
+    let key = "helloworld123".as_bytes();
+    let packet = include_bytes!("../packets/shrubbery_author_response");
+    let (_, parsed_packet) = parser::parse_packet(packet, key).unwrap();
+    assert!(matches!(
+        parsed_packet.body,
+        Body::AuthorizationReply { .. }
+    ));
+    if let Body::AuthorizationReply {
+        status,
+        data: _,
+        server_msg: _,
+        args,
+    } = parsed_packet.body
+    {
+        assert_eq!(status, AuthorizationStatus::AuthPassRepl);
+        let ref_args = vec![
+            b"service=shell".to_vec(),
+            b"cmd=".to_vec(),
+            b"cisco-av-pair=shell:roles=network-admin vsan-admin".to_vec(),
+            b"priv-lvl=15".to_vec(),
+            b"brcd-role=Admin".to_vec(),
+            b"brcd-AV-Pair1=HomeLF=128;LFRoleList=admin:1-128".to_vec(),
+            b"brcd-AV-Pair2=ChassisRole=admin".to_vec(),
+        ];
+        assert_eq!(args, ref_args);
+    }
 }

@@ -281,7 +281,11 @@ pub fn parse_body(input: &[u8], header: Header) -> nom::IResult<&[u8], Body> {
             alt((parse_authen_start, parse_authen_reply, parse_authen_cont))(input)
         }
 
-        PacketType::Authorization => alt((parse_author_req, parse_author_reply))(input),
+        PacketType::Authorization => (if header.seq_no % 2 == 0 {
+            parse_author_reply
+        } else {
+            parse_author_req
+        })(input),
 
         PacketType::Accounting => alt((parse_accounting_request, parse_accounting_reply))(input),
     }
