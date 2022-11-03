@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use pretty_hex::pretty_hex;
 use tacrust::{parser, serializer, AuthorizationStatus, Body};
 
@@ -170,14 +168,6 @@ pub fn test_shrubbery_response_parsing() {
             b"brcd-AV-Pair1=HomeLF=128;LFRoleList=admin:1-128".to_vec(),
             b"brcd-AV-Pair2=ChassisRole=admin".to_vec(),
         ];
-        let mut args_set: HashSet<Vec<u8>> = HashSet::new();
-        for arg in &args {
-            args_set.insert(arg.to_vec());
-        }
-        let mut ref_args_set: HashSet<Vec<u8>> = HashSet::new();
-        for ref_arg in &ref_args {
-            ref_args_set.insert(ref_arg.to_vec());
-        }
-        assert_eq!(args_set, ref_args_set);
+        assert_eq!(args, ref_args);
     }
 }
