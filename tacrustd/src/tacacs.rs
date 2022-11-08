@@ -21,7 +21,6 @@ use tracing::Instrument;
 const CLIENT_MAP_KEY_USERNAME: &str = "username";
 const CLIENT_MAP_REQUESTED_AUTH_CONT_DATA: &str = "requested_auth_continue_data";
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum AclResult {
     Pass,
@@ -380,7 +379,6 @@ lazy_static! {
     static ref RE_OTHER: Regex = Regex::new(r#"(\S*?)\s*(=|\*)\s*(.*)"#).unwrap();
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum AvPair {
     Service {
@@ -1170,7 +1168,6 @@ pub async fn verify_authorization(
     }
 }
 
-#[allow(dead_code)]
 pub async fn verify_acl(
     shared_state: Arc<RwLock<State>>,
     acl: &str,
