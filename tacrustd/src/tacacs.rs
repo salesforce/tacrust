@@ -1010,30 +1010,23 @@ async fn verify_authorization_against_principal(
 }
 
 async fn is_cmd_authz(request_avpairs: &[AvPair]) -> Option<bool> {
-    for avpair in request_avpairs {
-        if let AvPair::Cmd {
+    request_avpairs.iter().find_map(|avpair| match avpair {
+        AvPair::Cmd {
             mandatory: _,
             value,
-        } = avpair
-        {
-            return Some(!value.is_empty());
-        }
-    }
-
-    None
+        } => Some(!value.is_empty()),
+        _ => None,
+    })
 }
 
 async fn find_service_requested_for_authz(request_avpairs: &[AvPair]) -> Option<String> {
-    for avpair in request_avpairs {
-        match avpair {
-            AvPair::Service {
-                mandatory: _,
-                value,
-            } => return Some(value.to_string()),
-            _ => continue,
-        }
-    }
-    None
+    request_avpairs.iter().find_map(|avpair| match avpair {
+        AvPair::Service {
+            mandatory: _,
+            value,
+        } => Some(value.to_string()),
+        _ => None,
+    })
 }
 
 pub async fn verify_authorization(
