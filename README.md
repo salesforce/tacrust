@@ -26,11 +26,12 @@ TACACS+ implementation in Rust ([RFC 8907](https://www.rfc-editor.org/rfc/rfc890
 - [x] Configuration
   - [x] ACLs
   - [x] Group membership
-- [ ] Feature enhancements (things not supported in the Shrubbery daemon)
+- [x] Feature enhancements (things not supported in the Shrubbery daemon)
   - [x] Forward/proxy packets to upstream TACACS+ server based for specific users
   - [x] Support multiple groups per user
   - [x] Support for [multiple keys](https://git.soma.salesforce.com/Kuleana/tacacs/pull/3)
   - [x] Support for [debug logging for specific clients](https://git.soma.salesforce.com/Kuleana/tacrust/pull/215)
-  - [ ] Per client IP secret keys (groups are not known until packet is decrypted)
   - [x] Command and service definitions at user level (instead of requiring groups)
+- [ ] Future improvements
+  - [ ] Per client IP secret keys (obstacle: groups are not known until packet is decrypted)
 
