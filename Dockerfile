@@ -1,4 +1,4 @@
-FROM dva-registry.internal.salesforce.com/sfci/kuleana/rust-builder/kuleana-rust-builder:33 as builder
+FROM dva-registry.internal.salesforce.com/sfci/kuleana/rust-builder/kuleana-rust-builder:35 as builder
 
 ENV BUILD_NUMBER=$BUILD_NUMBER
 
