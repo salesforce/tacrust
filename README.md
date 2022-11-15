@@ -34,5 +34,5 @@ TACACS+ implementation in Rust ([RFC 8907](https://www.rfc-editor.org/rfc/rfc890
   - [x] Command and service definitions at user level (instead of requiring groups)
   - [x] Debug logging based on client IP
 - [ ] Future improvements
-  - [ ] Per client IP secret keys (obstacle: groups are not known until packet is decrypted)
+  - [ ] Per client secret keys (obstacle: groups are not known until packet is decrypted)
 
