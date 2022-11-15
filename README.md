@@ -2,8 +2,8 @@
 
 TACACS+ implementation in Rust ([RFC 8907](https://www.rfc-editor.org/rfc/rfc8907.html), [context](https://salesforce.quip.com/ClnrA3p0oPbQ)), written as a replacement for the unmaintained [TACACS+ daemon from Shrubbery Networks](https://www.shrubbery.net/tac_plus/).
 
+* AuthZ testing matrix to model the original daemon's behavior for reference: [sfdc.co/shrubbery-authz-matrix](https://sfdc.co/shrubbery-authz-matrix)
 * Hardware test matrix and instructions at: [sfdc.co/tacrust-testing](https://sfdc.co/tacrust-testing)
-* AuthZ tessting matrix to model the original daemon's behavior for reference: [sfdc.co/shrubbery-authz-matrix](https://sfdc.co/shrubbery-authz-matrix)
 
 ## Status
 
