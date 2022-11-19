@@ -601,7 +601,7 @@ async fn authorize_svc(
                     results.push((AuthorizationStatus::AuthStatusFail, String::new()));
                     return results;
                 } else {
-                    tracing::debug!("optional request avpair mapped to config mandatory arg, key: {}, value: {} | FAIL", key, value);
+                    tracing::debug!("optional request avpair mapped to config mandatory arg, key: {}, value: {} | REPL", key, value);
                     final_value = format!(
                         "{}={}",
                         key,
@@ -623,7 +623,7 @@ async fn authorize_svc(
                 if mandatory {
                     tracing::debug!("mandatory request avpair mapped to config optional arg, key: {}, value: {} | NOP", key, value);
                 } else {
-                    tracing::debug!("optional request avpair mapped to config optional arg, key: {}, value: {} | NOP", key, value);
+                    tracing::debug!("optional request avpair mapped to config optional arg, key: {}, value: {} | REPL", key, value);
                     final_value = match config_service_args_read.optional_args[key]
                         .allowed_values
                         .get(value)
