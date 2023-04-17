@@ -7,7 +7,7 @@ fn main() {
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("hello.rs");
     fs::write(
-        &dest_path,
+        dest_path,
         "pub fn message() -> &'static str {
             \"Hello, World!\"
         }
@@ -23,7 +23,7 @@ fn main() {
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
 
     let dest_path = Path::new(&out_dir).join("version.txt");
-    fs::write(&dest_path, format!("{:?}", env::var("FULL_VERSION"))).unwrap();
+    fs::write(dest_path, format!("{:?}", env::var("FULL_VERSION"))).unwrap();
     if env::var("FULL_VERSION").is_err() {
         println!("cargo:rustc-env=FULL_VERSION=dev-{}", git_hash);
     }

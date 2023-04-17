@@ -37,17 +37,12 @@ mod tacacs;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 enum Credentials {
+    #[default]
     Pam,
     Ascii(String),
-}
-
-impl Default for Credentials {
-    fn default() -> Self {
-        Credentials::Pam
-    }
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, Eq, PartialEq)]
