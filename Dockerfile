@@ -2,8 +2,8 @@ FROM docker.repo.local.sfdc.net/sfci/kuleana/rust-builder/kuleana-rust-builder:4
 
 ENV BUILD_NUMBER=$BUILD_NUMBER
 
-USER root
-ADD . /tmp/src
+USER 0
+COPY . /tmp/src
 RUN /tmp/src/build.sh
 
 FROM docker.repo.local.sfdc.net/sfci/docker-images/sfdc_centos7:146
