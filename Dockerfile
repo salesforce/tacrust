@@ -1,4 +1,4 @@
-FROM docker.repo.local.sfdc.net/sfci/kuleana/rust-builder/kuleana-rust-builder:42 as builder
+FROM docker.repo.local.sfdc.net/sfci/kuleana/rust-builder/kuleana-rust-builder:43 as builder
 
 ENV BUILD_NUMBER=$BUILD_NUMBER
 
