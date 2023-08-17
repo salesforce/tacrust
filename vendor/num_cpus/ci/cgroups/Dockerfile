@@ -1,4 +1,3 @@
-# no-dfiu 
 FROM rust:latest
 
 WORKDIR /usr/num_cpus
