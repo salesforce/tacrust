@@ -36,8 +36,7 @@ cd rpmbuild && fpm -s dir -t rpm \
         -n "${PROJ_NAME}" \
         -m "kuleana@salesforce.com" \
         --rpm-os linux \
-        --iteration "${ITERATION}" \
-        --rpm-dist el9 \
+        --iteration "${ITERATION}.el9" \
         --version ${VERSION} \
         --epoch ${EPOCH} \
         --verbose \
