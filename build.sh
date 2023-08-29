@@ -9,6 +9,12 @@ export EPOCH="2"
 export PROJ_NAME="tacrust"
 export VERSION=${BUILD_ID}
 
+if [ -f /etc/os-release ]; then
+    # freedesktop.org and systemd
+    . /etc/os-release
+    OS=$NAME
+    DIST=$VERSION_ID
+
 if [ "${VERSION}" == "" ]; then
 	export VERSION="dev"
 fi
@@ -23,7 +29,8 @@ mkdir -p rpmbuild/usr/bin
 cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
 
 mkdir rpm-generated || true
-cd rpmbuild && fpm -s dir -t rpm \
+if [ "${DIST}" == "7" ]; then
+    cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
 	-m "kuleana@salesforce.com" \
 	--rpm-os linux \
@@ -31,15 +38,19 @@ cd rpmbuild && fpm -s dir -t rpm \
 	--version ${VERSION} \
 	--epoch ${EPOCH} \
 	--verbose \
-	. && \
-        fpm -s dir -t rpm \
-        -n "${PROJ_NAME}" \
-        -m "kuleana@salesforce.com" \
-        --rpm-os linux \
-        --iteration "${ITERATION}.el9" \
-        --version ${VERSION} \
-        --epoch ${EPOCH} \
-        --verbose \
         . && \
 	mv *.rpm ../rpm-generated/
+elif [ "${DIST}" == "9" ]; then
+    cd rpmbuild && fpm -s dir -t rpm \
+	-n "${PROJ_NAME}" \
+	-m "kuleana@salesforce.com" \
+	--rpm-os linux \
+	--iteration "${ITERATION}.el9" \
+	--version ${VERSION} \
+	--epoch ${EPOCH} \
+	--verbose \
+        . && \
+	mv *.rpm ../rpm-generated/
+fi
+
 
