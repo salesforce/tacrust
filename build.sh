@@ -28,8 +28,8 @@ make build-release
 mkdir -p rpmbuild/usr/bin
 cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
 
-mkdir rpm-generated || true
 if [ "${DIST}" == "7" ]; then
+    mkdir rpm-generated || true
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
 	-m "kuleana@salesforce.com" \
@@ -41,6 +41,7 @@ if [ "${DIST}" == "7" ]; then
         . && \
 	mv *.rpm ../rpm-generated/
 elif [ "${DIST}" == "9" ]; then
+    mkdir rpm-generated || true
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
 	-m "kuleana@salesforce.com" \
