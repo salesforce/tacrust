@@ -51,4 +51,6 @@ elif [ "${DIST}" == "9" ]; then
 	--verbose \
         . && \
 	mv *.rpm ../rpm-generated/
+else 
+    echo "Unrecognized OS"
 fi
