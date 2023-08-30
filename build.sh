@@ -14,6 +14,7 @@ if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS=$NAME
     DIST=$VERSION_ID
+fi
 
 if [ "${VERSION}" == "" ]; then
 	export VERSION="dev"
