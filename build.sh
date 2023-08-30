@@ -52,5 +52,3 @@ elif [ "${DIST}" == "9" ]; then
         . && \
 	mv *.rpm ../rpm-generated/
 fi
-
-
