@@ -43,7 +43,7 @@ if [ "${DIST}" == "7" ]; then
 	--verbose \
         . && \
 	mv *.rpm ../rpm-generated/
-elif [ "${DIST}" == "9" ]; then
+elif
     mkdir rpm-generated || true
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
@@ -55,6 +55,4 @@ elif [ "${DIST}" == "9" ]; then
 	--verbose \
         . && \
 	mv *.rpm ../rpm-generated/
-else 
-    echo "Unrecognized OS"
 fi
