@@ -43,7 +43,7 @@ if [ "${DIST}" == "7" ]; then
 	--verbose \
         . && \
 	mv *.rpm ../rpm-generated/
-elif
+else
     mkdir rpm-generated || true
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
