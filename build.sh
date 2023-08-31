@@ -50,7 +50,7 @@ else
 	-m "kuleana@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el9" \
-	--version ${VERSION} \
+	--version ${VERSION_ID} \
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
