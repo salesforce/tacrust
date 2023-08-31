@@ -38,7 +38,7 @@ if [ "${DIST}" == "7" ]; then
 	-m "kuleana@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el7" \
-	--version ${VERSION} \
+	--version ${VERSION_ID} \
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
