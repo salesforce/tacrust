@@ -9,6 +9,9 @@ export EPOCH="2"
 export PROJ_NAME="tacrust"
 export VERSION=${BUILD_ID}
 
+ITERATION=$(date +"%Y%m%d%H%M%S")
+echo ${ITERATION} > .iteration
+
 if [ -f /etc/os-release ]; then
     # freedesktop.org and systemd
     . /etc/os-release
@@ -20,7 +23,6 @@ if [ "${VERSION}" == "" ]; then
 	export VERSION="dev"
 fi
 
-export ITERATION="$(date -u +'%Y%m%d%H%M%S')"
 export FULL_VERSION="${VERSION}-${ITERATION}"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -28,11 +30,9 @@ make build-release
 
 mkdir -p rpmbuild/usr/bin
 cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
-
-echo ${VERSION}
+mkdir rpm-generated || true
 
 if [ "${DIST}" == "7" ]; then
-    mkdir rpm-generated || true
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
 	-m "kuleana@salesforce.com" \
@@ -43,7 +43,10 @@ if [ "${DIST}" == "7" ]; then
 	--verbose \
         . && \
 	mv *.rpm ../rpm-generated/
-else
+elif [ "${DIST}" =~ "^9*" ]; then
+    ITERATION=$(cat .iteration)
+    echo "ITERATION: ${ITERATION}"
+    export ITERATION
     mkdir rpm-generated || true
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
