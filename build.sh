@@ -25,7 +25,7 @@ cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
 mkdir rpm-generated || true
 cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
-	-m "kuleana@salesforce.com" \
+	-m "platform-integrity-c4ssh@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el7" \
 	--version ${VERSION} \
