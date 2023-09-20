@@ -32,7 +32,7 @@ mkdir -p rpmbuild/usr/bin
 cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
 mkdir rpm-generated || true
 
-if [ "${DIST}" == "7" ]; then
+if [[ "${DIST}" == ^7 ]]; then
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
 	-m "platform-integrity-c4ssh@salesforce.com" \
@@ -43,7 +43,7 @@ if [ "${DIST}" == "7" ]; then
 	--verbose \
         . && \
 	mv *.rpm ../rpm-generated/
-elif [ "${DIST}" =~ "^9*" ]; then
+elif [[ "${DIST}" =~ ^9.* ]]; then
     if [ ! -f .iteration ]; then # if building locally (for example), there won't be a .iteration file from the CE7 packaging container
         ITERATION=$(date +"%Y%m%d%H%M%S")
     else 
