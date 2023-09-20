@@ -1,5 +1,5 @@
 pipeline_template: rpm/Jenkinsfile
-email_reply_to: kuleana@salesforce.com                  # Change this to your group's e-mail address!
+email_reply_to: platform-integrity-c4ssh@salesforce.com
 compliance_required: false                              # (Optional) default = true
 docker_test_images:                                     # The image(s) that will be used to run your unit tests (Unit tests will be run against each image)
     - sfci/kuleana/rust-builder/kuleana-rust-builder:35
