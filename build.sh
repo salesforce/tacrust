@@ -51,7 +51,6 @@ elif [ "${DIST}" =~ "^9*" ]; then
     fi
     echo "ITERATION: ${ITERATION}"
     export ITERATION
-    mkdir rpm-generated || true
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
 	-m "kuleana@salesforce.com" \
