@@ -44,7 +44,11 @@ if [ "${DIST}" == "7" ]; then
         . && \
 	mv *.rpm ../rpm-generated/
 elif [ "${DIST}" =~ "^9*" ]; then
-    ITERATION=$(cat .iteration)
+    if [ ! -f .iteration ]; then # if building locally (for example), there won't be a .iteration file from the CE7 packaging container
+        ITERATION=$(date +"%Y%m%d%H%M%S")
+    else 
+        ITERATION=$(cat .iteration)
+    fi
     echo "ITERATION: ${ITERATION}"
     export ITERATION
     mkdir rpm-generated || true
