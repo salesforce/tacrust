@@ -53,7 +53,7 @@ elif [[ "${DIST}" =~ ^9.* ]]; then
     export ITERATION
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
-	-m "kuleana@salesforce.com" \
+	-m "platform-integrity-c4ssh@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el9" \
 	--version ${VERSION_ID} \

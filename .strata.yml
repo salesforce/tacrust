@@ -2,8 +2,8 @@ pipeline_template: rpm/Jenkinsfile
 email_reply_to: platform-integrity-c4ssh@salesforce.com
 compliance_required: false                              # (Optional) default = true
 docker_test_images:                                     # The image(s) that will be used to run your unit tests (Unit tests will be run against each image)
-    - sfci/kuleana/rust-builder/kuleana-rust-builder:35
-    - sfci/kuleana/rust-builder/kuleana-rhel9-rust-builder:latest
+    - sfci/kuleana/rust-builder/kuleana-rust-builder
+    - sfci/kuleana/rust-builder/kuleana-rhel9-rust-builder
 unit_tests_command: STRATA=yes ./test.sh                # The command we'll run for the unit tests stage
 docker_package_images: 
     - sfci/kuleana/rust-builder/kuleana-rust-builder:35      # The image that will be used to package your RPM
