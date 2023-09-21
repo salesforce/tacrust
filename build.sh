@@ -38,7 +38,7 @@ if [[ "${DIST}" == ^7 ]]; then
 	-m "platform-integrity-c4ssh@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el7" \
-	--version ${VERSION_ID} \
+	--version ${VERSION} \
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
@@ -56,7 +56,7 @@ elif [[ "${DIST}" =~ ^9.* ]]; then
 	-m "platform-integrity-c4ssh@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el9" \
-	--version ${VERSION_ID} \
+	--version ${VERSION} \
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
