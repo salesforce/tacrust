@@ -7,7 +7,7 @@ export HTTPS_PROXY=http://${PROXY_SERVER}
 
 export EPOCH="2"
 export PROJ_NAME="tacrust"
-export VERSION=${BUILD_ID}
+export VERSION_NUMBER="${BUILD_ID}
 
 ITERATION=$(date +"%Y%m%d%H%M%S")
 echo ${ITERATION} > .iteration
@@ -19,8 +19,8 @@ if [ -f /etc/os-release ]; then
     DIST=$VERSION_ID
 fi
 
-if [ "${VERSION}" == "" ]; then
-	export VERSION="dev"
+if [ "${VERSION_NUMBER}" == "" ]; then
+	export VERSION_NUMBER="dev"
 fi
 
 export FULL_VERSION="${VERSION}-${ITERATION}"
@@ -38,7 +38,7 @@ if [[ "${DIST}" == ^7 ]]; then
 	-m "platform-integrity-c4ssh@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el7" \
-	--version ${VERSION} \
+	--version ${VERSION_NUMBER} \
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
@@ -56,7 +56,7 @@ elif [[ "${DIST}" =~ ^9.* ]]; then
 	-m "platform-integrity-c4ssh@salesforce.com" \
 	--rpm-os linux \
 	--iteration "${ITERATION}.el9" \
-	--version ${VERSION} \
+	--version ${VERSION_NUMBER} \
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
