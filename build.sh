@@ -15,7 +15,6 @@ echo ${ITERATION} > .iteration
 if [ -f /etc/os-release ]; then
     # freedesktop.org and systemd
     . /etc/os-release
-    OS=$NAME
     DIST=$VERSION_ID
 fi
 
