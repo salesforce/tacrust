@@ -7,7 +7,7 @@ export HTTPS_PROXY=http://${PROXY_SERVER}
 
 export EPOCH="2"
 export PROJ_NAME="tacrust"
-export VERSION_NUMBER="${BUILD_ID}
+export VERSION_NUMBER="${BUILD_ID}"
 
 ITERATION=$(date +"%Y%m%d%H%M%S")
 echo ${ITERATION} > .iteration
@@ -52,11 +52,11 @@ elif [[ "${DIST}" =~ ^9.* ]]; then
     echo "ITERATION: ${ITERATION}"
     export ITERATION
     cd rpmbuild && fpm -s dir -t rpm \
-	-n "${PROJ_NAME}" \
-	-m "platform-integrity-c4ssh@salesforce.com" \
-	--rpm-os linux \
-	--iteration "${ITERATION}.el9" \
-	--version ${VERSION_NUMBER} \
+        -n "${PROJ_NAME}" \
+        -m "platform-integrity-c4ssh@salesforce.com" \
+        --rpm-os linux \
+        --iteration "${ITERATION}.el9" \
+        --version ${VERSION_NUMBER} \
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
