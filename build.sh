@@ -23,7 +23,7 @@ if [ "${VERSION_NUMBER}" == "" ]; then
 	export VERSION_NUMBER="dev"
 fi
 
-export FULL_VERSION="${VERSION}-${ITERATION}"
+export FULL_VERSION="${VERSION_NUMBER}-${ITERATION}"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 make build-release
