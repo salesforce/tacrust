@@ -31,7 +31,7 @@ mkdir -p rpmbuild/usr/bin
 cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
 mkdir rpm-generated || true
 
-if [[ "${DIST}" == ^7 ]]; then
+if [[ "${DIST}" == 7 ]]; then
     cd rpmbuild && fpm -s dir -t rpm \
 	-n "${PROJ_NAME}" \
 	-m "platform-integrity-c4ssh@salesforce.com" \
