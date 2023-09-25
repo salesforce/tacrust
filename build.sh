@@ -10,7 +10,8 @@ export PROJ_NAME="tacrust"
 export VERSION_NUMBER="${BUILD_ID}"
 
 ITERATION=$(date +"%Y%m%d%H%M%S")
-echo ${ITERATION} > .iteration
+echo "${ITERATION}" > .iteration
+
 
 if [ -f /etc/os-release ]; then
     # freedesktop.org and systemd
@@ -41,7 +42,7 @@ if [[ "${DIST}" == 7 ]]; then
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
-	mv *.rpm ../rpm-generated/
+	mv ./*.rpm ../rpm-generated/
 elif [[ "${DIST}" =~ ^9.* ]]; then
     if [ ! -f .iteration ]; then # if building locally (for example), there won't be a .iteration file from the CE7 packaging container
         ITERATION=$(date +"%Y%m%d%H%M%S")
@@ -59,5 +60,5 @@ elif [[ "${DIST}" =~ ^9.* ]]; then
 	--epoch ${EPOCH} \
 	--verbose \
         . && \
-	mv *.rpm ../rpm-generated/
+	mv ./*.rpm ../rpm-generated/
 fi
