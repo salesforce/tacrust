@@ -7,7 +7,7 @@ export HTTPS_PROXY=http://${PROXY_SERVER}
 
 export EPOCH="2"
 export PROJ_NAME="tacrust"
-export VERSION_NUMBER="${CHANGE_ID}"
+export VERSION_NUMBER="${BUILD_ID}"
 
 ITERATION=$(date +"%Y%m%d%H%M%S")
 echo "${ITERATION}" > .iteration
