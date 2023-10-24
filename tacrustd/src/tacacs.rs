@@ -56,10 +56,10 @@ pub(crate) async fn decrypt_request(
         }
         Err(e) => {
             tracing::debug!("unable to parse packet using primary key: {:?}", e);
-            for extra_key in &(shared_state_read.extra_keys) {
+            for (index, extra_key) in shared_state_read.extra_keys.iter().enumerate() {
                 match parser::parse_packet(request_bytes, extra_key) {
                     Ok((_, p)) => {
-                        tracing::info!("packet parsed with extra key");
+                        tracing::info!("packet parsed with extra_key{index}");
                         return Ok((extra_key.to_vec(), p));
                     }
                     Err(e) => {
