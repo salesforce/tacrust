@@ -4,7 +4,7 @@
 #![deny(warnings)]
 #![allow(dead_code)]
 
-use serde::Deserialize;
+use serde_derive::Deserialize;
 
 /// This is what we're going to decode into.
 #[derive(Debug, Deserialize)]

@@ -2,7 +2,9 @@ pub use serde::de::{Deserialize, IntoDeserializer};
 
 use crate::value::{Array, Table, Value};
 
-/// Construct a [`Table`] from TOML syntax.
+/// Construct a [`toml::Value`] from TOML syntax.
+///
+/// [`toml::Value`]: value/enum.Value.html
 ///
 /// ```rust
 /// let cargo_toml = toml::toml! {
@@ -30,10 +32,7 @@ macro_rules! toml {
         let table = $crate::value::Table::new();
         let mut root = $crate::Value::Table(table);
         $crate::toml_internal!(@toplevel root [] $($toml)+);
-        match root {
-            $crate::Value::Table(table) => table,
-            _ => unreachable!(),
-        }
+        root
     }};
 }
 
@@ -198,15 +197,15 @@ macro_rules! toml_internal {
     }};
 
     (@value (-nan)) => {
-        $crate::Value::Float(::std::f64::NAN.copysign(-1.0))
+        $crate::Value::Float(-::std::f64::NAN)
     };
 
     (@value (nan)) => {
-        $crate::Value::Float(::std::f64::NAN.copysign(1.0))
+        $crate::Value::Float(::std::f64::NAN)
     };
 
     (@value nan) => {
-        $crate::Value::Float(::std::f64::NAN.copysign(1.0))
+        $crate::Value::Float(::std::f64::NAN)
     };
 
     (@value (-inf)) => {

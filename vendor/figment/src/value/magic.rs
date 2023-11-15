@@ -385,17 +385,16 @@ impl RelativePathBuf {
     }
 }
 
-// /// MAGIC
 // #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 // #[serde(rename = "___figment_selected_profile")]
 // pub struct SelectedProfile {
-//     profile: crate::Profile,
+//     profile: Profile,
 // }
 //
-// /// TODO: This doesn't work when it's in a map and the config doesn't contain a
-// /// value for the corresponding field; we never get to call `deserialize` on the
-// /// field's value. We can't fabricate this from no value. We either need to fake
-// /// the field name, somehow, or just not have this.
+// /// TODO: This doesn't work when it's in a map and the config doesn't
+// contain a value for the corresponding field; we never get to call
+// `deserialize` on the field's value. We can't fabricate this from no value. We
+// either need to fake the field name, somehow, or just not have this.
 // impl Magic for SelectedProfile {
 //     const NAME: &'static str = "___figment_selected_profile";
 //     const FIELDS: &'static [&'static str] = &["profile"];
@@ -411,7 +410,7 @@ impl RelativePathBuf {
 // }
 //
 // impl Deref for SelectedProfile {
-//     type Target = crate::Profile;
+//     type Target = Profile;
 //
 //     fn deref(&self) -> &Self::Target {
 //         &self.profile
@@ -656,7 +655,6 @@ impl<T> From<T> for Tagged<T> {
 mod _serde {
     use super::*;
 
-    #[allow(unused_imports)]
     pub mod export {
         // These are re-reexports used by serde's codegen.
         pub use std::clone::Clone;
@@ -1444,14 +1442,11 @@ mod tests {
     // fn test_selected_profile() {
     //     use super::SelectedProfile;
     //
-    //     let profile: SelectedProfile = Figment::new().extract().unwrap();
-    //     assert_eq!(&*profile, crate::Profile::default());
-    //
     //     let profile: SelectedProfile = Figment::new().select("foo").extract().unwrap();
-    //     assert_eq!(&*profile, "foo");
+    //     assert_eq!(profile.as_str(), "foo");
     //
     //     let profile: SelectedProfile = Figment::new().select("bar").extract().unwrap();
-    //     assert_eq!(&*profile, "bar");
+    //     assert_eq!(profile.as_str(), "bar");
     //
     //     #[derive(serde::Deserialize)]
     //     struct Testing {
@@ -1464,28 +1459,7 @@ mod tests {
     //         .merge(("other", "hi"))
     //         .select("with-value").extract().unwrap();
     //
-    //     assert_eq!(&*testing.profile, "with-value");
-    //     assert_eq!(testing.value, 123);
-    // }
-
-    // #[test]
-    // fn test_selected_profile_kink() {
-    //     use super::SelectedProfile;
-    //
-    //     #[derive(serde::Deserialize)]
-    //     struct Base {
-    //         profile: SelectedProfile,
-    //     }
-    //
-    //     #[derive(serde::Deserialize)]
-    //     struct Testing {
-    //         base: Base,
-    //         value: usize
-    //     }
-    //
-    //     let testing: Testing = Figment::from(("value", 123)).extract().unwrap();
-    //
-    //     assert_eq!(&*testing.base.profile, "with-value");
+    //     assert_eq!(testing.profile.as_str(), "with-value");
     //     assert_eq!(testing.value, 123);
     // }
 

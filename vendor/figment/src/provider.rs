@@ -117,9 +117,7 @@ impl<T: Provider> Provider for &T {
     }
 }
 
-/// This is exactly equivalent to [`Serialized::global(K, V)`].
-///
-/// [`Serialized::global(K, V)`]: crate::providers::Serialized::global()
+/// This is exactly `Serialized::global(K, V)`.
 impl<K: AsRef<str>, V: serde::Serialize> Provider for (K, V) {
     fn metadata(&self) -> Metadata {
         use std::any::type_name;

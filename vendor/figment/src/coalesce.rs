@@ -4,9 +4,7 @@ use crate::value::{Value, Map};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Order {
     Merge,
-    Join,
-    Adjoin,
-    Admerge,
+    Join
 }
 
 pub trait Coalescible: Sized {
@@ -16,20 +14,16 @@ pub trait Coalescible: Sized {
 
 impl Coalescible for Profile {
     fn coalesce(self, other: Self, order: Order) -> Self {
-        match order {
-            Order::Join | Order::Adjoin => self,
-            Order::Merge | Order::Admerge => other,
-        }
+        if order == Order::Join { self } else { other }
     }
 }
 
 impl Coalescible for Value {
-    fn coalesce(self, other: Self, o: Order) -> Self {
-        use {Value::Dict as D, Value::Array as A, Order::*};
-        match (self, other, o) {
-            (D(t, a), D(_, b), Join | Adjoin) | (D(_, a), D(t, b), Merge | Admerge) => D(t, a.coalesce(b, o)),
-            (A(t, mut a), A(_, b), Adjoin | Admerge) => A(t, { a.extend(b); a }),
-            (v, _, Join | Adjoin) | (_, v, Merge | Admerge) => v,
+    fn coalesce(self, other: Self, order: Order) -> Self {
+        use {Value::Dict as D, Order::Join as L, Order::Merge as R};
+        match (self, other, order) {
+            (D(t, a), D(_, b), L) | (D(_, a), D(t, b), R) => D(t, a.coalesce(b, order)),
+            (v, _, L) | (_, v, R) => v,
         }
     }
 }

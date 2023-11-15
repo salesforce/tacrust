@@ -11,7 +11,6 @@ mod size_hint {
 }
 
 mod map {
-    use crate::raw::Allocator;
     use core::fmt;
     use core::hash::{BuildHasher, Hash};
     use core::marker::PhantomData;
@@ -22,12 +21,11 @@ mod map {
 
     use super::size_hint;
 
-    impl<K, V, H, A> Serialize for HashMap<K, V, H, A>
+    impl<K, V, H> Serialize for HashMap<K, V, H>
     where
         K: Serialize + Eq + Hash,
         V: Serialize,
         H: BuildHasher,
-        A: Allocator,
     {
         #[cfg_attr(feature = "inline-more", inline)]
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -38,46 +36,40 @@ mod map {
         }
     }
 
-    impl<'de, K, V, S, A> Deserialize<'de> for HashMap<K, V, S, A>
+    impl<'de, K, V, S> Deserialize<'de> for HashMap<K, V, S>
     where
         K: Deserialize<'de> + Eq + Hash,
         V: Deserialize<'de>,
         S: BuildHasher + Default,
-        A: Allocator + Default,
     {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
             D: Deserializer<'de>,
         {
-            struct MapVisitor<K, V, S, A>
-            where
-                A: Allocator,
-            {
-                marker: PhantomData<HashMap<K, V, S, A>>,
+            struct MapVisitor<K, V, S> {
+                marker: PhantomData<HashMap<K, V, S>>,
             }
 
-            impl<'de, K, V, S, A> Visitor<'de> for MapVisitor<K, V, S, A>
+            impl<'de, K, V, S> Visitor<'de> for MapVisitor<K, V, S>
             where
                 K: Deserialize<'de> + Eq + Hash,
                 V: Deserialize<'de>,
                 S: BuildHasher + Default,
-                A: Allocator + Default,
             {
-                type Value = HashMap<K, V, S, A>;
+                type Value = HashMap<K, V, S>;
 
                 fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                     formatter.write_str("a map")
                 }
 
                 #[cfg_attr(feature = "inline-more", inline)]
-                fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+                fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
                 where
-                    M: MapAccess<'de>,
+                    A: MapAccess<'de>,
                 {
-                    let mut values = HashMap::with_capacity_and_hasher_in(
+                    let mut values = HashMap::with_capacity_and_hasher(
                         size_hint::cautious(map.size_hint()),
                         S::default(),
-                        A::default(),
                     );
 
                     while let Some((key, value)) = map.next_entry()? {
@@ -97,7 +89,6 @@ mod map {
 }
 
 mod set {
-    use crate::raw::Allocator;
     use core::fmt;
     use core::hash::{BuildHasher, Hash};
     use core::marker::PhantomData;
@@ -108,11 +99,10 @@ mod set {
 
     use super::size_hint;
 
-    impl<T, H, A> Serialize for HashSet<T, H, A>
+    impl<T, H> Serialize for HashSet<T, H>
     where
         T: Serialize + Eq + Hash,
         H: BuildHasher,
-        A: Allocator,
     {
         #[cfg_attr(feature = "inline-more", inline)]
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -123,44 +113,38 @@ mod set {
         }
     }
 
-    impl<'de, T, S, A> Deserialize<'de> for HashSet<T, S, A>
+    impl<'de, T, S> Deserialize<'de> for HashSet<T, S>
     where
         T: Deserialize<'de> + Eq + Hash,
         S: BuildHasher + Default,
-        A: Allocator + Default,
     {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
             D: Deserializer<'de>,
         {
-            struct SeqVisitor<T, S, A>
-            where
-                A: Allocator,
-            {
-                marker: PhantomData<HashSet<T, S, A>>,
+            struct SeqVisitor<T, S> {
+                marker: PhantomData<HashSet<T, S>>,
             }
 
-            impl<'de, T, S, A> Visitor<'de> for SeqVisitor<T, S, A>
+            impl<'de, T, S> Visitor<'de> for SeqVisitor<T, S>
             where
                 T: Deserialize<'de> + Eq + Hash,
                 S: BuildHasher + Default,
-                A: Allocator + Default,
             {
-                type Value = HashSet<T, S, A>;
+                type Value = HashSet<T, S>;
 
                 fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                     formatter.write_str("a sequence")
                 }
 
                 #[cfg_attr(feature = "inline-more", inline)]
-                fn visit_seq<M>(self, mut seq: M) -> Result<Self::Value, M::Error>
+                fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
                 where
-                    M: SeqAccess<'de>,
+                    A: SeqAccess<'de>,
                 {
-                    let mut values = HashSet::with_capacity_and_hasher_in(
+                    let mut values = HashSet::with_capacity_and_hasher(
                         size_hint::cautious(seq.size_hint()),
                         S::default(),
-                        A::default(),
                     );
 
                     while let Some(value) = seq.next_element()? {
@@ -182,15 +166,12 @@ mod set {
         where
             D: Deserializer<'de>,
         {
-            struct SeqInPlaceVisitor<'a, T, S, A>(&'a mut HashSet<T, S, A>)
-            where
-                A: Allocator;
+            struct SeqInPlaceVisitor<'a, T, S>(&'a mut HashSet<T, S>);
 
-            impl<'a, 'de, T, S, A> Visitor<'de> for SeqInPlaceVisitor<'a, T, S, A>
+            impl<'a, 'de, T, S> Visitor<'de> for SeqInPlaceVisitor<'a, T, S>
             where
                 T: Deserialize<'de> + Eq + Hash,
                 S: BuildHasher + Default,
-                A: Allocator,
             {
                 type Value = ();
 
@@ -199,9 +180,9 @@ mod set {
                 }
 
                 #[cfg_attr(feature = "inline-more", inline)]
-                fn visit_seq<M>(self, mut seq: M) -> Result<Self::Value, M::Error>
+                fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
                 where
-                    M: SeqAccess<'de>,
+                    A: SeqAccess<'de>,
                 {
                     self.0.clear();
                     self.0.reserve(size_hint::cautious(seq.size_hint()));

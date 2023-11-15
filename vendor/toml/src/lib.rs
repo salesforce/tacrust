@@ -17,10 +17,9 @@
 //!
 //! ## TOML values
 //!
-//! A TOML document is represented with the [`Table`] type which maps `String` to the [`Value`] enum:
+//! A value in TOML is represented with the [`Value`] enum in this crate:
 //!
-//! ```rust
-//! # use toml::value::{Datetime, Array, Table};
+//! ```rust,ignore
 //! pub enum Value {
 //!     String(String),
 //!     Integer(i64),
@@ -32,22 +31,25 @@
 //! }
 //! ```
 //!
+//! TOML is similar to JSON with the notable addition of a [`Datetime`]
+//! type. In general, TOML and JSON are interchangeable in terms of
+//! formats.
+//!
 //! ## Parsing TOML
 //!
-//! The easiest way to parse a TOML document is via the [`Table`] type:
+//! The easiest way to parse a TOML document is via the [`Value`] type:
 //!
-#![cfg_attr(not(feature = "parse"), doc = " ```ignore")]
-#![cfg_attr(feature = "parse", doc = " ```")]
-//! use toml::Table;
+//! ```rust
+//! use toml::Value;
 //!
-//! let value = "foo = 'bar'".parse::<Table>().unwrap();
+//! let value = "foo = 'bar'".parse::<Value>().unwrap();
 //!
 //! assert_eq!(value["foo"].as_str(), Some("bar"));
 //! ```
 //!
-//! The [`Table`] type implements a number of convenience methods and
+//! The [`Value`] type implements a number of convenience methods and
 //! traits; the example above uses [`FromStr`] to parse a [`str`] into a
-//! [`Table`].
+//! [`Value`].
 //!
 //! ## Deserialization and Serialization
 //!
@@ -55,27 +57,23 @@
 //! implementations of the `Deserialize`, `Serialize`, `Deserializer`, and
 //! `Serializer` traits. Namely, you'll find:
 //!
-//! * `Deserialize for Table`
-//! * `Serialize for Table`
 //! * `Deserialize for Value`
 //! * `Serialize for Value`
 //! * `Deserialize for Datetime`
 //! * `Serialize for Datetime`
 //! * `Deserializer for de::Deserializer`
 //! * `Serializer for ser::Serializer`
-//! * `Deserializer for Table`
 //! * `Deserializer for Value`
 //!
 //! This means that you can use Serde to deserialize/serialize the
-//! [`Table`] type as well as [`Value`] and [`Datetime`] type in this crate. You can also
-//! use the [`Deserializer`], [`Serializer`], or [`Table`] type itself to act as
+//! [`Value`] type as well as the [`Datetime`] type in this crate. You can also
+//! use the [`Deserializer`], [`Serializer`], or [`Value`] type itself to act as
 //! a deserializer/serializer for arbitrary types.
 //!
 //! An example of deserializing with TOML is:
 //!
-#![cfg_attr(not(feature = "parse"), doc = " ```ignore")]
-#![cfg_attr(feature = "parse", doc = " ```")]
-//! use serde::Deserialize;
+//! ```rust
+//! use serde_derive::Deserialize;
 //!
 //! #[derive(Deserialize)]
 //! struct Config {
@@ -90,25 +88,26 @@
 //!     travis: Option<String>,
 //! }
 //!
-//! let config: Config = toml::from_str(r#"
-//!     ip = '127.0.0.1'
+//! fn main() {
+//!     let config: Config = toml::from_str(r#"
+//!         ip = '127.0.0.1'
 //!
-//!     [keys]
-//!     github = 'xxxxxxxxxxxxxxxxx'
-//!     travis = 'yyyyyyyyyyyyyyyyy'
-//! "#).unwrap();
+//!         [keys]
+//!         github = 'xxxxxxxxxxxxxxxxx'
+//!         travis = 'yyyyyyyyyyyyyyyyy'
+//!     "#).unwrap();
 //!
-//! assert_eq!(config.ip, "127.0.0.1");
-//! assert_eq!(config.port, None);
-//! assert_eq!(config.keys.github, "xxxxxxxxxxxxxxxxx");
-//! assert_eq!(config.keys.travis.as_ref().unwrap(), "yyyyyyyyyyyyyyyyy");
+//!     assert_eq!(config.ip, "127.0.0.1");
+//!     assert_eq!(config.port, None);
+//!     assert_eq!(config.keys.github, "xxxxxxxxxxxxxxxxx");
+//!     assert_eq!(config.keys.travis.as_ref().unwrap(), "yyyyyyyyyyyyyyyyy");
+//! }
 //! ```
 //!
 //! You can serialize types in a similar fashion:
 //!
-#![cfg_attr(not(feature = "display"), doc = " ```ignore")]
-#![cfg_attr(feature = "display", doc = " ```")]
-//! use serde::Serialize;
+//! ```rust
+//! use serde_derive::Serialize;
 //!
 //! #[derive(Serialize)]
 //! struct Config {
@@ -123,16 +122,18 @@
 //!     travis: Option<String>,
 //! }
 //!
-//! let config = Config {
-//!     ip: "127.0.0.1".to_string(),
-//!     port: None,
-//!     keys: Keys {
-//!         github: "xxxxxxxxxxxxxxxxx".to_string(),
-//!         travis: Some("yyyyyyyyyyyyyyyyy".to_string()),
-//!     },
-//! };
+//! fn main() {
+//!     let config = Config {
+//!         ip: "127.0.0.1".to_string(),
+//!         port: None,
+//!         keys: Keys {
+//!             github: "xxxxxxxxxxxxxxxxx".to_string(),
+//!             travis: Some("yyyyyyyyyyyyyyyyy".to_string()),
+//!         },
+//!     };
 //!
-//! let toml = toml::to_string(&config).unwrap();
+//!     let toml = toml::to_string(&config).unwrap();
+//! }
 //! ```
 //!
 //! [TOML]: https://github.com/toml-lang/toml
@@ -147,36 +148,29 @@
 // and lets them ensure that there is indeed no unsafe code as opposed to
 // something they couldn't detect (e.g. unsafe added via macro expansion, etc).
 #![forbid(unsafe_code)]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 pub mod map;
 pub mod value;
+#[doc(no_inline)]
+pub use crate::value::Value;
+mod datetime;
 
-pub mod de;
 pub mod ser;
+#[doc(no_inline)]
+pub use crate::ser::{to_string, to_string_pretty, to_vec, Serializer};
+pub mod de;
+#[doc(no_inline)]
+pub use crate::de::{from_slice, from_str, Deserializer};
+mod tokens;
 
 #[doc(hidden)]
 pub mod macros;
 
-mod edit;
-#[cfg(feature = "display")]
-mod fmt;
-mod table;
+mod spanned;
+pub use crate::spanned::Spanned;
 
-#[cfg(feature = "parse")]
-#[doc(inline)]
-pub use crate::de::{from_str, Deserializer};
-#[cfg(feature = "display")]
-#[doc(inline)]
-pub use crate::ser::{to_string, to_string_pretty, Serializer};
-#[doc(inline)]
-pub use crate::value::Value;
-
-pub use serde_spanned::Spanned;
-pub use table::Table;
-
-// Shortcuts for the module doc-comment
+// Just for rustdoc
+#[allow(unused_imports)]
+use crate::datetime::Datetime;
 #[allow(unused_imports)]
 use core::str::FromStr;
-#[allow(unused_imports)]
-use toml_datetime::Datetime;

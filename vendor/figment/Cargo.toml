@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "figment"
-version = "0.10.12"
+version = "0.10.8"
 authors = ["Sergio Benitez <sb@sergio.bz>"]
 description = "A configuration library so con-free, it's unreal."
 documentation = "https://docs.rs/figment/0.10"
@@ -55,14 +55,14 @@ version = "3"
 optional = true
 
 [dependencies.toml]
-version = "0.8"
+version = "0.5"
 optional = true
 
 [dependencies.uncased]
 version = "0.9.3"
 
 [dev-dependencies.clap]
-version = "4"
+version = "3"
 features = ["derive"]
 
 [dev-dependencies.parking_lot]
@@ -92,4 +92,4 @@ test = [
 yaml = ["serde_yaml"]
 
 [target."cfg(any(target_pointer_width = \"8\", target_pointer_width = \"16\", target_pointer_width = \"32\"))".dependencies.atomic]
-version = "0.6.0"
+version = "0.5.0"

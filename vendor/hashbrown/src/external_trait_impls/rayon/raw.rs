@@ -1,6 +1,7 @@
 use crate::raw::Bucket;
 use crate::raw::{Allocator, Global, RawIter, RawIterRange, RawTable};
 use crate::scopeguard::guard;
+use alloc::alloc::dealloc;
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr::NonNull;
@@ -75,18 +76,18 @@ impl<T> UnindexedProducer for ParIterProducer<T> {
 }
 
 /// Parallel iterator which consumes a table and returns elements.
-pub struct RawIntoParIter<T, A: Allocator = Global> {
+pub struct RawIntoParIter<T, A: Allocator + Clone = Global> {
     table: RawTable<T, A>,
 }
 
-impl<T, A: Allocator> RawIntoParIter<T, A> {
+impl<T, A: Allocator + Clone> RawIntoParIter<T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     pub(super) unsafe fn par_iter(&self) -> RawParIter<T> {
         self.table.par_iter()
     }
 }
 
-impl<T: Send, A: Allocator + Send> ParallelIterator for RawIntoParIter<T, A> {
+impl<T: Send, A: Allocator + Clone + Send> ParallelIterator for RawIntoParIter<T, A> {
     type Item = T;
 
     #[cfg_attr(feature = "inline-more", inline)]
@@ -96,9 +97,9 @@ impl<T: Send, A: Allocator + Send> ParallelIterator for RawIntoParIter<T, A> {
     {
         let iter = unsafe { self.table.iter().iter };
         let _guard = guard(self.table.into_allocation(), |alloc| {
-            if let Some((ptr, layout, ref alloc)) = *alloc {
+            if let Some((ptr, layout)) = *alloc {
                 unsafe {
-                    alloc.deallocate(ptr, layout);
+                    dealloc(ptr.as_ptr(), layout);
                 }
             }
         });
@@ -108,23 +109,23 @@ impl<T: Send, A: Allocator + Send> ParallelIterator for RawIntoParIter<T, A> {
 }
 
 /// Parallel iterator which consumes elements without freeing the table storage.
-pub struct RawParDrain<'a, T, A: Allocator = Global> {
+pub struct RawParDrain<'a, T, A: Allocator + Clone = Global> {
     // We don't use a &'a mut RawTable<T> because we want RawParDrain to be
     // covariant over T.
     table: NonNull<RawTable<T, A>>,
     marker: PhantomData<&'a RawTable<T, A>>,
 }
 
-unsafe impl<T: Send, A: Allocator> Send for RawParDrain<'_, T, A> {}
+unsafe impl<T: Send, A: Allocator + Clone> Send for RawParDrain<'_, T, A> {}
 
-impl<T, A: Allocator> RawParDrain<'_, T, A> {
+impl<T, A: Allocator + Clone> RawParDrain<'_, T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     pub(super) unsafe fn par_iter(&self) -> RawParIter<T> {
         self.table.as_ref().par_iter()
     }
 }
 
-impl<T: Send, A: Allocator> ParallelIterator for RawParDrain<'_, T, A> {
+impl<T: Send, A: Allocator + Clone> ParallelIterator for RawParDrain<'_, T, A> {
     type Item = T;
 
     #[cfg_attr(feature = "inline-more", inline)]
@@ -142,7 +143,7 @@ impl<T: Send, A: Allocator> ParallelIterator for RawParDrain<'_, T, A> {
     }
 }
 
-impl<T, A: Allocator> Drop for RawParDrain<'_, T, A> {
+impl<T, A: Allocator + Clone> Drop for RawParDrain<'_, T, A> {
     fn drop(&mut self) {
         // If drive_unindexed is not called then simply clear the table.
         unsafe {
@@ -203,7 +204,7 @@ impl<T> Drop for ParDrainProducer<T> {
     }
 }
 
-impl<T, A: Allocator> RawTable<T, A> {
+impl<T, A: Allocator + Clone> RawTable<T, A> {
     /// Returns a parallel iterator over the elements in a `RawTable`.
     #[cfg_attr(feature = "inline-more", inline)]
     pub unsafe fn par_iter(&self) -> RawParIter<T> {

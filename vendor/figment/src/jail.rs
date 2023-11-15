@@ -1,4 +1,4 @@
-use std::fs::{File, self};
+use std::fs::File;
 use std::io::{Write, BufWriter};
 use std::path::{Path, PathBuf};
 use std::fmt::Display;
@@ -137,19 +137,14 @@ impl Jail {
         &self.canonical_dir
     }
 
-    /// Creates a file with contents `contents` within the jail's directory. The
-    /// file is deleted when the jail is dropped.
-    ///
-    /// # Errors
-    ///
-    /// An error is returned if `path` is not relative. Any I/O errors
-    /// encountered while creating the file are returned.
+    /// Creates a file with contents `contents` in the jail's directory. The
+    /// file will be deleted with the jail is dropped.
     ///
     /// # Example
     ///
     /// ```rust
     /// figment::Jail::expect_with(|jail| {
-    ///     jail.create_file("MyConfig.json", "contents...")?;
+    ///     jail.create_file("MyConfig.json", "contents...");
     ///     Ok(())
     /// });
     /// ```
@@ -163,86 +158,6 @@ impl Jail {
         let mut writer = BufWriter::new(file);
         writer.write_all(contents.as_bytes()).map_err(as_string)?;
         Ok(writer.into_inner().map_err(as_string)?)
-    }
-
-    /// Creates a directory at `path` within the jail's directory and returns
-    /// the relative path to the subdirectory in the jail. Recursively creates
-    /// directories for all of its parent components if they are missing.
-    ///
-    /// The directory and all of its contents are deleted when the jail is
-    /// dropped.
-    ///
-    /// # Errors
-    ///
-    /// An error is returned if `path` is not relative. Any I/O errors
-    /// encountered while creating the subdirectory are returned.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use std::path::Path;
-    ///
-    /// figment::Jail::expect_with(|jail| {
-    ///     let dir = jail.create_dir("subdir")?;
-    ///     jail.create_file(dir.join("config.json"), "{ foo: 123 }")?;
-    ///     # assert_eq!(dir, Path::new("subdir"));
-    ///
-    ///     let dir = jail.create_dir("subdir/1/2")?;
-    ///     jail.create_file(dir.join("secret.toml"), "secret = 1337")?;
-    ///     # assert_eq!(dir, Path::new("subdir/1/2"));
-    ///
-    ///     Ok(())
-    /// });
-    /// ```
-    pub fn create_dir<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
-        let path = path.as_ref();
-        if !path.is_relative() {
-            return Err("Jail::create_dir(): dir path is absolute".to_string().into());
-        }
-
-        let absolute_dir_path = self.directory().join(path);
-        fs::create_dir_all(&absolute_dir_path).map_err(as_string)?;
-        Ok(path.into())
-    }
-
-    /// Remove all environment variables. All variables will be restored when
-    /// the jail is dropped.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let init_count = std::env::vars_os().count();
-    ///
-    /// figment::Jail::expect_with(|jail| {
-    ///     // We start with _something_ in the env vars.
-    ///     assert!(std::env::vars_os().count() != 0);
-    ///
-    ///     // Clear them all, and it's empty!
-    ///     jail.clear_env();
-    ///     assert!(std::env::vars_os().count() == 0);
-    ///
-    ///     // Set a value.
-    ///     jail.set_env("FIGMENT_SPECIAL_JAIL_VALUE", "value");
-    ///     assert!(std::env::vars_os().count() == 1);
-    ///
-    ///     // If we clear again, the new values are removed.
-    ///     jail.clear_env();
-    ///     assert!(std::env::vars_os().count() == 0);
-    ///
-    ///     Ok(())
-    /// });
-    ///
-    /// // After the drop, we have our original env vars.
-    /// assert!(std::env::vars_os().count() == init_count);
-    /// assert!(std::env::var("FIGMENT_SPECIAL_JAIL_VALUE").is_err());
-    /// ```
-    pub fn clear_env(&mut self) {
-        for (key, val) in std::env::vars_os() {
-            std::env::remove_var(&key);
-            if !self.saved_env_vars.contains_key(&key) {
-                self.saved_env_vars.insert(key, Some(val));
-            }
-        }
     }
 
     /// Set the environment variable `k` to value `v`. The variable will be
