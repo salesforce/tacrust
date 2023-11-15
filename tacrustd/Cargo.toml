@@ -27,7 +27,7 @@ once_cell = { version = "1.15.0" }
 lazy_static = { version = "1.4.0" }
 serial_test = { version = "0.5.1" }
 base64 = { version = "0.13.0" }
-tempfile = { version = "3.2.0" }
+tempfile = { version = "3.8.1" }
 itertools = { version = "0.10.3" }
 indexmap = { version = "1.9.1" }
 
