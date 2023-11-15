@@ -1,16 +1,46 @@
+# Version 0.5.8
+
+- Fix race condition in unbounded channel. (#972)
+
+# Version 0.5.7
+
+**Note:** This release has been yanked due to bug fixed in 0.5.8.
+
+- Improve handling of very large timeout. (#953)
+
+# Version 0.5.6
+
+**Note:** This release has been yanked due to bug fixed in 0.5.8.
+
+- Bump the minimum supported Rust version to 1.38. (#877)
+
+# Version 0.5.5
+
+**Note:** This release has been yanked due to bug fixed in 0.5.8.
+
+- Replace Spinlock with Mutex. (#835)
+
 # Version 0.5.4
+
+**Note:** This release has been yanked due to bug fixed in 0.5.8.
 
 - Workaround a bug in upstream related to TLS access on AArch64 Linux. (#802)
 
 # Version 0.5.3
 
+**Note:** This release has been yanked. See [#802](https://github.com/crossbeam-rs/crossbeam/issues/802) for details.
+
 - Fix panic on very large timeout. (#798)
 
 # Version 0.5.2
 
+**Note:** This release has been yanked. See [#802](https://github.com/crossbeam-rs/crossbeam/issues/802) for details.
+
 - Fix stacked borrows violations when `-Zmiri-tag-raw-pointers` is enabled. (#763, #764)
 
 # Version 0.5.1
+
+**Note:** This release has been yanked due to bug fixed in 0.5.8.
 
 - Fix memory leak in unbounded channel. (#669)
 
@@ -30,7 +60,7 @@
 
 # Version 0.4.3
 
-**Note**: This release has been yanked. See [CVE-2020-15254](https://github.com/crossbeam-rs/crossbeam/security/advisories/GHSA-v5m7-53cv-f3hx) for details.
+**Note:** This release has been yanked. See [GHSA-v5m7-53cv-f3hx](https://github.com/crossbeam-rs/crossbeam/security/advisories/GHSA-v5m7-53cv-f3hx) for details.
 
 - Change license to "MIT OR Apache-2.0".
 

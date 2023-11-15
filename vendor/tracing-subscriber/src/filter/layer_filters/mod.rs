@@ -44,7 +44,7 @@ use std::{
 use tracing_core::{
     span,
     subscriber::{Interest, Subscriber},
-    Event, Metadata,
+    Dispatch, Event, Metadata,
 };
 pub mod combinator;
 
@@ -298,6 +298,63 @@ pub trait FilterExt<S>: layer::Filter<S> {
 
     /// Inverts `self`, returning a filter that enables spans and events only if
     /// `self` would *not* enable them.
+    ///
+    /// This inverts the values returned by the [`enabled`] and [`callsite_enabled`]
+    /// methods on the wrapped filter; it does *not* invert [`event_enabled`], as
+    /// filters which do not implement filtering on event field values will return
+    /// the default `true` even for events that their [`enabled`] method disables.
+    ///
+    /// Consider a normal filter defined as:
+    ///
+    /// ```ignore (pseudo-code)
+    /// // for spans
+    /// match callsite_enabled() {
+    ///     ALWAYS => on_span(),
+    ///     SOMETIMES => if enabled() { on_span() },
+    ///     NEVER => (),
+    /// }
+    /// // for events
+    /// match callsite_enabled() {
+    ///    ALWAYS => on_event(),
+    ///    SOMETIMES => if enabled() && event_enabled() { on_event() },
+    ///    NEVER => (),
+    /// }
+    /// ```
+    ///
+    /// and an inverted filter defined as:
+    ///
+    /// ```ignore (pseudo-code)
+    /// // for spans
+    /// match callsite_enabled() {
+    ///     ALWAYS => (),
+    ///     SOMETIMES => if !enabled() { on_span() },
+    ///     NEVER => on_span(),
+    /// }
+    /// // for events
+    /// match callsite_enabled() {
+    ///     ALWAYS => (),
+    ///     SOMETIMES => if !enabled() { on_event() },
+    ///     NEVER => on_event(),
+    /// }
+    /// ```
+    ///
+    /// A proper inversion would do `!(enabled() && event_enabled())` (or
+    /// `!enabled() || !event_enabled()`), but because of the implicit `&&`
+    /// relation between `enabled` and `event_enabled`, it is difficult to
+    /// short circuit and not call the wrapped `event_enabled`.
+    ///
+    /// A combinator which remembers the result of `enabled` in order to call
+    /// `event_enabled` only when `enabled() == true` is possible, but requires
+    /// additional thread-local mutable state to support a very niche use case.
+    //
+    //  Also, it'd mean the wrapped layer's `enabled()` always gets called and
+    //  globally applied to events where it doesn't today, since we can't know
+    //  what `event_enabled` will say until we have the event to call it with.
+    ///
+    /// [`Filter`]: crate::layer::Filter
+    /// [`enabled`]: crate::layer::Filter::enabled
+    /// [`event_enabled`]: crate::layer::Filter::event_enabled
+    /// [`callsite_enabled`]: crate::layer::Filter::callsite_enabled
     fn not(self) -> combinator::Not<Self, S>
     where
         Self: Sized,
@@ -421,6 +478,36 @@ macro_rules! filter_impl_body {
         fn max_level_hint(&self) -> Option<LevelFilter> {
             self.deref().max_level_hint()
         }
+
+        #[inline]
+        fn event_enabled(&self, event: &Event<'_>, cx: &Context<'_, S>) -> bool {
+            self.deref().event_enabled(event, cx)
+        }
+
+        #[inline]
+        fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
+            self.deref().on_new_span(attrs, id, ctx)
+        }
+
+        #[inline]
+        fn on_record(&self, id: &span::Id, values: &span::Record<'_>, ctx: Context<'_, S>) {
+            self.deref().on_record(id, values, ctx)
+        }
+
+        #[inline]
+        fn on_enter(&self, id: &span::Id, ctx: Context<'_, S>) {
+            self.deref().on_enter(id, ctx)
+        }
+
+        #[inline]
+        fn on_exit(&self, id: &span::Id, ctx: Context<'_, S>) {
+            self.deref().on_exit(id, ctx)
+        }
+
+        #[inline]
+        fn on_close(&self, id: span::Id, ctx: Context<'_, S>) {
+            self.deref().on_close(id, ctx)
+        }
     };
 }
 
@@ -434,6 +521,75 @@ impl<S> layer::Filter<S> for Arc<dyn layer::Filter<S> + Send + Sync + 'static> {
 #[cfg_attr(docsrs, doc(cfg(feature = "registry")))]
 impl<S> layer::Filter<S> for Box<dyn layer::Filter<S> + Send + Sync + 'static> {
     filter_impl_body!();
+}
+
+// Implement Filter for Option<Filter> where None => allow
+#[cfg(feature = "registry")]
+#[cfg_attr(docsrs, doc(cfg(feature = "registry")))]
+impl<F, S> layer::Filter<S> for Option<F>
+where
+    F: layer::Filter<S>,
+{
+    #[inline]
+    fn enabled(&self, meta: &Metadata<'_>, ctx: &Context<'_, S>) -> bool {
+        self.as_ref()
+            .map(|inner| inner.enabled(meta, ctx))
+            .unwrap_or(true)
+    }
+
+    #[inline]
+    fn callsite_enabled(&self, meta: &'static Metadata<'static>) -> Interest {
+        self.as_ref()
+            .map(|inner| inner.callsite_enabled(meta))
+            .unwrap_or_else(Interest::always)
+    }
+
+    #[inline]
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        self.as_ref().and_then(|inner| inner.max_level_hint())
+    }
+
+    #[inline]
+    fn event_enabled(&self, event: &Event<'_>, ctx: &Context<'_, S>) -> bool {
+        self.as_ref()
+            .map(|inner| inner.event_enabled(event, ctx))
+            .unwrap_or(true)
+    }
+
+    #[inline]
+    fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
+        if let Some(inner) = self {
+            inner.on_new_span(attrs, id, ctx)
+        }
+    }
+
+    #[inline]
+    fn on_record(&self, id: &span::Id, values: &span::Record<'_>, ctx: Context<'_, S>) {
+        if let Some(inner) = self {
+            inner.on_record(id, values, ctx)
+        }
+    }
+
+    #[inline]
+    fn on_enter(&self, id: &span::Id, ctx: Context<'_, S>) {
+        if let Some(inner) = self {
+            inner.on_enter(id, ctx)
+        }
+    }
+
+    #[inline]
+    fn on_exit(&self, id: &span::Id, ctx: Context<'_, S>) {
+        if let Some(inner) = self {
+            inner.on_exit(id, ctx)
+        }
+    }
+
+    #[inline]
+    fn on_close(&self, id: span::Id, ctx: Context<'_, S>) {
+        if let Some(inner) = self {
+            inner.on_close(id, ctx)
+        }
+    }
 }
 
 // === impl Filtered ===
@@ -529,7 +685,7 @@ impl<L, F, S> Filtered<L, F, S> {
     /// #
     /// # // specifying the Registry type is required
     /// # let _: &reload::Handle<filter::Filtered<fmt::Layer<Registry, _, _, fn() -> std::io::Stdout>,
-    /// # filter::LevelFilter, Registry>, _>
+    /// # filter::LevelFilter, Registry>, Registry>
     /// # = &reload_handle;
     /// #
     /// info!("This will be logged to stderr");
@@ -538,7 +694,7 @@ impl<L, F, S> Filtered<L, F, S> {
     /// # }
     /// ```
     ///
-    /// [subscriber]: Subscribe
+    /// [`Layer`]: crate::layer::Layer
     pub fn inner_mut(&mut self) -> &mut L {
         &mut self.layer
     }
@@ -550,6 +706,10 @@ where
     F: layer::Filter<S> + 'static,
     L: Layer<S>,
 {
+    fn on_register_dispatch(&self, subscriber: &Dispatch) {
+        self.layer.on_register_dispatch(subscriber);
+    }
+
     fn on_layer(&mut self, subscriber: &mut S) {
         self.id = MagicPlfDowncastMarker(subscriber.register_filter());
         self.layer.on_layer(subscriber);
@@ -640,6 +800,22 @@ where
         if cx.is_enabled_for(span, self.id()) && cx.is_enabled_for(follows, self.id()) {
             self.layer
                 .on_follows_from(span, follows, cx.with_filter(self.id()))
+        }
+    }
+
+    fn event_enabled(&self, event: &Event<'_>, cx: Context<'_, S>) -> bool {
+        let cx = cx.with_filter(self.id());
+        let enabled = FILTERING
+            .with(|filtering| filtering.and(self.id(), || self.filter.event_enabled(event, &cx)));
+
+        if enabled {
+            // If the filter enabled this event, ask the wrapped subscriber if
+            // _it_ wants it --- it might have a global filter.
+            self.layer.event_enabled(event, cx)
+        } else {
+            // Otherwise, return `true`. See the comment in `enabled` for why this
+            // is necessary.
+            true
         }
     }
 
@@ -1012,6 +1188,14 @@ impl FilterState {
                 "if we are in a filter pass, we must not be in an interest pass."
             )
         }
+    }
+
+    /// Run a second filtering pass, e.g. for Layer::event_enabled.
+    fn and(&self, filter: FilterId, f: impl FnOnce() -> bool) -> bool {
+        let map = self.enabled.get();
+        let enabled = map.is_enabled(filter) && f();
+        self.enabled.set(map.set(filter, enabled));
+        enabled
     }
 
     /// Clears the current in-progress filter state.

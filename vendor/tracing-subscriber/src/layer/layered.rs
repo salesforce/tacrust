@@ -1,9 +1,4 @@
-use tracing_core::{
-    metadata::Metadata,
-    span,
-    subscriber::{Interest, Subscriber},
-    Event, LevelFilter,
-};
+use tracing_core::{metadata::Metadata, span, Dispatch, Event, Interest, LevelFilter, Subscriber};
 
 use crate::{
     filter,
@@ -12,13 +7,17 @@ use crate::{
 };
 #[cfg(all(feature = "registry", feature = "std"))]
 use crate::{filter::FilterId, registry::Registry};
-use core::{any::TypeId, cmp, fmt, marker::PhantomData};
+use core::{
+    any::{Any, TypeId},
+    cmp, fmt,
+    marker::PhantomData,
+};
 
 /// A [`Subscriber`] composed of a `Subscriber` wrapped by one or more
 /// [`Layer`]s.
 ///
 /// [`Layer`]: crate::Layer
-/// [`Subscriber`]: https://docs.rs/tracing-core/latest/tracing_core/trait.Subscriber.html
+/// [`Subscriber`]: tracing_core::Subscriber
 #[derive(Clone)]
 pub struct Layered<L, I, S = I> {
     /// The layer.
@@ -63,6 +62,30 @@ pub struct Layered<L, I, S = I> {
 
 // === impl Layered ===
 
+impl<L, S> Layered<L, S>
+where
+    L: Layer<S>,
+    S: Subscriber,
+{
+    /// Returns `true` if this [`Subscriber`] is the same type as `T`.
+    pub fn is<T: Any>(&self) -> bool {
+        self.downcast_ref::<T>().is_some()
+    }
+
+    /// Returns some reference to this [`Subscriber`] value if it is of type `T`,
+    /// or `None` if it isn't.
+    pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
+        unsafe {
+            let raw = self.downcast_raw(TypeId::of::<T>())?;
+            if raw.is_null() {
+                None
+            } else {
+                Some(&*(raw as *const T))
+            }
+        }
+    }
+}
+
 impl<L, S> Subscriber for Layered<L, S>
 where
     L: Layer<S>,
@@ -92,7 +115,11 @@ where
     }
 
     fn max_level_hint(&self) -> Option<LevelFilter> {
-        self.pick_level_hint(self.layer.max_level_hint(), self.inner.max_level_hint())
+        self.pick_level_hint(
+            self.layer.max_level_hint(),
+            self.inner.max_level_hint(),
+            super::subscriber_is_none(&self.inner),
+        )
     }
 
     fn new_span(&self, span: &span::Attributes<'_>) -> span::Id {
@@ -109,6 +136,16 @@ where
     fn record_follows_from(&self, span: &span::Id, follows: &span::Id) {
         self.inner.record_follows_from(span, follows);
         self.layer.on_follows_from(span, follows, self.ctx());
+    }
+
+    fn event_enabled(&self, event: &Event<'_>) -> bool {
+        if self.layer.event_enabled(event, self.ctx()) {
+            // if the outer layer enables the event, ask the inner subscriber.
+            self.inner.event_enabled(event)
+        } else {
+            // otherwise, the event is disabled by this layer
+            false
+        }
     }
 
     fn event(&self, event: &Event<'_>) {
@@ -207,6 +244,11 @@ where
     B: Layer<S>,
     S: Subscriber,
 {
+    fn on_register_dispatch(&self, subscriber: &Dispatch) {
+        self.layer.on_register_dispatch(subscriber);
+        self.inner.on_register_dispatch(subscriber);
+    }
+
     fn on_layer(&mut self, subscriber: &mut S) {
         self.layer.on_layer(subscriber);
         self.inner.on_layer(subscriber);
@@ -229,7 +271,11 @@ where
     }
 
     fn max_level_hint(&self) -> Option<LevelFilter> {
-        self.pick_level_hint(self.layer.max_level_hint(), self.inner.max_level_hint())
+        self.pick_level_hint(
+            self.layer.max_level_hint(),
+            self.inner.max_level_hint(),
+            super::layer_is_none(&self.inner),
+        )
     }
 
     #[inline]
@@ -248,6 +294,17 @@ where
     fn on_follows_from(&self, span: &span::Id, follows: &span::Id, ctx: Context<'_, S>) {
         self.inner.on_follows_from(span, follows, ctx.clone());
         self.layer.on_follows_from(span, follows, ctx);
+    }
+
+    #[inline]
+    fn event_enabled(&self, event: &Event<'_>, ctx: Context<'_, S>) -> bool {
+        if self.layer.event_enabled(event, ctx.clone()) {
+            // if the outer layer enables the event, ask the inner subscriber.
+            self.inner.event_enabled(event, ctx)
+        } else {
+            // otherwise, the event is disabled by this layer
+            false
+        }
     }
 
     #[inline]
@@ -386,7 +443,7 @@ where
             // (rather than calling into the inner type), clear the current
             // per-layer filter interest state.
             #[cfg(feature = "registry")]
-            drop(filter::FilterState::take_interest());
+            filter::FilterState::take_interest();
 
             return outer;
         }
@@ -413,7 +470,7 @@ where
             return Interest::sometimes();
         }
 
-        // otherwise, allow the inner subscriber or collector to weigh in.
+        // otherwise, allow the inner subscriber or subscriber to weigh in.
         inner
     }
 
@@ -421,6 +478,7 @@ where
         &self,
         outer_hint: Option<LevelFilter>,
         inner_hint: Option<LevelFilter>,
+        inner_is_none: bool,
     ) -> Option<LevelFilter> {
         if self.inner_is_registry {
             return outer_hint;
@@ -436,6 +494,31 @@ where
 
         if self.inner_has_layer_filter && outer_hint.is_none() {
             return None;
+        }
+
+        // If the layer is `Option::None`, then we
+        // want to short-circuit the layer underneath, if it
+        // returns `None`, to override the `None` layer returning
+        // `Some(OFF)`, which should ONLY apply when there are
+        // no other layers that return `None`. Note this
+        // `None` does not == `Some(TRACE)`, it means
+        // something more like: "whatever all the other
+        // layers agree on, default to `TRACE` if none
+        // have an opinion". We also choose do this AFTER
+        // we check for per-layer filters, which
+        // have their own logic.
+        //
+        // Also note that this does come at some perf cost, but
+        // this function is only called on initialization and
+        // subscriber reloading.
+        if super::layer_is_none(&self.layer) {
+            return cmp::max(outer_hint, Some(inner_hint?));
+        }
+
+        // Similarly, if the layer on the inside is `None` and it returned an
+        // `Off` hint, we want to override that with the outer hint.
+        if inner_is_none && inner_hint == Some(LevelFilter::OFF) {
+            return outer_hint;
         }
 
         cmp::max(outer_hint, inner_hint)

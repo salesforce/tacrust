@@ -16,9 +16,9 @@
 //! tracing-subscriber = "0.3"
 //! ```
 //!
-//! *Compiler support: [requires `rustc` 1.49+][msrv]*
+//! *Compiler support: [requires `rustc` 1.63+][msrv]*
 //!
-//! [msrv]: ../index.html#supported-rust-versions
+//! [msrv]: super#supported-rust-versions
 //!
 //! Add the following to your executable to initialize the default subscriber:
 //! ```rust
@@ -163,7 +163,7 @@
 //!
 //! ### Composing Layers
 //!
-//! Composing an [`EnvFilter`] `Layer` and a [format `Layer`](../fmt/struct.Layer.html):
+//! Composing an [`EnvFilter`] `Layer` and a [format `Layer`][super::fmt::Layer]:
 //!
 //! ```rust
 //! use tracing_subscriber::{fmt, EnvFilter};
@@ -181,11 +181,10 @@
 //!     .init();
 //! ```
 //!
-//! [`EnvFilter`]: ../filter/struct.EnvFilter.html
+//! [`EnvFilter`]: super::filter::EnvFilter
 //! [`env_logger`]: https://docs.rs/env_logger/
-//! [`filter`]: ../filter/index.html
-//! [`SubscriberBuilder`]: ./struct.SubscriberBuilder.html
-//! [`FmtSubscriber`]: ./struct.Subscriber.html
+//! [`filter`]: super::filter
+//! [`FmtSubscriber`]: Subscriber
 //! [`Subscriber`]:
 //!     https://docs.rs/tracing/latest/tracing/trait.Subscriber.html
 //! [`tracing`]: https://crates.io/crates/tracing
@@ -244,6 +243,7 @@ pub type Formatter<
 /// Configures and constructs `Subscriber`s.
 #[cfg_attr(docsrs, doc(cfg(all(feature = "fmt", feature = "std"))))]
 #[derive(Debug)]
+#[must_use]
 pub struct SubscriberBuilder<
     N = format::DefaultFields,
     E = format::Format<format::Full>,
@@ -313,7 +313,7 @@ pub struct SubscriberBuilder<
 /// ```
 ///
 /// [formatting subscriber]: Subscriber
-/// [`SubscriberBuilder::default()`]: struct.SubscriberBuilder.html#method.default
+/// [`SubscriberBuilder::default()`]: SubscriberBuilder::default
 /// [`init`]: SubscriberBuilder::init()
 /// [`try_init`]: SubscriberBuilder::try_init()
 /// [`finish`]: SubscriberBuilder::finish()
@@ -329,7 +329,7 @@ pub fn fmt() -> SubscriberBuilder {
 ///
 /// [formatting layer]: Layer
 /// [composed]: crate::layer
-/// [`Layer::default()`]: struct.Layer.html#method.default
+/// [`Layer::default()`]: Layer::default
 #[cfg_attr(docsrs, doc(cfg(all(feature = "fmt", feature = "std"))))]
 pub fn layer<S>() -> Layer<S> {
     Layer::default()
@@ -341,8 +341,8 @@ impl Subscriber {
     ///
     /// This can be overridden with the [`SubscriberBuilder::with_max_level`] method.
     ///
-    /// [verbosity level]: https://docs.rs/tracing-core/0.1.5/tracing_core/struct.Level.html
-    /// [`SubscriberBuilder::with_max_level`]: struct.SubscriberBuilder.html#method.with_max_level
+    /// [verbosity level]: tracing_core::Level
+    /// [`SubscriberBuilder::with_max_level`]: SubscriberBuilder::with_max_level
     pub const DEFAULT_MAX_LEVEL: LevelFilter = LevelFilter::INFO;
 
     /// Returns a new `SubscriberBuilder` for configuring a format subscriber.
@@ -396,6 +396,11 @@ where
     #[inline]
     fn record_follows_from(&self, span: &span::Id, follows: &span::Id) {
         self.inner.record_follows_from(span, follows)
+    }
+
+    #[inline]
+    fn event_enabled(&self, event: &Event<'_>) -> bool {
+        self.inner.event_enabled(event)
     }
 
     #[inline]
@@ -462,6 +467,7 @@ impl Default for SubscriberBuilder {
             filter: Subscriber::DEFAULT_MAX_LEVEL,
             inner: Default::default(),
         }
+        .log_internal_errors(true)
     }
 }
 
@@ -598,7 +604,7 @@ where
     /// `Layer`s added to this subscriber.
     ///
     /// [lifecycle]: https://docs.rs/tracing/latest/tracing/span/index.html#the-span-lifecycle
-    /// [time]: #method.without_time
+    /// [time]: SubscriberBuilder::without_time()
     pub fn with_span_events(self, kind: format::FmtSpan) -> Self {
         SubscriberBuilder {
             inner: self.inner.with_span_events(kind),
@@ -606,12 +612,47 @@ where
         }
     }
 
-    /// Enable ANSI encoding for formatted events.
+    /// Sets whether or not the formatter emits ANSI terminal escape codes
+    /// for colors and other text formatting.
+    ///
+    /// Enabling ANSI escapes (calling `with_ansi(true)`) requires the "ansi"
+    /// crate feature flag. Calling `with_ansi(true)` without the "ansi"
+    /// feature flag enabled will panic if debug assertions are enabled, or
+    /// print a warning otherwise.
+    ///
+    /// This method itself is still available without the feature flag. This
+    /// is to allow ANSI escape codes to be explicitly *disabled* without
+    /// having to opt-in to the dependencies required to emit ANSI formatting.
+    /// This way, code which constructs a formatter that should never emit
+    /// ANSI escape codes can ensure that they are not used, regardless of
+    /// whether or not other crates in the dependency graph enable the "ansi"
+    /// feature flag.
     #[cfg(feature = "ansi")]
     #[cfg_attr(docsrs, doc(cfg(feature = "ansi")))]
     pub fn with_ansi(self, ansi: bool) -> SubscriberBuilder<N, format::Format<L, T>, F, W> {
         SubscriberBuilder {
             inner: self.inner.with_ansi(ansi),
+            ..self
+        }
+    }
+
+    /// Sets whether to write errors from [`FormatEvent`] to the writer.
+    /// Defaults to true.
+    ///
+    /// By default, `fmt::Layer` will write any `FormatEvent`-internal errors to
+    /// the writer. These errors are unlikely and will only occur if there is a
+    /// bug in the `FormatEvent` implementation or its dependencies.
+    ///
+    /// If writing to the writer fails, the error message is printed to stderr
+    /// as a fallback.
+    ///
+    /// [`FormatEvent`]: crate::fmt::FormatEvent
+    pub fn log_internal_errors(
+        self,
+        log_internal_errors: bool,
+    ) -> SubscriberBuilder<N, format::Format<L, T>, F, W> {
+        SubscriberBuilder {
+            inner: self.inner.log_internal_errors(log_internal_errors),
             ..self
         }
     }
@@ -667,9 +708,9 @@ where
     }
 
     /// Sets whether or not the [name] of the current thread is displayed
-    /// when formatting events
+    /// when formatting events.
     ///
-    /// [name]: https://doc.rust-lang.org/stable/std/thread/index.html#naming-threads
+    /// [name]: std::thread#naming-threads
     pub fn with_thread_names(
         self,
         display_thread_names: bool,
@@ -681,9 +722,9 @@ where
     }
 
     /// Sets whether or not the [thread ID] of the current thread is displayed
-    /// when formatting events
+    /// when formatting events.
     ///
-    /// [thread ID]: https://doc.rust-lang.org/stable/std/thread/struct.ThreadId.html
+    /// [thread ID]: std::thread::ThreadId
     pub fn with_thread_ids(
         self,
         display_thread_ids: bool,
@@ -721,7 +762,7 @@ where
 
     /// Sets the subscriber being built to use a JSON formatter.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`] for details.
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn json(
@@ -742,7 +783,7 @@ where
 impl<T, F, W> SubscriberBuilder<format::JsonFields, format::Format<format::Json, T>, F, W> {
     /// Sets the json subscriber being built to flatten event metadata.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`] for details.
     pub fn flatten_event(
         self,
         flatten_event: bool,
@@ -756,7 +797,7 @@ impl<T, F, W> SubscriberBuilder<format::JsonFields, format::Format<format::Json,
     /// Sets whether or not the JSON subscriber being built will include the current span
     /// in formatted events.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`] for details.
     pub fn with_current_span(
         self,
         display_current_span: bool,
@@ -770,7 +811,7 @@ impl<T, F, W> SubscriberBuilder<format::JsonFields, format::Format<format::Json,
     /// Sets whether or not the JSON subscriber being built will include a list (from
     /// root to leaf) of all currently entered spans in formatted events.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`] for details.
     pub fn with_span_list(
         self,
         display_span_list: bool,
@@ -892,8 +933,8 @@ impl<N, E, F, W> SubscriberBuilder<N, E, F, W> {
     ///     .try_init()?;
     /// # Ok(())}
     /// ```
-    /// [`EnvFilter`]: ../filter/struct.EnvFilter.html
-    /// [`with_max_level`]: #method.with_max_level
+    /// [`EnvFilter`]: super::filter::EnvFilter
+    /// [`with_max_level`]: SubscriberBuilder::with_max_level()
     #[cfg(feature = "env-filter")]
     #[cfg_attr(docsrs, doc(cfg(feature = "env-filter")))]
     pub fn with_env_filter(
@@ -936,7 +977,7 @@ impl<N, E, F, W> SubscriberBuilder<N, E, F, W> {
     ///     .with_max_level(LevelFilter::OFF)
     ///     .finish();
     /// ```
-    /// [verbosity level]: https://docs.rs/tracing-core/0.1.5/tracing_core/struct.Level.html
+    /// [verbosity level]: tracing_core::Level
     /// [`EnvFilter`]: struct@crate::filter::EnvFilter
     /// [`with_env_filter`]: fn@Self::with_env_filter
     pub fn with_max_level(
@@ -1029,7 +1070,7 @@ impl<N, E, F, W> SubscriberBuilder<N, E, F, W> {
     ///
     /// [capturing]:
     /// https://doc.rust-lang.org/book/ch11-02-running-tests.html#showing-function-output
-    /// [`TestWriter`]: writer/struct.TestWriter.html
+    /// [`TestWriter`]: writer::TestWriter
     pub fn with_test_writer(self) -> SubscriberBuilder<N, E, F, TestWriter> {
         SubscriberBuilder {
             filter: self.filter,
@@ -1138,8 +1179,7 @@ impl<N, E, F, W> SubscriberBuilder<N, E, F, W> {
 ///
 /// [`LogTracer`]:
 ///     https://docs.rs/tracing-log/0.1.0/tracing_log/struct.LogTracer.html
-/// [`RUST_LOG` environment variable]:
-///     ../filter/struct.EnvFilter.html#associatedconstant.DEFAULT_ENV
+/// [`RUST_LOG` environment variable]: crate::filter::EnvFilter::DEFAULT_ENV
 pub fn try_init() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let builder = Subscriber::builder();
 
@@ -1182,21 +1222,26 @@ pub fn try_init() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 /// Install a global tracing subscriber that listens for events and
 /// filters based on the value of the [`RUST_LOG` environment variable].
 ///
+/// The configuration of the subscriber initialized by this function
+/// depends on what [feature flags](crate#feature-flags) are enabled.
+///
 /// If the `tracing-log` feature is enabled, this will also install
 /// the LogTracer to convert `Log` records into `tracing` `Event`s.
 ///
-/// This is shorthand for
+/// If the `env-filter` feature is enabled, this is shorthand for
 ///
 /// ```rust
-/// tracing_subscriber::fmt().init()
+/// # use tracing_subscriber::EnvFilter;
+/// tracing_subscriber::fmt()
+///     .with_env_filter(EnvFilter::from_default_env())
+///     .init();
 /// ```
 ///
 /// # Panics
 /// Panics if the initialization was unsuccessful, likely because a
 /// global subscriber was already installed by another call to `try_init`.
 ///
-/// [`RUST_LOG` environment variable]:
-///     ../filter/struct.EnvFilter.html#associatedconstant.DEFAULT_ENV
+/// [`RUST_LOG` environment variable]: crate::filter::EnvFilter::DEFAULT_ENV
 pub fn init() {
     try_init().expect("Unable to install global subscriber")
 }
@@ -1259,6 +1304,9 @@ mod test {
             Self { buf }
         }
 
+        // this is currently only used by the JSON formatter tests. if we need
+        // it elsewhere in the future, feel free to remove the `#[cfg]`
+        // attribute!
         #[cfg(feature = "json")]
         pub(crate) fn buf(&self) -> MutexGuard<'_, Vec<u8>> {
             self.buf.lock().unwrap()

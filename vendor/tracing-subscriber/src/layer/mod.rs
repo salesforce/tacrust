@@ -268,7 +268,7 @@
 //! more convenient, but [`Box::new`] may be used as well.
 //!
 //! When the number of `Layer`s varies at runtime, note that a
-//! [`Vec<L> where L: `Layer`` also implements `Layer`][vec-impl]. This
+//! [`Vec<L> where L: Layer` also implements `Layer`][vec-impl]. This
 //! can be used to add a variable number of `Layer`s to a `Subscriber`:
 //!
 //! ```
@@ -370,6 +370,7 @@
 //!
 //! [option-impl]: Layer#impl-Layer<S>-for-Option<L>
 //! [box-impl]: Layer#impl-Layer%3CS%3E-for-Box%3Cdyn%20Layer%3CS%3E%20+%20Send%20+%20Sync%3E
+//! [vec-impl]: Layer#impl-Layer<S>-for-Vec<L>
 //! [prelude]: crate::prelude
 //!
 //! # Recording Traces
@@ -414,6 +415,28 @@
 //! [`Interest::never()`] from its [`register_callsite`] method, filter
 //! evaluation will short-circuit and the span or event will be disabled.
 //!
+//! ### Enabling Interest
+//!
+//! Whenever an tracing event (or span) is emitted, it goes through a number of
+//! steps to determine how and how much it should be processed. The earlier an
+//! event is disabled, the less work has to be done to process the event, so
+//! `Layer`s that implement filtering should attempt to disable unwanted
+//! events as early as possible. In order, each event checks:
+//!
+//! - [`register_callsite`], once per callsite (roughly: once per time that
+//!   `event!` or `span!` is written in the source code; this is cached at the
+//!   callsite). See [`Subscriber::register_callsite`] and
+//!   [`tracing_core::callsite`] for a summary of how this behaves.
+//! - [`enabled`], once per emitted event (roughly: once per time that `event!`
+//!   or `span!` is *executed*), and only if `register_callsite` regesters an
+//!   [`Interest::sometimes`]. This is the main customization point to globally
+//!   filter events based on their [`Metadata`]. If an event can be disabled
+//!   based only on [`Metadata`], it should be, as this allows the construction
+//!   of the actual `Event`/`Span` to be skipped.
+//! - For events only (and not spans), [`event_enabled`] is called just before
+//!   processing the event. This gives layers one last chance to say that
+//!   an event should be filtered out, now that the event's fields are known.
+//!
 //! ## Per-Layer Filtering
 //!
 //! **Note**: per-layer filtering APIs currently require the [`"registry"` crate
@@ -444,6 +467,24 @@
 //! and [`DynFilterFn`] types allow implementing a [`Filter`] with a closure or
 //! function pointer. In addition, when more control is required, the [`Filter`]
 //! trait may also be implemented for user-defined types.
+//!
+//! //! [`Option<Filter>`] also implements [`Filter`], which allows for an optional
+//! filter. [`None`](Option::None) filters out _nothing_ (that is, allows
+//! everything through). For example:
+//!
+//! ```rust
+//! # use tracing_subscriber::{filter::filter_fn, Layer};
+//! # use tracing_core::{Metadata, subscriber::Subscriber};
+//! # struct MyLayer<S>(std::marker::PhantomData<S>);
+//! # impl<S> MyLayer<S> { fn new() -> Self { Self(std::marker::PhantomData)} }
+//! # impl<S: Subscriber> Layer<S> for MyLayer<S> {}
+//! # fn my_filter(_: &str) -> impl Fn(&Metadata) -> bool { |_| true  }
+//! fn setup_tracing<S: Subscriber>(filter_config: Option<&str>) {
+//!     let layer = MyLayer::<S>::new()
+//!         .with_filter(filter_config.map(|config| filter_fn(my_filter(config))));
+//! //...
+//! }
+//! ```
 //!
 //! <pre class="compile_fail" style="white-space:normal;font:inherit;">
 //!     <strong>Warning</strong>: Currently, the <a href="../struct.Registry.html">
@@ -628,15 +669,16 @@
 //! # Ok(()) }
 //! ```
 //!
-//! [`Subscriber`]: https://docs.rs/tracing-core/latest/tracing_core/subscriber/trait.Subscriber.html
-//! [span IDs]: https://docs.rs/tracing-core/latest/tracing_core/span/struct.Id.html
+//! [`Subscriber`]: tracing_core::subscriber::Subscriber
+//! [span IDs]: tracing_core::span::Id
 //! [the current span]: Context::current_span
 //! [`register_callsite`]: Layer::register_callsite
 //! [`enabled`]: Layer::enabled
+//! [`event_enabled`]: Layer::event_enabled
 //! [`on_enter`]: Layer::on_enter
 //! [`Layer::register_callsite`]: Layer::register_callsite
 //! [`Layer::enabled`]: Layer::enabled
-//! [`Interest::never()`]: https://docs.rs/tracing-core/latest/tracing_core/subscriber/struct.Interest.html#method.never
+//! [`Interest::never()`]: tracing_core::subscriber::Interest::never()
 //! [`Filtered`]: crate::filter::Filtered
 //! [`filter`]: crate::filter
 //! [`Targets`]: crate::filter::Targets
@@ -654,7 +696,7 @@ use tracing_core::{
     metadata::Metadata,
     span,
     subscriber::{Interest, Subscriber},
-    Event, LevelFilter,
+    Dispatch, Event, LevelFilter,
 };
 
 use core::any::TypeId;
@@ -687,6 +729,31 @@ where
     S: Subscriber,
     Self: 'static,
 {
+    /// Performs late initialization when installing this layer as a
+    /// [`Subscriber`].
+    ///
+    /// ## Avoiding Memory Leaks
+    ///
+    /// `Layer`s should not store the [`Dispatch`] pointing to the [`Subscriber`]
+    /// that they are a part of. Because the `Dispatch` owns the `Subscriber`,
+    /// storing the `Dispatch` within the `Subscriber` will create a reference
+    /// count cycle, preventing the `Dispatch` from ever being dropped.
+    ///
+    /// Instead, when it is necessary to store a cyclical reference to the
+    /// `Dispatch` within a `Layer`, use [`Dispatch::downgrade`] to convert a
+    /// `Dispatch` into a [`WeakDispatch`]. This type is analogous to
+    /// [`std::sync::Weak`], and does not create a reference count cycle. A
+    /// [`WeakDispatch`] can be stored within a subscriber without causing a
+    /// memory leak, and can be [upgraded] into a `Dispatch` temporarily when
+    /// the `Dispatch` must be accessed by the subscriber.
+    ///
+    /// [`WeakDispatch`]: tracing_core::dispatcher::WeakDispatch
+    /// [upgraded]: tracing_core::dispatcher::WeakDispatch::upgrade
+    /// [`Subscriber`]: tracing_core::Subscriber
+    fn on_register_dispatch(&self, subscriber: &Dispatch) {
+        let _ = subscriber;
+    }
+
     /// Performs late initialization when attaching a `Layer` to a
     /// [`Subscriber`].
     ///
@@ -748,15 +815,15 @@ where
     /// globally enable or disable those callsites, it should always return
     /// [`Interest::always()`].
     ///
-    /// [`Interest`]: https://docs.rs/tracing-core/latest/tracing_core/struct.Interest.html
-    /// [`Subscriber::register_callsite`]: https://docs.rs/tracing-core/latest/tracing_core/trait.Subscriber.html#method.register_callsite
-    /// [`Interest::never()`]: https://docs.rs/tracing-core/latest/tracing_core/subscriber/struct.Interest.html#method.never
-    /// [`Interest::always()`]: https://docs.rs/tracing-core/latest/tracing_core/subscriber/struct.Interest.html#method.always
-    /// [`self.enabled`]: #method.enabled
-    /// [`Layer::enabled`]: #method.enabled
-    /// [`on_event`]: #method.on_event
-    /// [`on_enter`]: #method.on_enter
-    /// [`on_exit`]: #method.on_exit
+    /// [`Interest`]: tracing_core::Interest
+    /// [`Subscriber::register_callsite`]: tracing_core::Subscriber::register_callsite()
+    /// [`Interest::never()`]: tracing_core::subscriber::Interest::never()
+    /// [`Interest::always()`]: tracing_core::subscriber::Interest::always()
+    /// [`self.enabled`]: Layer::enabled()
+    /// [`Layer::enabled`]: Layer::enabled()
+    /// [`on_event`]: Layer::on_event()
+    /// [`on_enter`]: Layer::on_enter()
+    /// [`on_exit`]: Layer::on_exit()
     /// [the trait-level documentation]: #filtering-with-layers
     fn register_callsite(&self, metadata: &'static Metadata<'static>) -> Interest {
         if self.enabled(metadata, Context::none()) {
@@ -791,13 +858,12 @@ where
     /// See [the trait-level documentation] for more information on filtering
     /// with `Layer`s.
     ///
-    /// [`Interest`]: https://docs.rs/tracing-core/latest/tracing_core/struct.Interest.html
-    /// [`Context`]: ../struct.Context.html
-    /// [`Subscriber::enabled`]: https://docs.rs/tracing-core/latest/tracing_core/trait.Subscriber.html#method.enabled
-    /// [`Layer::register_callsite`]: #method.register_callsite
-    /// [`on_event`]: #method.on_event
-    /// [`on_enter`]: #method.on_enter
-    /// [`on_exit`]: #method.on_exit
+    /// [`Interest`]: tracing_core::Interest
+    /// [`Subscriber::enabled`]: tracing_core::Subscriber::enabled()
+    /// [`Layer::register_callsite`]: Layer::register_callsite()
+    /// [`on_event`]: Layer::on_event()
+    /// [`on_enter`]: Layer::on_enter()
+    /// [`on_exit`]: Layer::on_exit()
     /// [the trait-level documentation]: #filtering-with-layers
     fn enabled(&self, metadata: &Metadata<'_>, ctx: Context<'_, S>) -> bool {
         let _ = (metadata, ctx);
@@ -831,6 +897,31 @@ where
     // only thing the `Context` type currently provides), but passing it in anyway
     // seems like a good future-proofing measure as it may grow other methods later...
     fn on_follows_from(&self, _span: &span::Id, _follows: &span::Id, _ctx: Context<'_, S>) {}
+
+    /// Called before [`on_event`], to determine if `on_event` should be called.
+    ///
+    /// <div class="example-wrap" style="display:inline-block">
+    /// <pre class="ignore" style="white-space:normal;font:inherit;">
+    ///
+    /// **Note**: This method determines whether an event is globally enabled,
+    /// *not* whether the individual `Layer` will be notified about the
+    /// event. This is intended to be used by `Layer`s that implement
+    /// filtering for the entire stack. `Layer`s which do not wish to be
+    /// notified about certain events but do not wish to globally disable them
+    /// should ignore those events in their [on_event][Self::on_event].
+    ///
+    /// </pre></div>
+    ///
+    /// See [the trait-level documentation] for more information on filtering
+    /// with `Layer`s.
+    ///
+    /// [`on_event`]: Self::on_event
+    /// [`Interest`]: tracing_core::Interest
+    /// [the trait-level documentation]: #filtering-with-layers
+    #[inline] // collapse this to a constant please mrs optimizer
+    fn event_enabled(&self, _event: &Event<'_>, _ctx: Context<'_, S>) -> bool {
+        true
+    }
 
     /// Notifies this layer that an event has occurred.
     fn on_event(&self, _event: &Event<'_>, _ctx: Context<'_, S>) {}
@@ -996,7 +1087,7 @@ where
     ///     .with_subscriber(MySubscriber::new());
     ///```
     ///
-    /// [`Subscriber`]: https://docs.rs/tracing-core/latest/tracing_core/trait.Subscriber.html
+    /// [`Subscriber`]: tracing_core::Subscriber
     fn with_subscriber(mut self, mut inner: S) -> Layered<Self, S>
     where
         Self: Sized,
@@ -1304,6 +1395,26 @@ feature! {
             Interest::sometimes()
         }
 
+        /// Called before the filtered [`Layer]'s [`on_event`], to determine if
+        /// `on_event` should be called.
+        ///
+        /// This gives a chance to filter events based on their fields. Note,
+        /// however, that this *does not* override [`enabled`], and is not even
+        /// called if [`enabled`] returns `false`.
+        ///
+        /// ## Default Implementation
+        ///
+        /// By default, this method returns `true`, indicating that no events are
+        /// filtered out based on their fields.
+        ///
+        /// [`enabled`]: crate::layer::Filter::enabled
+        /// [`on_event`]: crate::layer::Layer::on_event
+        #[inline] // collapse this to a constant please mrs optimizer
+        fn event_enabled(&self, event: &Event<'_>, cx: &Context<'_, S>) -> bool {
+            let _ = (event, cx);
+            true
+        }
+
         /// Returns an optional hint of the highest [verbosity level][level] that
         /// this `Filter` will enable.
         ///
@@ -1404,6 +1515,47 @@ pub struct Identity {
 
 // === impl Layer ===
 
+#[derive(Clone, Copy)]
+pub(crate) struct NoneLayerMarker(());
+static NONE_LAYER_MARKER: NoneLayerMarker = NoneLayerMarker(());
+
+/// Is a type implementing `Layer` `Option::<_>::None`?
+pub(crate) fn layer_is_none<L, S>(layer: &L) -> bool
+where
+    L: Layer<S>,
+    S: Subscriber,
+{
+    unsafe {
+        // Safety: we're not actually *doing* anything with this pointer ---
+        // this only care about the `Option`, which is essentially being used
+        // as a bool. We can rely on the pointer being valid, because it is
+        // a crate-private type, and is only returned by the `Layer` impl
+        // for `Option`s. However, even if the layer *does* decide to be
+        // evil and give us an invalid pointer here, that's fine, because we'll
+        // never actually dereference it.
+        layer.downcast_raw(TypeId::of::<NoneLayerMarker>())
+    }
+    .is_some()
+}
+
+/// Is a type implementing `Subscriber` `Option::<_>::None`?
+pub(crate) fn subscriber_is_none<S>(subscriber: &S) -> bool
+where
+    S: Subscriber,
+{
+    unsafe {
+        // Safety: we're not actually *doing* anything with this pointer ---
+        // this only care about the `Option`, which is essentially being used
+        // as a bool. We can rely on the pointer being valid, because it is
+        // a crate-private type, and is only returned by the `Layer` impl
+        // for `Option`s. However, even if the subscriber *does* decide to be
+        // evil and give us an invalid pointer here, that's fine, because we'll
+        // never actually dereference it.
+        subscriber.downcast_raw(TypeId::of::<NoneLayerMarker>())
+    }
+    .is_some()
+}
+
 impl<L, S> Layer<S> for Option<L>
 where
     L: Layer<S>,
@@ -1442,7 +1594,11 @@ where
     fn max_level_hint(&self) -> Option<LevelFilter> {
         match self {
             Some(ref inner) => inner.max_level_hint(),
-            None => None,
+            None => {
+                // There is no inner layer, so this layer will
+                // never enable anything.
+                Some(LevelFilter::OFF)
+            }
         }
     }
 
@@ -1457,6 +1613,14 @@ where
     fn on_follows_from(&self, span: &span::Id, follows: &span::Id, ctx: Context<'_, S>) {
         if let Some(ref inner) = self {
             inner.on_follows_from(span, follows, ctx);
+        }
+    }
+
+    #[inline]
+    fn event_enabled(&self, event: &Event<'_>, ctx: Context<'_, S>) -> bool {
+        match self {
+            Some(ref inner) => inner.event_enabled(event, ctx),
+            None => true,
         }
     }
 
@@ -1500,6 +1664,8 @@ where
     unsafe fn downcast_raw(&self, id: TypeId) -> Option<*const ()> {
         if id == TypeId::of::<Self>() {
             Some(self as *const _ as *const ())
+        } else if id == TypeId::of::<NoneLayerMarker>() && self.is_none() {
+            Some(&NONE_LAYER_MARKER as *const _ as *const ())
         } else {
             self.as_ref().and_then(|inner| inner.downcast_raw(id))
         }
@@ -1513,6 +1679,11 @@ feature! {
 
     macro_rules! layer_impl_body {
         () => {
+            #[inline]
+            fn on_register_dispatch(&self, subscriber: &Dispatch) {
+                self.deref().on_register_dispatch(subscriber);
+            }
+
             #[inline]
             fn on_layer(&mut self, subscriber: &mut S) {
                 self.deref_mut().on_layer(subscriber);
@@ -1546,6 +1717,11 @@ feature! {
             #[inline]
             fn on_follows_from(&self, span: &span::Id, follows: &span::Id, ctx: Context<'_, S>) {
                 self.deref().on_follows_from(span, follows, ctx)
+            }
+
+            #[inline]
+            fn event_enabled(&self, event: &Event<'_>, ctx: Context<'_, S>) -> bool {
+                self.deref().event_enabled(event, ctx)
             }
 
             #[inline]
@@ -1629,6 +1805,10 @@ feature! {
             self.iter().all(|l| l.enabled(metadata, ctx.clone()))
         }
 
+        fn event_enabled(&self, event: &Event<'_>, ctx: Context<'_, S>) -> bool {
+            self.iter().all(|l| l.event_enabled(event, ctx.clone()))
+        }
+
         fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
             for l in self {
                 l.on_new_span(attrs, id, ctx.clone());
@@ -1636,7 +1816,8 @@ feature! {
         }
 
         fn max_level_hint(&self) -> Option<LevelFilter> {
-            let mut max_level = LevelFilter::ERROR;
+            // Default to `OFF` if there are no inner layers.
+            let mut max_level = LevelFilter::OFF;
             for l in self {
                 // NOTE(eliza): this is slightly subtle: if *any* layer
                 // returns `None`, we have to return `None`, assuming there is

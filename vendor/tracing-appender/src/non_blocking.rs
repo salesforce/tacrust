@@ -19,7 +19,7 @@
 //! tracing_appender::non_blocking(std::io::stdout())
 //! # }
 //! ```
-//! [builder]: ./struct.NonBlockingBuilder.html#method.default
+//! [builder]: NonBlockingBuilder::default
 //!
 //! <br/> This function returns a tuple of `NonBlocking` and `WorkerGuard`.
 //! `NonBlocking` implements [`MakeWriter`] which integrates with `tracing_subscriber`.
@@ -33,7 +33,7 @@
 //!
 //! See [`WorkerGuard`][worker_guard] for examples of using the guard.
 //!
-//! [worker_guard]: ./struct.WorkerGuard.html
+//! [worker_guard]: WorkerGuard
 //!
 //! # Examples
 //!
@@ -65,7 +65,7 @@ use tracing_subscriber::fmt::MakeWriter;
 /// backpressure will be exerted on senders, causing them to block their
 /// respective threads until there is available capacity.
 ///
-/// [non-blocking]: ./struct.NonBlocking.html
+/// [non-blocking]: NonBlocking
 /// Recommended to be a power of 2.
 pub const DEFAULT_BUFFERED_LINES_LIMIT: usize = 128_000;
 
@@ -78,7 +78,6 @@ pub const DEFAULT_BUFFERED_LINES_LIMIT: usize = 128_000;
 /// terminates abruptly (such as through an uncaught `panic` or a `std::process::exit`), some spans
 /// or events may not be written.
 ///
-/// [`NonBlocking`]: ./struct.NonBlocking.html
 /// Since spans/events and events recorded near a crash are often necessary for diagnosing the failure,
 /// `WorkerGuard` provides a mechanism to ensure that _all_ buffered logs are flushed to their output.
 /// `WorkerGuard` should be assigned in the `main` function or whatever the entrypoint of the program is.
@@ -121,8 +120,8 @@ pub struct WorkerGuard {
 /// crate. Therefore, it can be used with the [`tracing_subscriber::fmt`][fmt] module
 /// or with any other subscriber/layer implementation that uses the `MakeWriter` trait.
 ///
-/// [make_writer]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/trait.MakeWriter.html
-/// [fmt]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/index.html
+/// [make_writer]: tracing_subscriber::fmt::MakeWriter
+/// [fmt]: mod@tracing_subscriber::fmt
 #[derive(Clone, Debug)]
 pub struct NonBlocking {
     error_counter: ErrorCounter,
@@ -145,24 +144,28 @@ impl NonBlocking {
     /// The returned `NonBlocking` writer will have the [default configuration][default] values.
     /// Other configurations can be specified using the [builder] interface.
     ///
-    /// [default]: ./struct.NonBlockingBuilder.html#method.default
-    /// [builder]: ./struct.NonBlockingBuilder.html
-    pub fn new<T: Write + Send + Sync + 'static>(writer: T) -> (NonBlocking, WorkerGuard) {
+    /// [default]: NonBlockingBuilder::default
+    /// [builder]: NonBlockingBuilder
+    pub fn new<T: Write + Send + 'static>(writer: T) -> (NonBlocking, WorkerGuard) {
         NonBlockingBuilder::default().finish(writer)
     }
 
-    fn create<T: Write + Send + Sync + 'static>(
+    fn create<T: Write + Send + 'static>(
         writer: T,
         buffered_lines_limit: usize,
         is_lossy: bool,
+        thread_name: String,
     ) -> (NonBlocking, WorkerGuard) {
         let (sender, receiver) = bounded(buffered_lines_limit);
 
         let (shutdown_sender, shutdown_receiver) = bounded(0);
 
         let worker = Worker::new(receiver, writer, shutdown_receiver);
-        let worker_guard =
-            WorkerGuard::new(worker.worker_thread(), sender.clone(), shutdown_sender);
+        let worker_guard = WorkerGuard::new(
+            worker.worker_thread(thread_name),
+            sender.clone(),
+            shutdown_sender,
+        );
 
         (
             Self {
@@ -183,11 +186,12 @@ impl NonBlocking {
 
 /// A builder for [`NonBlocking`][non-blocking].
 ///
-/// [non-blocking]: ./struct.NonBlocking.html
+/// [non-blocking]: NonBlocking
 #[derive(Debug)]
 pub struct NonBlockingBuilder {
     buffered_lines_limit: usize,
     is_lossy: bool,
+    thread_name: String,
 }
 
 impl NonBlockingBuilder {
@@ -208,9 +212,22 @@ impl NonBlockingBuilder {
         self
     }
 
+    /// Override the worker thread's name.
+    ///
+    /// The default worker thread name is "tracing-appender".
+    pub fn thread_name(mut self, name: &str) -> NonBlockingBuilder {
+        self.thread_name = name.to_string();
+        self
+    }
+
     /// Completes the builder, returning the configured `NonBlocking`.
-    pub fn finish<T: Write + Send + Sync + 'static>(self, writer: T) -> (NonBlocking, WorkerGuard) {
-        NonBlocking::create(writer, self.buffered_lines_limit, self.is_lossy)
+    pub fn finish<T: Write + Send + 'static>(self, writer: T) -> (NonBlocking, WorkerGuard) {
+        NonBlocking::create(
+            writer,
+            self.buffered_lines_limit,
+            self.is_lossy,
+            self.thread_name,
+        )
     }
 }
 
@@ -219,6 +236,7 @@ impl Default for NonBlockingBuilder {
         NonBlockingBuilder {
             buffered_lines_limit: DEFAULT_BUFFERED_LINES_LIMIT,
             is_lossy: true,
+            thread_name: "tracing-appender".to_string(),
         }
     }
 }

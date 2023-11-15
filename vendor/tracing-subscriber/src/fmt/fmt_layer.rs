@@ -5,7 +5,9 @@ use crate::{
     registry::{self, LookupSpan, SpanRef},
 };
 use format::{FmtSpan, TimingDisplay};
-use std::{any::TypeId, cell::RefCell, fmt, io, marker::PhantomData, ops::Deref, time::Instant};
+use std::{
+    any::TypeId, cell::RefCell, env, fmt, io, marker::PhantomData, ops::Deref, time::Instant,
+};
 use tracing_core::{
     field,
     span::{Attributes, Current, Id, Record},
@@ -56,7 +58,7 @@ use tracing_core::{
 /// # tracing::subscriber::set_global_default(subscriber).unwrap();
 /// ```
 ///
-/// [`Layer`]: ../layer/trait.Layer.html
+/// [`Layer`]: super::layer::Layer
 #[cfg_attr(docsrs, doc(cfg(all(feature = "fmt", feature = "std"))))]
 #[derive(Debug)]
 pub struct Layer<
@@ -70,11 +72,12 @@ pub struct Layer<
     fmt_event: E,
     fmt_span: format::FmtSpanConfig,
     is_ansi: bool,
+    log_internal_errors: bool,
     _inner: PhantomData<fn(S)>,
 }
 
 impl<S> Layer<S> {
-    /// Returns a new [`Layer`](struct.Layer.html) with the default configuration.
+    /// Returns a new [`Layer`][self::Layer] with the default configuration.
     pub fn new() -> Self {
         Self::default()
     }
@@ -119,6 +122,7 @@ where
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -148,6 +152,7 @@ where
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -180,6 +185,7 @@ impl<S, N, E, W> Layer<S, N, E, W> {
             fmt_event: self.fmt_event,
             fmt_span: self.fmt_span,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             make_writer,
             _inner: self._inner,
         }
@@ -256,24 +262,77 @@ impl<S, N, E, W> Layer<S, N, E, W> {
     /// ```
     /// [capturing]:
     /// https://doc.rust-lang.org/book/ch11-02-running-tests.html#showing-function-output
-    /// [`TestWriter`]: writer/struct.TestWriter.html
+    /// [`TestWriter`]: super::writer::TestWriter
     pub fn with_test_writer(self) -> Layer<S, N, E, TestWriter> {
         Layer {
             fmt_fields: self.fmt_fields,
             fmt_event: self.fmt_event,
             fmt_span: self.fmt_span,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             make_writer: TestWriter::default(),
             _inner: self._inner,
         }
     }
 
-    /// Enable ANSI terminal colors for formatted output.
-    #[cfg(feature = "ansi")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "ansi")))]
+    /// Sets whether or not the formatter emits ANSI terminal escape codes
+    /// for colors and other text formatting.
+    ///
+    /// When the "ansi" crate feature flag is enabled, ANSI colors are enabled
+    /// by default unless the [`NO_COLOR`] environment variable is set to
+    /// a non-empty value.  If the [`NO_COLOR`] environment variable is set to
+    /// any non-empty value, then ANSI colors will be suppressed by default.
+    /// The [`with_ansi`] and [`set_ansi`] methods can be used to forcibly
+    /// enable ANSI colors, overriding any [`NO_COLOR`] environment variable.
+    ///
+    /// [`NO_COLOR`]: https://no-color.org/
+    ///
+    /// Enabling ANSI escapes (calling `with_ansi(true)`) requires the "ansi"
+    /// crate feature flag. Calling `with_ansi(true)` without the "ansi"
+    /// feature flag enabled will panic if debug assertions are enabled, or
+    /// print a warning otherwise.
+    ///
+    /// This method itself is still available without the feature flag. This
+    /// is to allow ANSI escape codes to be explicitly *disabled* without
+    /// having to opt-in to the dependencies required to emit ANSI formatting.
+    /// This way, code which constructs a formatter that should never emit
+    /// ANSI escape codes can ensure that they are not used, regardless of
+    /// whether or not other crates in the dependency graph enable the "ansi"
+    /// feature flag.
+    ///
+    /// [`with_ansi`]: Subscriber::with_ansi
+    /// [`set_ansi`]: Subscriber::set_ansi
     pub fn with_ansi(self, ansi: bool) -> Self {
+        #[cfg(not(feature = "ansi"))]
+        if ansi {
+            const ERROR: &str =
+                "tracing-subscriber: the `ansi` crate feature is required to enable ANSI terminal colors";
+            #[cfg(debug_assertions)]
+            panic!("{}", ERROR);
+            #[cfg(not(debug_assertions))]
+            eprintln!("{}", ERROR);
+        }
+
         Self {
             is_ansi: ansi,
+            ..self
+        }
+    }
+
+    /// Sets whether to write errors from [`FormatEvent`] to the writer.
+    /// Defaults to true.
+    ///
+    /// By default, `fmt::Layer` will write any `FormatEvent`-internal errors to
+    /// the writer. These errors are unlikely and will only occur if there is a
+    /// bug in the `FormatEvent` implementation or its dependencies.
+    ///
+    /// If writing to the writer fails, the error message is printed to stderr
+    /// as a fallback.
+    ///
+    /// [`FormatEvent`]: crate::fmt::FormatEvent
+    pub fn log_internal_errors(self, log_internal_errors: bool) -> Self {
+        Self {
+            log_internal_errors,
             ..self
         }
     }
@@ -306,6 +365,7 @@ impl<S, N, E, W> Layer<S, N, E, W> {
             fmt_event: self.fmt_event,
             fmt_span: self.fmt_span,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             make_writer: f(self.make_writer),
             _inner: self._inner,
         }
@@ -337,6 +397,7 @@ where
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -349,6 +410,7 @@ where
             fmt_span: self.fmt_span.without_time(),
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -393,7 +455,7 @@ where
     /// `Layer`s added to this subscriber.
     ///
     /// [lifecycle]: https://docs.rs/tracing/latest/tracing/span/index.html#the-span-lifecycle
-    /// [time]: #method.without_time
+    /// [time]: Layer::without_time()
     pub fn with_span_events(self, kind: FmtSpan) -> Self {
         Layer {
             fmt_span: self.fmt_span.with_kind(kind),
@@ -442,9 +504,9 @@ where
     }
 
     /// Sets whether or not the [thread ID] of the current thread is displayed
-    /// when formatting events
+    /// when formatting events.
     ///
-    /// [thread ID]: https://doc.rust-lang.org/stable/std/thread/struct.ThreadId.html
+    /// [thread ID]: std::thread::ThreadId
     pub fn with_thread_ids(self, display_thread_ids: bool) -> Layer<S, N, format::Format<L, T>, W> {
         Layer {
             fmt_event: self.fmt_event.with_thread_ids(display_thread_ids),
@@ -453,9 +515,9 @@ where
     }
 
     /// Sets whether or not the [name] of the current thread is displayed
-    /// when formatting events
+    /// when formatting events.
     ///
-    /// [name]: https://doc.rust-lang.org/stable/std/thread/index.html#naming-threads
+    /// [name]: std::thread#naming-threads
     pub fn with_thread_names(
         self,
         display_thread_names: bool,
@@ -466,7 +528,7 @@ where
         }
     }
 
-    /// Sets the layer being built to use a [less verbose formatter](../fmt/format/struct.Compact.html).
+    /// Sets the layer being built to use a [less verbose formatter][super::format::Compact].
     pub fn compact(self) -> Layer<S, N, format::Format<format::Compact, T>, W>
     where
         N: for<'writer> FormatFields<'writer> + 'static,
@@ -477,6 +539,7 @@ where
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -491,11 +554,12 @@ where
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
 
-    /// Sets the layer being built to use a [JSON formatter](../fmt/format/struct.Json.html).
+    /// Sets the layer being built to use a [JSON formatter][super::format::Json].
     ///
     /// The full format includes fields from all entered spans.
     ///
@@ -510,7 +574,7 @@ where
     /// - [`Layer::flatten_event`] can be used to enable flattening event fields into the root
     /// object.
     ///
-    /// [`Layer::flatten_event`]: #method.flatten_event
+    /// [`Layer::flatten_event`]: Layer::flatten_event()
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn json(self) -> Layer<S, format::JsonFields, format::Format<format::Json, T>, W> {
@@ -521,6 +585,7 @@ where
             make_writer: self.make_writer,
             // always disable ANSI escapes in JSON mode!
             is_ansi: false,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -531,7 +596,7 @@ where
 impl<S, T, W> Layer<S, format::JsonFields, format::Format<format::Json, T>, W> {
     /// Sets the JSON layer being built to flatten event metadata.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`][super::format::Json]
     pub fn flatten_event(
         self,
         flatten_event: bool,
@@ -546,7 +611,7 @@ impl<S, T, W> Layer<S, format::JsonFields, format::Format<format::Json, T>, W> {
     /// Sets whether or not the formatter will include the current span in
     /// formatted events.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`][super::format::Json]
     pub fn with_current_span(
         self,
         display_current_span: bool,
@@ -561,7 +626,7 @@ impl<S, T, W> Layer<S, format::JsonFields, format::Format<format::Json, T>, W> {
     /// Sets whether or not the formatter will include a list (from root to leaf)
     /// of all currently entered spans in formatted events.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`][super::format::Json]
     pub fn with_span_list(
         self,
         display_span_list: bool,
@@ -587,6 +652,7 @@ impl<S, N, E, W> Layer<S, N, E, W> {
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -617,6 +683,7 @@ impl<S, N, E, W> Layer<S, N, E, W> {
             fmt_span: self.fmt_span,
             make_writer: self.make_writer,
             is_ansi: self.is_ansi,
+            log_internal_errors: self.log_internal_errors,
             _inner: self._inner,
         }
     }
@@ -624,12 +691,17 @@ impl<S, N, E, W> Layer<S, N, E, W> {
 
 impl<S> Default for Layer<S> {
     fn default() -> Self {
+        // only enable ANSI when the feature is enabled, and the NO_COLOR
+        // environment variable is unset or empty.
+        let ansi = cfg!(feature = "ansi") && env::var("NO_COLOR").map_or(true, |v| v.is_empty());
+
         Layer {
             fmt_fields: format::DefaultFields::default(),
             fmt_event: format::Format::default(),
             fmt_span: format::FmtSpanConfig::default(),
             make_writer: io::stdout,
-            is_ansi: cfg!(feature = "ansi"),
+            is_ansi: ansi,
+            log_internal_errors: false,
             _inner: PhantomData,
         }
     }
@@ -660,7 +732,7 @@ where
 /// formatters are in use, each can store its own formatted representation
 /// without conflicting.
 ///
-/// [extensions]: ../registry/struct.Extensions.html
+/// [extensions]: crate::registry::Extensions
 #[derive(Default)]
 pub struct FormattedFields<E: ?Sized> {
     _format_fields: PhantomData<fn(E)>,
@@ -721,7 +793,7 @@ macro_rules! with_event_from_span {
         #[allow(unused)]
         let mut iter = fs.iter();
         let v = [$(
-            (&iter.next().unwrap(), Some(&$value as &dyn field::Value)),
+            (&iter.next().unwrap(), ::core::option::Option::Some(&$value as &dyn field::Value)),
         )*];
         let vs = fs.value_set(&v);
         let $event = Event::new_child_of($id, meta, &vs);
@@ -749,6 +821,11 @@ where
             {
                 fields.was_ansi = self.is_ansi;
                 extensions.insert(fields);
+            } else {
+                eprintln!(
+                    "[tracing-subscriber] Unable to format the following event, ignoring: {:?}",
+                    attrs
+                );
             }
         }
 
@@ -895,7 +972,20 @@ where
                 .is_ok()
             {
                 let mut writer = self.make_writer.make_writer_for(event.metadata());
-                let _ = io::Write::write_all(&mut writer, buf.as_bytes());
+                let res = io::Write::write_all(&mut writer, buf.as_bytes());
+                if self.log_internal_errors {
+                    if let Err(e) = res {
+                        eprintln!("[tracing-subscriber] Unable to write an event to the Writer for this Subscriber! Error: {}\n", e);
+                    }
+                }
+            } else if self.log_internal_errors {
+                let err_msg = format!("Unable to format the following event. Name: {}; Fields: {:?}\n",
+                    event.metadata().name(), event.fields());
+                let mut writer = self.make_writer.make_writer_for(event.metadata());
+                let res = io::Write::write_all(&mut writer, err_msg.as_bytes());
+                if let Err(e) = res {
+                    eprintln!("[tracing-subscriber] Unable to write an \"event formatting error\" to the Writer for this Subscriber! Error: {}\n", e);
+                }
             }
 
             buf.clear();
@@ -984,7 +1074,7 @@ where
     /// If this returns `None`, then no span exists for that ID (either it has
     /// closed or the ID is invalid).
     ///
-    /// [stored data]: ../registry/struct.SpanRef.html
+    /// [stored data]: crate::registry::SpanRef
     #[inline]
     pub fn span(&self, id: &Id) -> Option<SpanRef<'_, S>>
     where
@@ -1007,7 +1097,7 @@ where
     ///
     /// If this returns `None`, then we are not currently within a span.
     ///
-    /// [stored data]: ../registry/struct.SpanRef.html
+    /// [stored data]: crate::registry::SpanRef
     #[inline]
     pub fn lookup_current(&self) -> Option<SpanRef<'_, S>>
     where
@@ -1193,6 +1283,69 @@ mod test {
     }
 
     #[test]
+    fn format_error_print_to_stderr() {
+        struct AlwaysError;
+
+        impl std::fmt::Debug for AlwaysError {
+            fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                Err(std::fmt::Error)
+            }
+        }
+
+        let make_writer = MockMakeWriter::default();
+        let subscriber = crate::fmt::Subscriber::builder()
+            .with_writer(make_writer.clone())
+            .with_level(false)
+            .with_ansi(false)
+            .with_timer(MockTime)
+            .finish();
+
+        with_default(subscriber, || {
+            tracing::info!(?AlwaysError);
+        });
+        let actual = sanitize_timings(make_writer.get_string());
+
+        // Only assert the start because the line number and callsite may change.
+        let expected = concat!(
+            "Unable to format the following event. Name: event ",
+            file!(),
+            ":"
+        );
+        assert!(
+            actual.as_str().starts_with(expected),
+            "\nactual = {}\nshould start with expected = {}\n",
+            actual,
+            expected
+        );
+    }
+
+    #[test]
+    fn format_error_ignore_if_log_internal_errors_is_false() {
+        struct AlwaysError;
+
+        impl std::fmt::Debug for AlwaysError {
+            fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                Err(std::fmt::Error)
+            }
+        }
+
+        let make_writer = MockMakeWriter::default();
+        let subscriber = crate::fmt::Subscriber::builder()
+            .with_writer(make_writer.clone())
+            .with_level(false)
+            .with_ansi(false)
+            .with_timer(MockTime)
+            .log_internal_errors(false)
+            .finish();
+
+        with_default(subscriber, || {
+            tracing::info!(?AlwaysError);
+        });
+        let actual = sanitize_timings(make_writer.get_string());
+        assert_eq!("", actual.as_str());
+    }
+
+    #[test]
     fn synthesize_span_none() {
         let make_writer = MockMakeWriter::default();
         let subscriber = crate::fmt::Subscriber::builder()
@@ -1364,5 +1517,74 @@ mod test {
              fake time writer1_span{x=42}:writer2_span: close timing timing\n",
             actual.as_str()
         );
+    }
+
+    // Because we need to modify an environment variable for these test cases,
+    // we do them all in a single test.
+    #[cfg(feature = "ansi")]
+    #[test]
+    fn layer_no_color() {
+        const NO_COLOR: &str = "NO_COLOR";
+
+        // Restores the previous value of the `NO_COLOR` env variable when
+        // dropped.
+        //
+        // This is done in a `Drop` implementation, rather than just resetting
+        // the value at the end of the test, so that the previous value is
+        // restored even if the test panics.
+        struct RestoreEnvVar(Result<String, env::VarError>);
+        impl Drop for RestoreEnvVar {
+            fn drop(&mut self) {
+                match self.0 {
+                    Ok(ref var) => env::set_var(NO_COLOR, var),
+                    Err(_) => env::remove_var(NO_COLOR),
+                }
+            }
+        }
+
+        let _saved_no_color = RestoreEnvVar(env::var(NO_COLOR));
+
+        let cases: Vec<(Option<&str>, bool)> = vec![
+            (Some("0"), false),   // any non-empty value disables ansi
+            (Some("off"), false), // any non-empty value disables ansi
+            (Some("1"), false),
+            (Some(""), true), // empty value does not disable ansi
+            (None, true),
+        ];
+
+        for (var, ansi) in cases {
+            if let Some(value) = var {
+                env::set_var(NO_COLOR, value);
+            } else {
+                env::remove_var(NO_COLOR);
+            }
+
+            let layer: Layer<()> = fmt::Layer::default();
+            assert_eq!(
+                layer.is_ansi, ansi,
+                "NO_COLOR={:?}; Layer::default().is_ansi should be {}",
+                var, ansi
+            );
+
+            // with_ansi should override any `NO_COLOR` value
+            let layer: Layer<()> = fmt::Layer::default().with_ansi(true);
+            assert!(
+                layer.is_ansi,
+                "NO_COLOR={:?}; Layer::default().with_ansi(true).is_ansi should be true",
+                var
+            );
+
+            // set_ansi should override any `NO_COLOR` value
+            let mut layer: Layer<()> = fmt::Layer::default();
+            layer.set_ansi(true);
+            assert!(
+                layer.is_ansi,
+                "NO_COLOR={:?}; layer.set_ansi(true); layer.is_ansi should be true",
+                var
+            );
+        }
+
+        // dropping `_saved_no_color` will restore the previous value of
+        // `NO_COLOR`.
     }
 }

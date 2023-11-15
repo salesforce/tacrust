@@ -1,9 +1,6 @@
-#[path = "../../tracing-futures/tests/support.rs"]
-// we don't use some of the test support functions, but `tracing-futures` does.
-#[allow(dead_code)]
-mod support;
-use support::*;
+use tracing_mock::*;
 
+use std::convert::Infallible;
 use std::{future::Future, pin::Pin, sync::Arc};
 use tracing::subscriber::with_default;
 use tracing_attributes::instrument;
@@ -17,14 +14,15 @@ async fn test_async_fn(polls: usize) -> Result<(), ()> {
 
 // Reproduces a compile error when returning an `impl Trait` from an
 // instrumented async fn (see https://github.com/tokio-rs/tracing/issues/1615)
+#[allow(dead_code)] // this is just here to test whether it compiles.
 #[instrument]
 async fn test_ret_impl_trait(n: i32) -> Result<impl Iterator<Item = i32>, ()> {
-    let n = n;
     Ok((0..10).filter(move |x| *x < n))
 }
 
 // Reproduces a compile error when returning an `impl Trait` from an
 // instrumented async fn (see https://github.com/tokio-rs/tracing/issues/1615)
+#[allow(dead_code)] // this is just here to test whether it compiles.
 #[instrument(err)]
 async fn test_ret_impl_trait_err(n: i32) -> Result<impl Iterator<Item = i32>, &'static str> {
     Ok((0..10).filter(move |x| *x < n))
@@ -32,6 +30,15 @@ async fn test_ret_impl_trait_err(n: i32) -> Result<impl Iterator<Item = i32>, &'
 
 #[instrument]
 async fn test_async_fn_empty() {}
+
+// Reproduces a compile error when an instrumented function body contains inner
+// attributes (https://github.com/tokio-rs/tracing/issues/2294).
+#[deny(unused_variables)]
+#[instrument]
+async fn repro_async_2294() {
+    #![allow(unused_variables)]
+    let i = 42;
+}
 
 // Reproduces https://github.com/tokio-rs/tracing/issues/1613
 #[instrument]
@@ -55,17 +62,37 @@ async fn repro_1613_2() {
     // else
 }
 
+// Reproduces https://github.com/tokio-rs/tracing/issues/1831
+#[allow(dead_code)] // this is just here to test whether it compiles.
+#[instrument]
+#[deny(unused_braces)]
+fn repro_1831() -> Pin<Box<dyn Future<Output = ()>>> {
+    Box::pin(async move {})
+}
+
+// This replicates the pattern used to implement async trait methods on nightly using the
+// `type_alias_impl_trait` feature
+#[allow(dead_code)] // this is just here to test whether it compiles.
+#[instrument(ret, err)]
+#[deny(unused_braces)]
+#[allow(clippy::manual_async_fn)]
+fn repro_1831_2() -> impl Future<Output = Result<(), Infallible>> {
+    async { Ok(()) }
+}
+
 #[test]
 fn async_fn_only_enters_for_polls() {
     let (subscriber, handle) = subscriber::mock()
-        .new_span(span::mock().named("test_async_fn"))
-        .enter(span::mock().named("test_async_fn"))
-        .event(event::mock().with_fields(field::mock("awaiting").with_value(&true)))
-        .exit(span::mock().named("test_async_fn"))
-        .enter(span::mock().named("test_async_fn"))
-        .exit(span::mock().named("test_async_fn"))
-        .drop_span(span::mock().named("test_async_fn"))
-        .done()
+        .new_span(expect::span().named("test_async_fn"))
+        .enter(expect::span().named("test_async_fn"))
+        .event(expect::event().with_fields(expect::field("awaiting").with_value(&true)))
+        .exit(expect::span().named("test_async_fn"))
+        .enter(expect::span().named("test_async_fn"))
+        .exit(expect::span().named("test_async_fn"))
+        .enter(expect::span().named("test_async_fn"))
+        .exit(expect::span().named("test_async_fn"))
+        .drop_span(expect::span().named("test_async_fn"))
+        .only()
         .run_with_handle();
     with_default(subscriber, || {
         block_on_future(async { test_async_fn(2).await }).unwrap();
@@ -85,19 +112,23 @@ fn async_fn_nested() {
         tracing::trace!(nested = true);
     }
 
-    let span = span::mock().named("test_async_fns_nested");
-    let span2 = span::mock().named("test_async_fns_nested_other");
+    let span = expect::span().named("test_async_fns_nested");
+    let span2 = expect::span().named("test_async_fns_nested_other");
     let (subscriber, handle) = subscriber::mock()
         .new_span(span.clone())
         .enter(span.clone())
         .new_span(span2.clone())
         .enter(span2.clone())
-        .event(event::mock().with_fields(field::mock("nested").with_value(&true)))
+        .event(expect::event().with_fields(expect::field("nested").with_value(&true)))
+        .exit(span2.clone())
+        .enter(span2.clone())
         .exit(span2.clone())
         .drop_span(span2)
         .exit(span.clone())
+        .enter(span.clone())
+        .exit(span.clone())
         .drop_span(span)
-        .done()
+        .only()
         .run_with_handle();
 
     with_default(subscriber, || {
@@ -159,29 +190,35 @@ fn async_fn_with_async_trait() {
         }
     }
 
-    let span = span::mock().named("foo");
-    let span2 = span::mock().named("bar");
-    let span3 = span::mock().named("baz");
+    let span = expect::span().named("foo");
+    let span2 = expect::span().named("bar");
+    let span3 = expect::span().named("baz");
     let (subscriber, handle) = subscriber::mock()
         .new_span(
             span.clone()
-                .with_field(field::mock("self"))
-                .with_field(field::mock("v")),
+                .with_field(expect::field("self"))
+                .with_field(expect::field("v")),
         )
         .enter(span.clone())
         .new_span(span3.clone())
         .enter(span3.clone())
-        .event(event::mock().with_fields(field::mock("val").with_value(&2u64)))
+        .event(expect::event().with_fields(expect::field("val").with_value(&2u64)))
+        .exit(span3.clone())
+        .enter(span3.clone())
         .exit(span3.clone())
         .drop_span(span3)
-        .new_span(span2.clone().with_field(field::mock("self")))
+        .new_span(span2.clone().with_field(expect::field("self")))
         .enter(span2.clone())
-        .event(event::mock().with_fields(field::mock("val").with_value(&5u64)))
+        .event(expect::event().with_fields(expect::field("val").with_value(&5u64)))
+        .exit(span2.clone())
+        .enter(span2.clone())
         .exit(span2.clone())
         .drop_span(span2)
         .exit(span.clone())
+        .enter(span.clone())
+        .exit(span.clone())
         .drop_span(span)
-        .done()
+        .only()
         .run_with_handle();
 
     with_default(subscriber, || {
@@ -217,21 +254,23 @@ fn async_fn_with_async_trait_and_fields_expressions() {
         async fn call(&mut self, _v: usize) {}
     }
 
-    let span = span::mock().named("call");
+    let span = expect::span().named("call");
     let (subscriber, handle) = subscriber::mock()
         .new_span(
             span.clone().with_field(
-                field::mock("_v")
+                expect::field("_v")
                     .with_value(&5usize)
-                    .and(field::mock("test").with_value(&tracing::field::debug(10)))
-                    .and(field::mock("val").with_value(&42u64))
-                    .and(field::mock("val2").with_value(&42u64)),
+                    .and(expect::field("test").with_value(&tracing::field::debug(10)))
+                    .and(expect::field("val").with_value(&42u64))
+                    .and(expect::field("val2").with_value(&42u64)),
             ),
         )
         .enter(span.clone())
         .exit(span.clone())
+        .enter(span.clone())
+        .exit(span.clone())
         .drop_span(span)
-        .done()
+        .only()
         .run_with_handle();
 
     with_default(subscriber, || {
@@ -283,40 +322,46 @@ fn async_fn_with_async_trait_and_fields_expressions_with_generic_parameter() {
     }
 
     //let span = span::mock().named("call");
-    let span2 = span::mock().named("call_with_self");
-    let span3 = span::mock().named("call_with_mut_self");
-    let span4 = span::mock().named("sync_fun");
+    let span2 = expect::span().named("call_with_self");
+    let span3 = expect::span().named("call_with_mut_self");
+    let span4 = expect::span().named("sync_fun");
     let (subscriber, handle) = subscriber::mock()
         /*.new_span(span.clone()
             .with_field(
-                field::mock("Self").with_value(&"TestImpler")))
+                expect::field("Self").with_value(&"TestImpler")))
         .enter(span.clone())
         .exit(span.clone())
         .drop_span(span)*/
         .new_span(
             span2
                 .clone()
-                .with_field(field::mock("Self").with_value(&std::any::type_name::<TestImpl>())),
+                .with_field(expect::field("Self").with_value(&std::any::type_name::<TestImpl>())),
         )
         .enter(span2.clone())
         .new_span(
             span4
                 .clone()
-                .with_field(field::mock("Self").with_value(&std::any::type_name::<TestImpl>())),
+                .with_field(expect::field("Self").with_value(&std::any::type_name::<TestImpl>())),
         )
         .enter(span4.clone())
+        .exit(span4.clone())
+        .enter(span4.clone())
         .exit(span4)
+        .exit(span2.clone())
+        .enter(span2.clone())
         .exit(span2.clone())
         .drop_span(span2)
         .new_span(
             span3
                 .clone()
-                .with_field(field::mock("Self").with_value(&std::any::type_name::<TestImpl>())),
+                .with_field(expect::field("Self").with_value(&std::any::type_name::<TestImpl>())),
         )
         .enter(span3.clone())
         .exit(span3.clone())
+        .enter(span3.clone())
+        .exit(span3.clone())
         .drop_span(span3)
-        .done()
+        .only()
         .run_with_handle();
 
     with_default(subscriber, || {
@@ -351,13 +396,15 @@ fn out_of_scope_fields() {
         }
     }
 
-    let span = span::mock().named("call");
+    let span = expect::span().named("call");
     let (subscriber, handle) = subscriber::mock()
         .new_span(span.clone())
         .enter(span.clone())
         .exit(span.clone())
+        .enter(span.clone())
+        .exit(span.clone())
         .drop_span(span)
-        .done()
+        .only()
         .run_with_handle();
 
     with_default(subscriber, || {
@@ -366,6 +413,73 @@ fn out_of_scope_fields() {
                 metrics: Arc::new(()),
             };
             my_thing.call(()).await;
+        });
+    });
+
+    handle.assert_finished();
+}
+
+#[test]
+fn manual_impl_future() {
+    #[allow(clippy::manual_async_fn)]
+    #[instrument]
+    fn manual_impl_future() -> impl Future<Output = ()> {
+        async {
+            tracing::trace!(poll = true);
+        }
+    }
+
+    let span = expect::span().named("manual_impl_future");
+    let poll_event = || expect::event().with_fields(expect::field("poll").with_value(&true));
+
+    let (subscriber, handle) = subscriber::mock()
+        // await manual_impl_future
+        .new_span(span.clone())
+        .enter(span.clone())
+        .event(poll_event())
+        .exit(span.clone())
+        .enter(span.clone())
+        .exit(span.clone())
+        .drop_span(span)
+        .only()
+        .run_with_handle();
+
+    with_default(subscriber, || {
+        block_on_future(async {
+            manual_impl_future().await;
+        });
+    });
+
+    handle.assert_finished();
+}
+
+#[test]
+fn manual_box_pin() {
+    #[instrument]
+    fn manual_box_pin() -> Pin<Box<dyn Future<Output = ()>>> {
+        Box::pin(async {
+            tracing::trace!(poll = true);
+        })
+    }
+
+    let span = expect::span().named("manual_box_pin");
+    let poll_event = || expect::event().with_fields(expect::field("poll").with_value(&true));
+
+    let (subscriber, handle) = subscriber::mock()
+        // await manual_box_pin
+        .new_span(span.clone())
+        .enter(span.clone())
+        .event(poll_event())
+        .exit(span.clone())
+        .enter(span.clone())
+        .exit(span.clone())
+        .drop_span(span)
+        .only()
+        .run_with_handle();
+
+    with_default(subscriber, || {
+        block_on_future(async {
+            manual_box_pin().await;
         });
     });
 

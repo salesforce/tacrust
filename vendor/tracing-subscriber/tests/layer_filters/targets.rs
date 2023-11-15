@@ -1,4 +1,5 @@
 use super::*;
+use tracing_mock::event;
 use tracing_subscriber::{
     filter::{filter_fn, Targets},
     prelude::*,
@@ -39,7 +40,7 @@ fn inner_layer_short_circuits() {
 
     let (layer, handle) = layer::mock()
         .event(event::msg("hello world"))
-        .done()
+        .only()
         .run_with_handle();
 
     let filter = Targets::new().with_target("magic_target", LevelFilter::DEBUG);

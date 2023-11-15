@@ -224,8 +224,8 @@ impl EnvFilter {
     /// `RUST_LOG` is the default environment variable used by
     /// [`EnvFilter::from_default_env`] and [`EnvFilter::try_from_default_env`].
     ///
-    /// [`EnvFilter::from_default_env`]: #method.from_default_env
-    /// [`EnvFilter::try_from_default_env`]: #method.try_from_default_env
+    /// [`EnvFilter::from_default_env`]: EnvFilter::from_default_env()
+    /// [`EnvFilter::try_from_default_env`]: EnvFilter::try_from_default_env()
     pub const DEFAULT_ENV: &'static str = "RUST_LOG";
 
     // === constructors, etc ===
@@ -415,8 +415,8 @@ impl EnvFilter {
     /// and events as a previous filter, but sets a different level for those
     /// spans and events, the previous directive is overwritten.
     ///
-    /// [`LevelFilter`]: ../filter/struct.LevelFilter.html
-    /// [`Level`]: https://docs.rs/tracing-core/latest/tracing_core/struct.Level.html
+    /// [`LevelFilter`]: super::LevelFilter
+    /// [`Level`]: tracing_core::Level
     ///
     /// # Examples
     ///
@@ -449,6 +449,11 @@ impl EnvFilter {
     /// # Ok(())
     /// # }
     /// ```
+    /// In the above example, substitute `my_crate`, `module`, etc. with the
+    /// name your target crate/module is imported with. This might be
+    /// different from the package name in Cargo.toml (`-` is replaced by `_`).
+    /// Example, if the package name in your Cargo.toml is `MY-FANCY-LIB`, then
+    /// the corresponding Rust identifier would be `MY_FANCY_LIB`:
     pub fn add_directive(mut self, mut directive: Directive) -> Self {
         if !self.regex {
             directive.deregexify();

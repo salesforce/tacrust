@@ -16,6 +16,7 @@ use crate::{
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 use core::{
+    fmt,
     iter::{Extend, FilterMap, FromIterator},
     slice,
     str::FromStr,
@@ -277,6 +278,62 @@ impl Targets {
         self
     }
 
+    /// Returns the default level for this filter, if one is set.
+    ///
+    /// The default level is used to filter any spans or events with targets
+    /// that do not match any of the configured set of prefixes.
+    ///
+    /// The default level can be set for a filter either by using
+    /// [`with_default`](Self::with_default) or when parsing from a filter string that includes a
+    /// level without a target (e.g. `"trace"`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tracing_subscriber::filter::{LevelFilter, Targets};
+    ///
+    /// let filter = Targets::new().with_default(LevelFilter::INFO);
+    /// assert_eq!(filter.default_level(), Some(LevelFilter::INFO));
+    ///
+    /// let filter: Targets = "info".parse().unwrap();
+    /// assert_eq!(filter.default_level(), Some(LevelFilter::INFO));
+    /// ```
+    ///
+    /// The default level is `None` if no default is set:
+    ///
+    /// ```
+    /// use tracing_subscriber::filter::Targets;
+    ///
+    /// let filter = Targets::new();
+    /// assert_eq!(filter.default_level(), None);
+    ///
+    /// let filter: Targets = "my_crate=info".parse().unwrap();
+    /// assert_eq!(filter.default_level(), None);
+    /// ```
+    ///
+    /// Note that an unset default level (`None`) behaves like [`LevelFilter::OFF`] when the filter is
+    /// used, but it could also be set explicitly which may be useful to distinguish (such as when
+    /// merging multiple `Targets`).
+    ///
+    /// ```
+    /// use tracing_subscriber::filter::{LevelFilter, Targets};
+    ///
+    /// let filter = Targets::new().with_default(LevelFilter::OFF);
+    /// assert_eq!(filter.default_level(), Some(LevelFilter::OFF));
+    ///
+    /// let filter: Targets = "off".parse().unwrap();
+    /// assert_eq!(filter.default_level(), Some(LevelFilter::OFF));
+    /// ```
+    pub fn default_level(&self) -> Option<LevelFilter> {
+        self.0.directives().find_map(|d| {
+            if d.target.is_none() {
+                Some(d.level)
+            } else {
+                None
+            }
+        })
+    }
+
     /// Returns an iterator over the [target]-[`LevelFilter`] pairs in this filter.
     ///
     /// The order of iteration is undefined.
@@ -429,6 +486,20 @@ impl<'a> IntoIterator for &'a Targets {
 
     fn into_iter(self) -> Self::IntoIter {
         Iter::new(self)
+    }
+}
+
+impl fmt::Display for Targets {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut directives = self.0.directives();
+        if let Some(directive) = directives.next() {
+            write!(f, "{}", directive)?;
+            for directive in directives {
+                write!(f, ",{}", directive)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -686,6 +757,21 @@ mod tests {
     }
 
     #[test]
+    fn targets_default_level() {
+        let filter = expect_parse("crate1::mod1=error,crate1::mod2,crate2=debug,crate3=off");
+        assert_eq!(filter.default_level(), None);
+
+        let filter = expect_parse("crate1::mod1=error,crate1::mod2,crate2=debug,crate3=off")
+            .with_default(LevelFilter::OFF);
+        assert_eq!(filter.default_level(), Some(LevelFilter::OFF));
+
+        let filter = expect_parse("crate1::mod1=error,crate1::mod2,crate2=debug,crate3=off")
+            .with_default(LevelFilter::OFF)
+            .with_default(LevelFilter::INFO);
+        assert_eq!(filter.default_level(), Some(LevelFilter::INFO));
+    }
+
+    #[test]
     // `println!` is only available with `libstd`.
     #[cfg(feature = "std")]
     fn size_of_filters() {
@@ -706,5 +792,43 @@ mod tests {
             "crate1::mod1=error,crate1::mod2=warn,crate1::mod2::mod3=info,\
             crate2=debug,crate3=trace,crate3::mod2::mod1=off",
         );
+    }
+
+    /// Test that the `fmt::Display` implementation for `Targets` emits a string
+    /// that can itself be parsed as a `Targets`, and that the parsed `Targets`
+    /// is equivalent to the original one.
+    #[test]
+    fn display_roundtrips() {
+        fn test_roundtrip(s: &str) {
+            let filter = expect_parse(s);
+            // we don't assert that the display output is equivalent to the
+            // original parsed filter string, because the `Display` impl always
+            // uses lowercase level names and doesn't use the
+            // target-without-level shorthand syntax. while they may not be
+            // textually equivalent, though, they should still *parse* to the
+            // same filter.
+            let formatted = filter.to_string();
+            let filter2 = match dbg!(&formatted).parse::<Targets>() {
+                Ok(filter) => filter,
+                Err(e) => panic!(
+                    "failed to parse formatted filter string {:?}: {}",
+                    formatted, e
+                ),
+            };
+            assert_eq!(filter, filter2);
+        }
+
+        test_roundtrip("crate1::mod1=error,crate1::mod2,crate2=debug,crate3=off");
+        test_roundtrip(
+            "crate1::mod1=ERROR,crate1::mod2=WARN,crate1::mod2::mod3=INFO,\
+        crate2=DEBUG,crate3=TRACE,crate3::mod2::mod1=OFF",
+        );
+        test_roundtrip(
+            "crate1::mod1=error,crate1::mod2=warn,crate1::mod2::mod3=info,\
+             crate2=debug,crate3=trace,crate3::mod2::mod1=off",
+        );
+        test_roundtrip("crate1::mod1,crate1::mod2,info");
+        test_roundtrip("crate1");
+        test_roundtrip("info");
     }
 }
