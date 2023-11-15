@@ -376,7 +376,7 @@ lazy_static! {
     static ref RE_CMD: Regex = Regex::new(r"cmd\s*(=|\*)\s*(.*)").unwrap();
     static ref RE_CMD_ARG: Regex = Regex::new(r"cmd.arg\s*(=|\*)\s*(.*)").unwrap();
     static ref RE_MATCHER_ARG: Regex = Regex::new(r"(\S*?)\s*==\s*(.*)").unwrap();
-    static ref RE_OTHER: Regex = Regex::new(r#"(\S*?)\s*(=|\*)\s*(.*)"#).unwrap();
+    static ref RE_OTHER: Regex = Regex::new(r"(\S*?)\s*(=|\*)\s*(.*)").unwrap();
 }
 
 #[derive(Debug)]
@@ -800,8 +800,7 @@ async fn authorize_cmd(
         }
         for pattern in &cmd.list {
             lazy_static! {
-                static ref RE_CMD_ARG_PATTERN: Regex =
-                    Regex::new(r#"(permit|deny)\s*(.*)"#).unwrap();
+                static ref RE_CMD_ARG_PATTERN: Regex = Regex::new(r"(permit|deny)\s*(.*)").unwrap();
             }
             if let Some(captures) = RE_CMD_ARG_PATTERN.captures(pattern) {
                 let cmd_pattern_action = &captures[1];
