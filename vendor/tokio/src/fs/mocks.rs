@@ -81,7 +81,7 @@ impl Write for &'_ MockFile {
     }
 }
 
-thread_local! {
+tokio_thread_local! {
     static QUEUE: RefCell<VecDeque<Box<dyn FnOnce() + Send>>> = RefCell::new(VecDeque::new())
 }
 
@@ -105,16 +105,31 @@ where
     JoinHandle { rx }
 }
 
+pub(super) fn spawn_mandatory_blocking<F, R>(f: F) -> Option<JoinHandle<R>>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    let (tx, rx) = oneshot::channel();
+    let task = Box::new(move || {
+        let _ = tx.send(f());
+    });
+
+    QUEUE.with(|cell| cell.borrow_mut().push_back(task));
+
+    Some(JoinHandle { rx })
+}
+
 impl<T> Future for JoinHandle<T> {
     type Output = Result<T, io::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        use std::task::Poll::*;
+        use std::task::Poll;
 
         match Pin::new(&mut self.rx).poll(cx) {
-            Ready(Ok(v)) => Ready(Ok(v)),
-            Ready(Err(e)) => panic!("error = {:?}", e),
-            Pending => Pending,
+            Poll::Ready(Ok(v)) => Poll::Ready(Ok(v)),
+            Poll::Ready(Err(e)) => panic!("error = {:?}", e),
+            Poll::Pending => Poll::Pending,
         }
     }
 }

@@ -73,19 +73,21 @@ cfg_os_poll! {
             SocketAddr { sockaddr, socklen }
         }
 
+        pub(crate) fn raw_sockaddr(&self) -> &libc::sockaddr_un {
+            &self.sockaddr
+        }
+
+        pub(crate) fn raw_socklen(&self) -> &libc::socklen_t {
+            &self.socklen
+        }
+
         /// Returns `true` if the address is unnamed.
         ///
         /// Documentation reflected in [`SocketAddr`]
         ///
         /// [`SocketAddr`]: std::os::unix::net::SocketAddr
-        // FIXME: The matches macro requires rust 1.42.0 and we still support 1.39.0
-        #[allow(clippy::match_like_matches_macro)]
         pub fn is_unnamed(&self) -> bool {
-            if let AddressKind::Unnamed = self.address() {
-                true
-            } else {
-                false
-            }
+            matches!(self.address(), AddressKind::Unnamed)
         }
 
         /// Returns the contents of this address if it is a `pathname` address.

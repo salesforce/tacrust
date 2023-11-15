@@ -1,5 +1,8 @@
 #![warn(rust_2018_idioms)]
-#![cfg(feature = "full")]
+#![cfg(feature = "sync")]
+
+#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 fn is_error<T: std::error::Error + Send + Sync>() {}
 

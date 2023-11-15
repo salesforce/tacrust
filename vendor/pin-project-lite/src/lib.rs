@@ -1,98 +1,116 @@
-//! A lightweight version of [pin-project] written with declarative macros.
-//!
-//! # Examples
-//!
-//! [`pin_project!`] macro creates a projection type covering all the fields of struct.
-//!
-//! ```rust
-//! use std::pin::Pin;
-//!
-//! use pin_project_lite::pin_project;
-//!
-//! pin_project! {
-//!     struct Struct<T, U> {
-//!         #[pin]
-//!         pinned: T,
-//!         unpinned: U,
-//!     }
-//! }
-//!
-//! impl<T, U> Struct<T, U> {
-//!     fn method(self: Pin<&mut Self>) {
-//!         let this = self.project();
-//!         let _: Pin<&mut T> = this.pinned; // Pinned reference to the field
-//!         let _: &mut U = this.unpinned; // Normal reference to the field
-//!     }
-//! }
-//! ```
-//!
-//! To use [`pin_project!`] on enums, you need to name the projection type
-//! returned from the method.
-//!
-//! ```rust
-//! use std::pin::Pin;
-//!
-//! use pin_project_lite::pin_project;
-//!
-//! pin_project! {
-//!     #[project = EnumProj]
-//!     enum Enum<T, U> {
-//!         Variant { #[pin] pinned: T, unpinned: U },
-//!     }
-//! }
-//!
-//! impl<T, U> Enum<T, U> {
-//!     fn method(self: Pin<&mut Self>) {
-//!         match self.project() {
-//!             EnumProj::Variant { pinned, unpinned } => {
-//!                 let _: Pin<&mut T> = pinned;
-//!                 let _: &mut U = unpinned;
-//!             }
-//!         }
-//!     }
-//! }
-//! ```
-//!
-//! # [pin-project] vs pin-project-lite
-//!
-//! Here are some similarities and differences compared to [pin-project].
-//!
-//! ## Similar: Safety
-//!
-//! pin-project-lite guarantees safety in much the same way as [pin-project].
-//! Both are completely safe unless you write other unsafe code.
-//!
-//! ## Different: Minimal design
-//!
-//! This library does not tackle as expansive of a range of use cases as
-//! [pin-project] does. If your use case is not already covered, please use
-//! [pin-project].
-//!
-//! ## Different: No proc-macro related dependencies
-//!
-//! This is the **only** reason to use this crate. However, **if you already
-//! have proc-macro related dependencies in your crate's dependency graph, there
-//! is no benefit from using this crate.** (Note: There is almost no difference
-//! in the amount of code generated between [pin-project] and pin-project-lite.)
-//!
-//! ## Different: No useful error messages
-//!
-//! This macro does not handle any invalid input. So error messages are not to
-//! be useful in most cases. If you do need useful error messages, then upon
-//! error you can pass the same input to [pin-project] to receive a helpful
-//! description of the compile error.
-//!
-//! ## Different: No support for custom Unpin implementation
-//!
-//! pin-project supports this by [`UnsafeUnpin`][unsafe-unpin] and [`!Unpin`][not-unpin].
-//!
-//! ## Different: No support for tuple structs and tuple variants
-//!
-//! pin-project supports this.
-//!
-//! [not-unpin]: https://docs.rs/pin-project/1/pin_project/attr.pin_project.html#unpin
-//! [pin-project]: https://github.com/taiki-e/pin-project
-//! [unsafe-unpin]: https://docs.rs/pin-project/1/pin_project/attr.pin_project.html#unsafeunpin
+/*!
+<!-- tidy:crate-doc:start -->
+A lightweight version of [pin-project] written with declarative macros.
+
+## Usage
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+pin-project-lite = "0.2"
+```
+
+*Compiler support: requires rustc 1.37+*
+
+## Examples
+
+[`pin_project!`] macro creates a projection type covering all the fields of
+struct.
+
+```rust
+use std::pin::Pin;
+
+use pin_project_lite::pin_project;
+
+pin_project! {
+    struct Struct<T, U> {
+        #[pin]
+        pinned: T,
+        unpinned: U,
+    }
+}
+
+impl<T, U> Struct<T, U> {
+    fn method(self: Pin<&mut Self>) {
+        let this = self.project();
+        let _: Pin<&mut T> = this.pinned; // Pinned reference to the field
+        let _: &mut U = this.unpinned; // Normal reference to the field
+    }
+}
+```
+
+To use [`pin_project!`] on enums, you need to name the projection type
+returned from the method.
+
+```rust
+use std::pin::Pin;
+
+use pin_project_lite::pin_project;
+
+pin_project! {
+    #[project = EnumProj]
+    enum Enum<T, U> {
+        Variant { #[pin] pinned: T, unpinned: U },
+    }
+}
+
+impl<T, U> Enum<T, U> {
+    fn method(self: Pin<&mut Self>) {
+        match self.project() {
+            EnumProj::Variant { pinned, unpinned } => {
+                let _: Pin<&mut T> = pinned;
+                let _: &mut U = unpinned;
+            }
+        }
+    }
+}
+```
+
+## [pin-project] vs pin-project-lite
+
+Here are some similarities and differences compared to [pin-project].
+
+### Similar: Safety
+
+pin-project-lite guarantees safety in much the same way as [pin-project].
+Both are completely safe unless you write other unsafe code.
+
+### Different: Minimal design
+
+This library does not tackle as expansive of a range of use cases as
+[pin-project] does. If your use case is not already covered, please use
+[pin-project].
+
+### Different: No proc-macro related dependencies
+
+This is the **only** reason to use this crate. However, **if you already
+have proc-macro related dependencies in your crate's dependency graph, there
+is no benefit from using this crate.** (Note: There is almost no difference
+in the amount of code generated between [pin-project] and pin-project-lite.)
+
+### Different: No useful error messages
+
+This macro does not handle any invalid input. So error messages are not to
+be useful in most cases. If you do need useful error messages, then upon
+error you can pass the same input to [pin-project] to receive a helpful
+description of the compile error.
+
+### Different: No support for custom Unpin implementation
+
+pin-project supports this by [`UnsafeUnpin`][unsafe-unpin]. (`!Unpin` is supported by both [pin-project][not-unpin] and [pin-project-lite][not-unpin-lite].)
+
+### Different: No support for tuple structs and tuple variants
+
+pin-project supports this.
+
+[not-unpin]: https://docs.rs/pin-project/1/pin_project/attr.pin_project.html#unpin
+[not-unpin-lite]: https://docs.rs/pin-project-lite/0.2/pin_project_lite/macro.pin_project.html#unpin
+[pin-project]: https://github.com/taiki-e/pin-project
+[unsafe-unpin]: https://docs.rs/pin-project/1/pin_project/attr.pin_project.html#unsafeunpin
+
+<!-- tidy:crate-doc:end -->
+*/
 
 #![no_std]
 #![doc(test(
@@ -103,7 +121,21 @@
     )
 ))]
 #![warn(rust_2018_idioms, single_use_lifetimes, unreachable_pub)]
-#![warn(clippy::default_trait_access, clippy::wildcard_imports)]
+#![warn(
+    clippy::pedantic,
+    // lints for public library
+    clippy::alloc_instead_of_core,
+    clippy::exhaustive_enums,
+    clippy::exhaustive_structs,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core,
+    // lints that help writing unsafe code
+    clippy::as_ptr_cast_mut,
+    clippy::default_union_representation,
+    clippy::trailing_empty_array,
+    clippy::transmute_undefined_repr,
+    clippy::undocumented_unsafe_blocks,
+)]
 
 /// A macro that creates a projection type covering all the fields of struct.
 ///
@@ -264,8 +296,22 @@
 ///
 /// # `!Unpin`
 ///
-/// If you want to ensure that [`Unpin`] is not implemented, use `#[pin]`
-/// attribute for a [`PhantomPinned`] field.
+/// If you want to make sure `Unpin` is not implemented, use the `#[project(!Unpin)]`
+/// attribute.
+///
+/// ```
+/// use pin_project_lite::pin_project;
+///
+/// pin_project! {
+///      #[project(!Unpin)]
+///      struct Struct<T> {
+///          #[pin]
+///          field: T,
+///      }
+/// }
+/// ```
+///
+/// This is equivalent to using `#[pin]` attribute for a [`PhantomPinned`] field.
 ///
 /// ```rust
 /// use std::marker::PhantomPinned;
@@ -275,13 +321,14 @@
 /// pin_project! {
 ///     struct Struct<T> {
 ///         field: T,
-///         #[pin] // <------ This `#[pin]` is required to make `Struct` to `!Unpin`.
+///         #[pin]
 ///         _pin: PhantomPinned,
 ///     }
 /// }
 /// ```
 ///
-/// Note that using [`PhantomPinned`] without `#[pin]` attribute has no effect.
+/// Note that using [`PhantomPinned`] without `#[pin]` or `#[project(!Unpin)]`
+/// attribute has no effect.
 ///
 /// [`PhantomPinned`]: core::marker::PhantomPinned
 /// [`Pin::as_mut`]: core::pin::Pin::as_mut
@@ -291,7 +338,7 @@
 macro_rules! pin_project {
     ($($tt:tt)*) => {
         $crate::__pin_project_internal! {
-            [][][][]
+            [][][][][]
             $($tt)*
         }
     };
@@ -306,35 +353,14 @@ macro_rules! pin_project {
 // - no useful error messages. (wontfix)
 // etc...
 
-// Not public API.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __pin_project_internal {
-    // macro helpers
-    // ignores any projection without a projection identity
-    (@make_proj_ty;
-        [] // no identity given, so we ignore the projection
-        $($field:tt)*
-    ) => {};
-    // ignores make_proj_replace_ty without a projection identity
-    (@make_proj_replace_ty;
-        [] // no identity given, so we ignore the projection
-        $($field:tt)*
-    ) => {};
-    (@$struct_ty_ident:ident=>make_proj_method;
-        []
-        $($variant:tt)*
-    ) => {};
-    (@$struct_ty_ident:ident=>make_proj_replace_method;
-        []
-        $($field:tt)*
-    ) => {};
-    // =============================================================================================
-    // struct:main
-    (@expand;
+macro_rules! __pin_project_expand {
+    (
         [$($proj_mut_ident:ident)?]
         [$($proj_ref_ident:ident)?]
         [$($proj_replace_ident:ident)?]
+        [$($proj_not_unpin_mark:ident)?]
         [$proj_vis:vis]
         [$(#[$attrs:meta])* $vis:vis $struct_ty_ident:ident $ident:ident]
         [$($def_generics:tt)*]
@@ -342,9 +368,9 @@ macro_rules! __pin_project_internal {
         {
             $($body_data:tt)*
         }
-        $(impl $($pinned_drop:tt)*)?
+        $($(#[$drop_impl_attrs:meta])* impl $($pinned_drop:tt)*)?
     ) => {
-        $crate::__pin_project_internal! { @reconstruct;
+        $crate::__pin_project_reconstruct! {
             [$(#[$attrs])* $vis $struct_ty_ident $ident]
             [$($def_generics)*] [$($impl_generics)*]
             [$($ty_generics)*] [$(where $($where_clause)*)?]
@@ -353,49 +379,56 @@ macro_rules! __pin_project_internal {
             }
         }
 
-        $crate::__pin_project_internal! { @make_proj_ty;
+        $crate::__pin_project_make_proj_ty! {
             [$($proj_mut_ident)?]
             [$proj_vis $struct_ty_ident $ident]
-            [make_proj_field_mut]
+            [__pin_project_make_proj_field_mut]
             [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
             {
                 $($body_data)*
             }
         }
-        $crate::__pin_project_internal! { @make_proj_ty;
+        $crate::__pin_project_make_proj_ty! {
             [$($proj_ref_ident)?]
             [$proj_vis $struct_ty_ident $ident]
-            [make_proj_field_ref]
+            [__pin_project_make_proj_field_ref]
             [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
             {
                 $($body_data)*
             }
         }
-        $crate::__pin_project_internal! { @make_proj_replace_ty;
+        $crate::__pin_project_make_proj_replace_ty! {
             [$($proj_replace_ident)?]
             [$proj_vis $struct_ty_ident]
-            [make_proj_field_replace]
+            [__pin_project_make_proj_field_replace]
             [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
             {
                 $($body_data)*
             }
         }
 
-        $crate::__pin_project_internal! { @constant;
+        $crate::__pin_project_constant! {
             [$(#[$attrs])* $vis $struct_ty_ident $ident]
             [$($proj_mut_ident)?] [$($proj_ref_ident)?] [$($proj_replace_ident)?]
+            [$($proj_not_unpin_mark)?]
             [$proj_vis]
             [$($def_generics)*] [$($impl_generics)*]
             [$($ty_generics)*] [$(where $($where_clause)*)?]
             {
                 $($body_data)*
             }
-            $(impl $($pinned_drop)*)?
+            $($(#[$drop_impl_attrs])* impl $($pinned_drop)*)?
         }
     };
-    (@constant;
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_constant {
+    (
         [$(#[$attrs:meta])* $vis:vis struct $ident:ident]
         [$($proj_mut_ident:ident)?] [$($proj_ref_ident:ident)?] [$($proj_replace_ident:ident)?]
+        [$($proj_not_unpin_mark:ident)?]
         [$proj_vis:vis]
         [$($def_generics:tt)*]
         [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
@@ -405,9 +438,8 @@ macro_rules! __pin_project_internal {
                 $field_vis:vis $field:ident: $field_ty:ty
             ),+ $(,)?
         }
-        $(impl $($pinned_drop:tt)*)?
+        $($(#[$drop_impl_attrs:meta])* impl $($pinned_drop:tt)*)?
     ) => {
-
         #[allow(explicit_outlives_requirements)] // https://github.com/rust-lang/rust/issues/60993
         #[allow(single_use_lifetimes)] // https://github.com/rust-lang/rust/issues/55058
         // This lint warns of `clippy::*` generated by external macros.
@@ -416,10 +448,10 @@ macro_rules! __pin_project_internal {
         #[allow(clippy::redundant_pub_crate)] // This lint warns `pub(crate)` field in private struct.
         #[allow(clippy::used_underscore_binding)]
         const _: () = {
-            $crate::__pin_project_internal! { @make_proj_ty;
+            $crate::__pin_project_make_proj_ty! {
                 [$($proj_mut_ident)? Projection]
                 [$proj_vis struct $ident]
-                [make_proj_field_mut]
+                [__pin_project_make_proj_field_mut]
                 [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
                 {
                     $(
@@ -428,10 +460,10 @@ macro_rules! __pin_project_internal {
                     ),+
                 }
             }
-            $crate::__pin_project_internal! { @make_proj_ty;
+            $crate::__pin_project_make_proj_ty! {
                 [$($proj_ref_ident)? ProjectionRef]
                 [$proj_vis struct $ident]
-                [make_proj_field_ref]
+                [__pin_project_make_proj_field_ref]
                 [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
                 {
                     $(
@@ -445,7 +477,7 @@ macro_rules! __pin_project_internal {
             $(where
                 $($where_clause)*)?
             {
-                $crate::__pin_project_internal! { @struct=>make_proj_method;
+                $crate::__pin_project_struct_make_proj_method! {
                     [$($proj_mut_ident)? Projection]
                     [$proj_vis]
                     [project get_unchecked_mut mut]
@@ -457,7 +489,7 @@ macro_rules! __pin_project_internal {
                         ),+
                     }
                 }
-                $crate::__pin_project_internal! { @struct=>make_proj_method;
+                $crate::__pin_project_struct_make_proj_method! {
                     [$($proj_ref_ident)? ProjectionRef]
                     [$proj_vis]
                     [project_ref get_ref]
@@ -469,7 +501,7 @@ macro_rules! __pin_project_internal {
                         ),+
                     }
                 }
-                $crate::__pin_project_internal! { @struct=>make_proj_replace_method;
+                $crate::__pin_project_struct_make_proj_replace_method! {
                     [$($proj_replace_ident)?]
                     [$proj_vis]
                     [ProjectionReplace]
@@ -483,20 +515,21 @@ macro_rules! __pin_project_internal {
                 }
             }
 
-            $crate::__pin_project_internal! { @make_unpin_impl;
+            $crate::__pin_project_make_unpin_impl! {
+                [$($proj_not_unpin_mark)?]
                 [$vis $ident]
                 [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
                 $(
-                    $field: $crate::__pin_project_internal!(@make_unpin_bound;
+                    $field: $crate::__pin_project_make_unpin_bound!(
                         $(#[$pin])? $field_ty
                     )
                 ),+
             }
 
-            $crate::__pin_project_internal! { @make_drop_impl;
+            $crate::__pin_project_make_drop_impl! {
                 [$ident]
                 [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
-                $(impl $($pinned_drop)*)?
+                $($(#[$drop_impl_attrs])* impl $($pinned_drop)*)?
             }
 
             // Ensure that it's impossible to use pin projections on a #[repr(packed)] struct.
@@ -530,11 +563,10 @@ macro_rules! __pin_project_internal {
             }
         };
     };
-    // =============================================================================================
-    // enum:main
-    (@constant;
+    (
         [$(#[$attrs:meta])* $vis:vis enum $ident:ident]
         [$($proj_mut_ident:ident)?] [$($proj_ref_ident:ident)?] [$($proj_replace_ident:ident)?]
+        [$($proj_not_unpin_mark:ident)?]
         [$proj_vis:vis]
         [$($def_generics:tt)*]
         [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
@@ -549,9 +581,8 @@ macro_rules! __pin_project_internal {
                 })?
             ),+ $(,)?
         }
-        $(impl $($pinned_drop:tt)*)?
+        $($(#[$drop_impl_attrs:meta])* impl $($pinned_drop:tt)*)?
     ) => {
-
         #[allow(single_use_lifetimes)] // https://github.com/rust-lang/rust/issues/55058
         // This lint warns of `clippy::*` generated by external macros.
         // We allow this lint for compatibility with older compilers.
@@ -562,7 +593,7 @@ macro_rules! __pin_project_internal {
             $(where
                 $($where_clause)*)?
             {
-                $crate::__pin_project_internal! { @enum=>make_proj_method;
+                $crate::__pin_project_enum_make_proj_method! {
                     [$($proj_mut_ident)?]
                     [$proj_vis]
                     [project get_unchecked_mut mut]
@@ -578,7 +609,7 @@ macro_rules! __pin_project_internal {
                         ),+
                     }
                 }
-                $crate::__pin_project_internal! { @enum=>make_proj_method;
+                $crate::__pin_project_enum_make_proj_method! {
                     [$($proj_ref_ident)?]
                     [$proj_vis]
                     [project_ref get_ref]
@@ -594,7 +625,7 @@ macro_rules! __pin_project_internal {
                         ),+
                     }
                 }
-                $crate::__pin_project_internal! { @enum=>make_proj_replace_method;
+                $crate::__pin_project_enum_make_proj_replace_method! {
                     [$($proj_replace_ident)?]
                     [$proj_vis]
                     [$($ty_generics)*]
@@ -611,13 +642,14 @@ macro_rules! __pin_project_internal {
                 }
             }
 
-            $crate::__pin_project_internal! { @make_unpin_impl;
+            $crate::__pin_project_make_unpin_impl! {
+                [$($proj_not_unpin_mark)?]
                 [$vis $ident]
                 [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
                 $(
                     $variant: ($(
                         $(
-                            $crate::__pin_project_internal!(@make_unpin_bound;
+                            $crate::__pin_project_make_unpin_bound!(
                                 $(#[$pin])? $field_ty
                             )
                         ),+
@@ -625,18 +657,22 @@ macro_rules! __pin_project_internal {
                 ),+
             }
 
-            $crate::__pin_project_internal! { @make_drop_impl;
+            $crate::__pin_project_make_drop_impl! {
                 [$ident]
                 [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
-                $(impl $($pinned_drop)*)?
+                $($(#[$drop_impl_attrs])* impl $($pinned_drop)*)?
             }
 
             // We don't need to check for '#[repr(packed)]',
             // since it does not apply to enums.
         };
     };
+}
 
-    (@reconstruct;
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_reconstruct {
+    (
         [$(#[$attrs:meta])* $vis:vis struct $ident:ident]
         [$($def_generics:tt)*] [$($impl_generics:tt)*]
         [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
@@ -657,9 +693,7 @@ macro_rules! __pin_project_internal {
             ),+
         }
     };
-
-    // reconstruct original enum type
-    (@reconstruct;
+    (
         [$(#[$attrs:meta])* $vis:vis enum $ident:ident]
         [$($def_generics:tt)*] [$($impl_generics:tt)*]
         [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
@@ -690,13 +724,88 @@ macro_rules! __pin_project_internal {
             ),+
         }
     };
-    // construct a projected type
-    (@make_proj_ty;
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_ty {
+    ([] $($field:tt)*) => {};
+    (
+        [$proj_ty_ident:ident $default_ident:ident]
+        [$proj_vis:vis struct $ident:ident]
+        $($field:tt)*
+    ) => {};
+    (
+        [$proj_ty_ident:ident]
+        [$proj_vis:vis struct $ident:ident]
+        [$__pin_project_make_proj_field:ident]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
+        {
+            $(
+                $(#[$pin:ident])?
+                $field_vis:vis $field:ident: $field_ty:ty
+            ),+ $(,)?
+        }
+    ) => {
+        $crate::__pin_project_make_proj_ty_body! {
+            [$proj_ty_ident]
+            [$proj_vis struct $ident]
+            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
+            [
+                $(
+                    $field_vis $field: $crate::$__pin_project_make_proj_field!(
+                        $(#[$pin])? $field_ty
+                    )
+                ),+
+            ]
+        }
+    };
+    (
+        [$proj_ty_ident:ident]
+        [$proj_vis:vis enum $ident:ident]
+        [$__pin_project_make_proj_field:ident]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
+        {
+            $(
+                $(#[$variant_attrs:meta])*
+                $variant:ident $({
+                    $(
+                        $(#[$pin:ident])?
+                        $field:ident: $field_ty:ty
+                    ),+ $(,)?
+                })?
+            ),+ $(,)?
+        }
+    ) => {
+        $crate::__pin_project_make_proj_ty_body! {
+            [$proj_ty_ident]
+            [$proj_vis enum $ident]
+            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
+            [
+                $(
+                    $variant $({
+                        $(
+                            $field: $crate::$__pin_project_make_proj_field!(
+                                $(#[$pin])? $field_ty
+                            )
+                        ),+
+                    })?
+                ),+
+            ]
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_ty_body {
+    (
         [$proj_ty_ident:ident]
         [$proj_vis:vis $struct_ty_ident:ident $ident:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
         [$($body_data:tt)+]
     ) => {
+        #[doc(hidden)] // Workaround for rustc bug: see https://github.com/taiki-e/pin-project-lite/issues/77#issuecomment-1671540180 for more.
         #[allow(dead_code)] // This lint warns unused fields/variants.
         #[allow(single_use_lifetimes)] // https://github.com/rust-lang/rust/issues/55058
         // This lint warns of `clippy::*` generated by external macros.
@@ -714,13 +823,83 @@ macro_rules! __pin_project_internal {
             $($body_data)+
         }
     };
-    // construct a project_replace type
-    (@make_proj_replace_ty;
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_replace_ty {
+    ([] $($field:tt)*) => {};
+    (
+        [$proj_ty_ident:ident]
+        [$proj_vis:vis struct]
+        [$__pin_project_make_proj_field:ident]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
+        {
+            $(
+                $(#[$pin:ident])?
+                $field_vis:vis $field:ident: $field_ty:ty
+            ),+ $(,)?
+        }
+    ) => {
+        $crate::__pin_project_make_proj_replace_ty_body! {
+            [$proj_ty_ident]
+            [$proj_vis struct]
+            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
+            [
+                $(
+                    $field_vis $field: $crate::$__pin_project_make_proj_field!(
+                        $(#[$pin])? $field_ty
+                    )
+                ),+
+            ]
+        }
+    };
+    (
+        [$proj_ty_ident:ident]
+        [$proj_vis:vis enum]
+        [$__pin_project_make_proj_field:ident]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
+        {
+            $(
+                $(#[$variant_attrs:meta])*
+                $variant:ident $({
+                    $(
+                        $(#[$pin:ident])?
+                        $field:ident: $field_ty:ty
+                    ),+ $(,)?
+                })?
+            ),+ $(,)?
+        }
+    ) => {
+        $crate::__pin_project_make_proj_replace_ty_body! {
+            [$proj_ty_ident]
+            [$proj_vis enum]
+            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)*)?]
+            [
+                $(
+                    $variant $({
+                        $(
+                            $field: $crate::$__pin_project_make_proj_field!(
+                                $(#[$pin])? $field_ty
+                            )
+                        ),+
+                    })?
+                ),+
+            ]
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_replace_ty_body {
+    (
         [$proj_ty_ident:ident]
         [$proj_vis:vis $struct_ty_ident:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
         [$($body_data:tt)+]
     ) => {
+        #[doc(hidden)] // Workaround for rustc bug: see https://github.com/taiki-e/pin-project-lite/issues/77#issuecomment-1671540180 for more.
         #[allow(dead_code)] // This lint warns unused fields/variants.
         #[allow(single_use_lifetimes)] // https://github.com/rust-lang/rust/issues/55058
         #[allow(clippy::mut_mut)] // This lint warns `&mut &mut <ty>`. (only needed for project)
@@ -733,137 +912,13 @@ macro_rules! __pin_project_internal {
             $($body_data)+
         }
     };
-    // =============================================================================================
-    // struct:make_proj_ty
-    // if a proj_ty_ident was given, we do *not* create one with the default
-    (@make_proj_ty;
-        [$proj_ty_ident:ident $default_ident:ident]
-        [$proj_vis:vis struct $ident:ident]
-        $($field:tt)*
-    ) => {};
-    (@make_proj_ty;
-        [$proj_ty_ident:ident]
-        [$proj_vis:vis struct $ident:ident]
-        [$make_proj_field:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
-        {
-            $(
-                $(#[$pin:ident])?
-                $field_vis:vis $field:ident: $field_ty:ty
-            ),+ $(,)?
-        }
-    ) => {
-        $crate::__pin_project_internal!{@make_proj_ty;
-            [$proj_ty_ident]
-            [$proj_vis struct $ident]
-            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)* )?]
-            [
-                $(
-                    $field_vis $field: $crate::__pin_project_internal!(@$make_proj_field;
-                        $(#[$pin])? $field_ty
-                    )
-                ),+
-            ]
-        }
-    };
-    (@make_proj_replace_ty;
-        [$proj_ty_ident:ident]
-        [$proj_vis:vis struct]
-        [$make_proj_field:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
-        {
-            $(
-                $(#[$pin:ident])?
-                $field_vis:vis $field:ident: $field_ty:ty
-            ),+ $(,)?
-        }
-    ) => {
-        $crate::__pin_project_internal!{@make_proj_replace_ty;
-            [$proj_ty_ident]
-            [$proj_vis struct]
-            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)* )?]
-            [
-                $(
-                    $field_vis $field: $crate::__pin_project_internal!(@$make_proj_field;
-                        $(#[$pin])? $field_ty
-                    )
-                ),+
-            ]
-        }
-    };
-    // =============================================================================================
-    // enum:make_proj_ty
-    (@make_proj_ty;
-        [$proj_ty_ident:ident]
-        [$proj_vis:vis enum $ident:ident]
-        [$make_proj_field:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
-        {
-            $(
-                $(#[$variant_attrs:meta])*
-                $variant:ident $({
-                    $(
-                        $(#[$pin:ident])?
-                        $field:ident: $field_ty:ty
-                    ),+ $(,)?
-                })?
-            ),+ $(,)?
-        }
-    ) => {
-        $crate::__pin_project_internal!{@make_proj_ty;
-            [$proj_ty_ident]
-            [$proj_vis enum $ident]
-            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)* )?]
-            [
-                $(
-                    $variant $({
-                        $(
-                            $field: $crate::__pin_project_internal!(@$make_proj_field;
-                                $(#[$pin])? $field_ty
-                            )
-                        ),+
-                    })?
-                ),+
-            ]
-        }
-    };
-    (@make_proj_replace_ty;
-        [$proj_ty_ident:ident]
-        [$proj_vis:vis enum]
-        [$make_proj_field:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
-        {
-            $(
-                $(#[$variant_attrs:meta])*
-                $variant:ident $({
-                    $(
-                        $(#[$pin:ident])?
-                        $field:ident: $field_ty:ty
-                    ),+ $(,)?
-                })?
-            ),+ $(,)?
-        }
-    ) => {
-        $crate::__pin_project_internal!{@make_proj_replace_ty;
-            [$proj_ty_ident]
-            [$proj_vis enum]
-            [$($impl_generics)*] [$($ty_generics)*] [$(where $($where_clause)* )?]
-            [
-                $(
-                    $variant $({
-                        $(
-                            $field: $crate::__pin_project_internal!(@$make_proj_field;
-                                $(#[$pin])? $field_ty
-                            )
-                        ),+
-                    })?
-                ),+
-            ]
-        }
-    };
-    // =============================================================================================
-    (@make_proj_replace_block;
-        [$($proj_path: tt)+]
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_replace_block {
+    (
+        [$($proj_path:tt)+]
         {
             $(
                 $(#[$pin:ident])?
@@ -873,7 +928,7 @@ macro_rules! __pin_project_internal {
     ) => {
         let result = $($proj_path)* {
             $(
-                $field: $crate::__pin_project_internal!(@make_replace_field_proj;
+                $field: $crate::__pin_project_make_replace_field_proj!(
                     $(#[$pin])? $field
                 )
             ),+
@@ -881,7 +936,7 @@ macro_rules! __pin_project_internal {
 
         {
             ( $(
-                $crate::__pin_project_internal!(@make_unsafe_drop_in_place_guard;
+                $crate::__pin_project_make_unsafe_drop_in_place_guard!(
                     $(#[$pin])? $field
                 ),
             )* );
@@ -889,23 +944,21 @@ macro_rules! __pin_project_internal {
 
         result
     };
-    (@make_proj_replace_block;
-        [$($proj_path: tt)+]
-    ) => {
-        $($proj_path)*
-    };
+    ([$($proj_path:tt)+]) => { $($proj_path)* };
+}
 
-    // =============================================================================================
-    // struct:make_proj_method
-    // this employs an ignored default strategy that ensures the identity used matches the one used in `struct=>make_proj_ty`
-    (@struct=>make_proj_method;
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_struct_make_proj_method {
+    ([] $($variant:tt)*) => {};
+    (
         [$proj_ty_ident:ident $_ignored_default_arg:ident]
         [$proj_vis:vis]
         [$method_ident:ident $get_method:ident $($mut:ident)?]
         [$($ty_generics:tt)*]
         $($variant:tt)*
     ) => {
-        $crate::__pin_project_internal! { @struct=>make_proj_method;
+        $crate::__pin_project_struct_make_proj_method! {
             [$proj_ty_ident]
             [$proj_vis]
             [$method_ident $get_method $($mut)?]
@@ -913,7 +966,7 @@ macro_rules! __pin_project_internal {
             $($variant)*
         }
     };
-    (@struct=>make_proj_method;
+    (
         [$proj_ty_ident:ident]
         [$proj_vis:vis]
         [$method_ident:ident $get_method:ident $($mut:ident)?]
@@ -925,6 +978,8 @@ macro_rules! __pin_project_internal {
             ),+
         }
     ) => {
+        #[doc(hidden)] // Workaround for rustc bug: see https://github.com/taiki-e/pin-project-lite/issues/77#issuecomment-1671540180 for more.
+        #[inline]
         $proj_vis fn $method_ident<'__pin>(
             self: $crate::__private::Pin<&'__pin $($mut)? Self>,
         ) -> $proj_ty_ident <'__pin, $($ty_generics)*> {
@@ -932,7 +987,7 @@ macro_rules! __pin_project_internal {
                 let Self { $($field),* } = self.$get_method();
                 $proj_ty_ident {
                     $(
-                        $field: $crate::__pin_project_internal!(@make_unsafe_field_proj;
+                        $field: $crate::__pin_project_make_unsafe_field_proj!(
                             $(#[$pin])? $field
                         )
                     ),+
@@ -940,8 +995,13 @@ macro_rules! __pin_project_internal {
             }
         }
     };
+}
 
-    (@struct=>make_proj_replace_method;
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_struct_make_proj_replace_method {
+    ([] $($field:tt)*) => {};
+    (
         [$proj_ty_ident:ident]
         [$proj_vis:vis]
         [$_proj_ty_ident:ident]
@@ -953,6 +1013,8 @@ macro_rules! __pin_project_internal {
             ),+
         }
     ) => {
+        #[doc(hidden)] // Workaround for rustc bug: see https://github.com/taiki-e/pin-project-lite/issues/77#issuecomment-1671540180 for more.
+        #[inline]
         $proj_vis fn project_replace(
             self: $crate::__private::Pin<&mut Self>,
             replacement: Self,
@@ -966,7 +1028,7 @@ macro_rules! __pin_project_internal {
 
                 let Self { $($field),* } = &mut *__self_ptr;
 
-                $crate::__pin_project_internal!{@make_proj_replace_block;
+                $crate::__pin_project_make_proj_replace_block! {
                     [$proj_ty_ident]
                     {
                         $(
@@ -978,9 +1040,13 @@ macro_rules! __pin_project_internal {
             }
         }
     };
-    // =============================================================================================
-    // enum:make_proj_method
-    (@enum=>make_proj_method;
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_enum_make_proj_method {
+    ([] $($variant:tt)*) => {};
+    (
         [$proj_ty_ident:ident]
         [$proj_vis:vis]
         [$method_ident:ident $get_method:ident $($mut:ident)?]
@@ -996,6 +1062,8 @@ macro_rules! __pin_project_internal {
             ),+
         }
     ) => {
+        #[doc(hidden)] // Workaround for rustc bug: see https://github.com/taiki-e/pin-project-lite/issues/77#issuecomment-1671540180 for more.
+        #[inline]
         $proj_vis fn $method_ident<'__pin>(
             self: $crate::__private::Pin<&'__pin $($mut)? Self>,
         ) -> $proj_ty_ident <'__pin, $($ty_generics)*> {
@@ -1007,8 +1075,7 @@ macro_rules! __pin_project_internal {
                         })? => {
                             $proj_ty_ident::$variant $({
                                 $(
-                                    $field: $crate::__pin_project_internal!(
-                                        @make_unsafe_field_proj;
+                                    $field: $crate::__pin_project_make_unsafe_field_proj!(
                                         $(#[$pin])? $field
                                     )
                                 ),+
@@ -1019,7 +1086,13 @@ macro_rules! __pin_project_internal {
             }
         }
     };
-    (@enum=>make_proj_replace_method;
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_enum_make_proj_replace_method {
+    ([] $($field:tt)*) => {};
+    (
         [$proj_ty_ident:ident]
         [$proj_vis:vis]
         [$($ty_generics:tt)*]
@@ -1034,6 +1107,8 @@ macro_rules! __pin_project_internal {
             ),+
         }
     ) => {
+        #[doc(hidden)] // Workaround for rustc bug: see https://github.com/taiki-e/pin-project-lite/issues/77#issuecomment-1671540180 for more.
+        #[inline]
         $proj_vis fn project_replace(
             self: $crate::__private::Pin<&mut Self>,
             replacement: Self,
@@ -1050,7 +1125,7 @@ macro_rules! __pin_project_internal {
                         Self::$variant $({
                             $($field),+
                         })? => {
-                            $crate::__pin_project_internal!{@make_proj_replace_block;
+                            $crate::__pin_project_make_proj_replace_block! {
                                 [$proj_ty_ident :: $variant]
                                 $({
                                     $(
@@ -1065,11 +1140,15 @@ macro_rules! __pin_project_internal {
             }
         }
     };
-    // =============================================================================================
-    // make_unpin_impl
-    (@make_unpin_impl;
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_unpin_impl {
+    (
+        []
         [$vis:vis $ident:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
         $($field:tt)*
     ) => {
         // Automatically create the appropriate conditional `Unpin` implementation.
@@ -1112,12 +1191,32 @@ macro_rules! __pin_project_internal {
         {
         }
     };
+    (
+        [$proj_not_unpin_mark:ident]
+        [$vis:vis $ident:ident]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
+        $($field:tt)*
+    ) => {
+        #[doc(hidden)]
+        impl <'__pin, $($impl_generics)*> $crate::__private::Unpin for $ident <$($ty_generics)*>
+        where
+            (
+                ::core::marker::PhantomData<&'__pin ()>,
+                ::core::marker::PhantomPinned,
+            ): $crate::__private::Unpin
+            $(, $($where_clause)*)?
+        {
+        }
+    }
+}
 
-    // =============================================================================================
-    // make_drop_impl
-    (@make_drop_impl;
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_drop_impl {
+    (
         [$_ident:ident]
-        [$($_impl_generics:tt)*] [$($_ty_generics:tt)*] [$(where $($_where_clause:tt)* )?]
+        [$($_impl_generics:tt)*] [$($_ty_generics:tt)*] [$(where $($_where_clause:tt)*)?]
+        $(#[$drop_impl_attrs:meta])*
         impl $(<
             $( $lifetime:lifetime $(: $lifetime_bound:lifetime)? ),* $(,)?
             $( $generics:ident
@@ -1134,11 +1233,13 @@ macro_rules! __pin_project_internal {
             ),* $(,)?
         )?
         {
+            $(#[$drop_fn_attrs:meta])*
             fn drop($($arg:ident)+: Pin<&mut Self>) {
                 $($tt:tt)*
             }
         }
     ) => {
+        $(#[$drop_impl_attrs])*
         impl $(<
             $( $lifetime $(: $lifetime_bound)? ,)*
             $( $generics
@@ -1155,6 +1256,7 @@ macro_rules! __pin_project_internal {
             ),*
         )?
         {
+            $(#[$drop_fn_attrs])*
             fn drop(&mut self) {
                 // Implementing `__DropInner::__drop_inner` is safe, but calling it is not safe.
                 // This is because destructors can be called multiple times in safe code and
@@ -1199,9 +1301,9 @@ macro_rules! __pin_project_internal {
             }
         }
     };
-    (@make_drop_impl;
+    (
         [$ident:ident]
-        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)* )?]
+        [$($impl_generics:tt)*] [$($ty_generics:tt)*] [$(where $($where_clause:tt)*)?]
     ) => {
         // Ensure that struct does not implement `Drop`.
         //
@@ -1221,108 +1323,94 @@ macro_rules! __pin_project_internal {
         {
         }
     };
+}
 
-    // =============================================================================================
-    // make_unpin_bound
-    (@make_unpin_bound;
-        #[pin]
-        $field_ty:ty
-    ) => {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_unpin_bound {
+    (#[pin] $field_ty:ty) => {
         $field_ty
     };
-    (@make_unpin_bound;
-        $field_ty:ty
-    ) => {
+    ($field_ty:ty) => {
         $crate::__private::AlwaysUnpin<$field_ty>
     };
+}
 
-    // =============================================================================================
-    // make_unsafe_field_proj
-    (@make_unsafe_field_proj;
-        #[pin]
-        $field:ident
-    ) => {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_unsafe_field_proj {
+    (#[pin] $field:ident) => {
         $crate::__private::Pin::new_unchecked($field)
     };
-    (@make_unsafe_field_proj;
-        $field:ident
-    ) => {
+    ($field:ident) => {
         $field
     };
+}
 
-    // =============================================================================================
-    // make_replace_field_proj
-    (@make_replace_field_proj;
-        #[pin]
-        $field:ident
-    ) => {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_replace_field_proj {
+    (#[pin] $field:ident) => {
         $crate::__private::PhantomData
     };
-    (@make_replace_field_proj;
-        $field:ident
-    ) => {
+    ($field:ident) => {
         $crate::__private::ptr::read($field)
     };
+}
 
-
-    // =============================================================================================
-    // make_unsafe_drop_in_place_guard
-    (@make_unsafe_drop_in_place_guard;
-        #[pin]
-        $field:ident
-    ) => {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_unsafe_drop_in_place_guard {
+    (#[pin] $field:ident) => {
         $crate::__private::UnsafeDropInPlaceGuard::new($field)
     };
-    (@make_unsafe_drop_in_place_guard;
-        $field:ident
-    ) => {
+    ($field:ident) => {
         ()
     };
+}
 
-    // =============================================================================================
-    // make_proj_field
-    (@make_proj_field_mut;
-        #[pin]
-        $field_ty:ty
-    ) => {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_field_mut {
+    (#[pin] $field_ty:ty) => {
         $crate::__private::Pin<&'__pin mut ($field_ty)>
     };
-    (@make_proj_field_mut;
-        $field_ty:ty
-    ) => {
+    ($field_ty:ty) => {
         &'__pin mut ($field_ty)
     };
-    (@make_proj_field_ref;
-        #[pin]
-        $field_ty:ty
-    ) => {
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_field_ref {
+    (#[pin] $field_ty:ty) => {
         $crate::__private::Pin<&'__pin ($field_ty)>
     };
-    (@make_proj_field_ref;
-        $field_ty:ty
-    ) => {
+    ($field_ty:ty) => {
         &'__pin ($field_ty)
     };
+}
 
-    (@make_proj_field_replace;
-        #[pin]
-        $field_ty:ty
-    ) => {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_make_proj_field_replace {
+    (#[pin] $field_ty:ty) => {
         $crate::__private::PhantomData<$field_ty>
     };
-    (@make_proj_field_replace;
-        $field_ty:ty
-    ) => {
+    ($field_ty:ty) => {
         $field_ty
     };
+}
 
-    // =============================================================================================
-    // Parses attributes and determines visibility
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_internal {
     // parsing proj_mut_ident
     (
         []
         [$($proj_ref_ident:ident)?]
         [$($proj_replace_ident:ident)?]
+        [$( ! $proj_not_unpin_mark:ident)?]
         [$($attrs:tt)*]
 
         #[project = $proj_mut_ident:ident]
@@ -1332,112 +1420,144 @@ macro_rules! __pin_project_internal {
             [$proj_mut_ident]
             [$($proj_ref_ident)?]
             [$($proj_replace_ident)?]
+            [$( ! $proj_not_unpin_mark)?]
             [$($attrs)*]
             $($tt)*
         }
     };
-
     // parsing proj_ref_ident
-    {
+    (
         [$($proj_mut_ident:ident)?]
         []
         [$($proj_replace_ident:ident)?]
+        [$( ! $proj_not_unpin_mark:ident)?]
         [$($attrs:tt)*]
 
         #[project_ref = $proj_ref_ident:ident]
         $($tt:tt)*
-    } => {
+    ) => {
         $crate::__pin_project_internal! {
             [$($proj_mut_ident)?]
             [$proj_ref_ident]
             [$($proj_replace_ident)?]
+            [$( ! $proj_not_unpin_mark)?]
             [$($attrs)*]
             $($tt)*
         }
     };
-
     // parsing proj_replace_ident
-    {
+    (
         [$($proj_mut_ident:ident)?]
         [$($proj_ref_ident:ident)?]
         []
+        [$( ! $proj_not_unpin_mark:ident)?]
         [$($attrs:tt)*]
 
         #[project_replace = $proj_replace_ident:ident]
         $($tt:tt)*
-    } => {
+    ) => {
         $crate::__pin_project_internal! {
             [$($proj_mut_ident)?]
             [$($proj_ref_ident)?]
             [$proj_replace_ident]
+            [$( ! $proj_not_unpin_mark)?]
             [$($attrs)*]
             $($tt)*
         }
     };
-
-    // this is actually part of a recursive step that picks off a single non-`pin_project_lite` attribute
-    // there could be more to parse
-    {
+    // parsing !Unpin
+    (
         [$($proj_mut_ident:ident)?]
         [$($proj_ref_ident:ident)?]
         [$($proj_replace_ident:ident)?]
+        []
+        [$($attrs:tt)*]
+
+        #[project( ! $proj_not_unpin_mark:ident)]
+        $($tt:tt)*
+    ) => {
+        $crate::__pin_project_internal! {
+            [$($proj_mut_ident)?]
+            [$($proj_ref_ident)?]
+            [$($proj_replace_ident)?]
+            [ ! $proj_not_unpin_mark]
+            [$($attrs)*]
+            $($tt)*
+        }
+    };
+    // this is actually part of a recursive step that picks off a single non-`pin_project_lite` attribute
+    // there could be more to parse
+    (
+        [$($proj_mut_ident:ident)?]
+        [$($proj_ref_ident:ident)?]
+        [$($proj_replace_ident:ident)?]
+        [$( ! $proj_not_unpin_mark:ident)?]
         [$($attrs:tt)*]
 
         #[$($attr:tt)*]
         $($tt:tt)*
-    } => {
+    ) => {
         $crate::__pin_project_internal! {
             [$($proj_mut_ident)?]
             [$($proj_ref_ident)?]
             [$($proj_replace_ident)?]
+            [$( ! $proj_not_unpin_mark)?]
             [$($attrs)* #[$($attr)*]]
             $($tt)*
         }
     };
-
     // now determine visibility
     // if public, downgrade
-    {
+    (
         [$($proj_mut_ident:ident)?]
         [$($proj_ref_ident:ident)?]
         [$($proj_replace_ident:ident)?]
+        [$( ! $proj_not_unpin_mark:ident)?]
         [$($attrs:tt)*]
         pub $struct_ty_ident:ident $ident:ident
         $($tt:tt)*
-    } => {
-        $crate::__pin_project_internal! {
+    ) => {
+        $crate::__pin_project_parse_generics! {
             [$($proj_mut_ident)?]
             [$($proj_ref_ident)?]
             [$($proj_replace_ident)?]
+            [$($proj_not_unpin_mark)?]
             [$($attrs)*]
             [pub $struct_ty_ident $ident pub(crate)]
             $($tt)*
         }
     };
-    {
+    (
         [$($proj_mut_ident:ident)?]
         [$($proj_ref_ident:ident)?]
         [$($proj_replace_ident:ident)?]
+        [$( ! $proj_not_unpin_mark:ident)?]
         [$($attrs:tt)*]
         $vis:vis $struct_ty_ident:ident $ident:ident
         $($tt:tt)*
-    } => {
-        $crate::__pin_project_internal! {
+    ) => {
+        $crate::__pin_project_parse_generics! {
             [$($proj_mut_ident)?]
             [$($proj_ref_ident)?]
             [$($proj_replace_ident)?]
+            [$($proj_not_unpin_mark)?]
             [$($attrs)*]
             [$vis $struct_ty_ident $ident $vis]
             $($tt)*
         }
     };
-    // parse generics
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __pin_project_parse_generics {
     (
         [$($proj_mut_ident:ident)?]
         [$($proj_ref_ident:ident)?]
         [$($proj_replace_ident:ident)?]
+        [$($proj_not_unpin_mark:ident)?]
         [$($attrs:tt)*]
-        [$vis:vis $struct_ty_ident:ident $ident:ident $proj_ty_vis:vis]
+        [$vis:vis $struct_ty_ident:ident $ident:ident $proj_vis:vis]
         $(<
             $( $lifetime:lifetime $(: $lifetime_bound:lifetime)? ),* $(,)?
             $( $generics:ident
@@ -1457,13 +1577,14 @@ macro_rules! __pin_project_internal {
         {
             $($body_data:tt)*
         }
-        $(impl $($pinned_drop:tt)*)?
+        $($(#[$drop_impl_attrs:meta])* impl $($pinned_drop:tt)*)?
     ) => {
-        $crate::__pin_project_internal! { @expand;
+        $crate::__pin_project_expand! {
             [$($proj_mut_ident)?]
             [$($proj_ref_ident)?]
             [$($proj_replace_ident)?]
-            [$proj_ty_vis]
+            [$($proj_not_unpin_mark)?]
+            [$proj_vis]
             [$($attrs)* $vis $struct_ty_ident $ident]
             [$(<
                 $( $lifetime $(: $lifetime_bound)? ,)*
@@ -1491,12 +1612,11 @@ macro_rules! __pin_project_internal {
             {
                 $($body_data)*
             }
-            $(impl $($pinned_drop)*)?
+            $($(#[$drop_impl_attrs])* impl $($pinned_drop)*)?
         }
     };
 }
 
-// Not public API.
 #[doc(hidden)]
 pub mod __private {
     use core::mem::ManuallyDrop;
@@ -1527,6 +1647,8 @@ pub mod __private {
 
     impl<T: ?Sized> Drop for UnsafeDropInPlaceGuard<T> {
         fn drop(&mut self) {
+            // SAFETY: the caller of `UnsafeDropInPlaceGuard::new` must guarantee
+            // that `ptr` is valid for drop when this guard is destructed.
             unsafe {
                 ptr::drop_in_place(self.0);
             }
@@ -1550,6 +1672,8 @@ pub mod __private {
 
     impl<T> Drop for UnsafeOverwriteGuard<T> {
         fn drop(&mut self) {
+            // SAFETY: the caller of `UnsafeOverwriteGuard::new` must guarantee
+            // that `target` is valid for writes when this guard is destructed.
             unsafe {
                 ptr::write(self.target, ptr::read(&*self.value));
             }
