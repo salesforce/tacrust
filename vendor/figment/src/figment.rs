@@ -19,28 +19,50 @@ use crate::coalesce::{Coalescible, Order};
 /// [`Figment::profile()`] and defaults to [`Profile::Default`]. The [top-level
 /// docs](crate) contain a broad overview of these topics.
 ///
-/// ## Merging vs. Joining
+/// ## Conflict Resolution
 ///
-/// _Merging_ and _joining_ control whether duplicate values are replaced or
-/// discarded. A _merged_ value replaces an existing value with the same key,
-/// while a _joined_ value is discarded if a value with the same key exists:
+/// Conflicts arising from two providers providing values for the same key are
+/// resolved via one of four strategies: [`join`], [`adjoin`], [`merge`], and
+/// [`admerge`]. In general, `join` and `adjoin` prefer existing values while
+/// `merge` and `admerge` prefer later values. The `ad-` strategies additionally
+/// concatenate conflicting arrays whereas the non-`ad-` strategies treat arrays
+/// as non-composite values.
 ///
-/// ```rust
-/// use figment::Figment;
+/// The table below summarizes these strategies and their behavior, with the
+/// column label referring to the type of the value pointed to by the
+/// conflicting keys:
 ///
-/// let figment = Figment::from(("key", "original"));
+/// | Strategy    | Dictionaries   | Arrays        | All Others    |
+/// |-------------|----------------|---------------|---------------|
+/// | [`join`]    | Union, Recurse | Keep Existing | Keep Existing |
+/// | [`adjoin`]  | Union, Recurse | Concatenate   | Keep Existing |
+/// | [`merge`]   | Union, Recurse | Use Incoming  | Use Incoming  |
+/// | [`admerge`] | Union, Recurse | Concatenate   | Use Incoming  |
 ///
-/// let original: String = figment.extract_inner("key").unwrap();
-/// assert_eq!(original, "original");
+/// ### Description
 ///
-/// let figment = figment.merge(("key", "replaced"));
-/// let replaced: String = figment.extract_inner("key").unwrap();
-/// assert_eq!(replaced, "replaced");
+/// If both keys point to a **dictionary**, the dictionaries are always unioned,
+/// irrespective of the strategy, and conflict resolution proceeds recursively
+/// with each key in the union.
 ///
-/// let figment = figment.join(("key", "joined"));
-/// let joined: String = figment.extract_inner("key").unwrap();
-/// assert_eq!(joined, "replaced");
-/// ```
+/// If both keys point to an **array**:
+///
+///   * `join` uses the existing value
+///   * `merge` uses the incoming value
+///   * `adjoin` and `admerge` concatenate the arrays
+///
+/// If both keys point to a **non-composite** (`String`, `Num`, etc.) or values
+/// of different kinds (i.e, **array** and **num**):
+///
+///   * `join` and `adjoin` use the existing value
+///   * `merge` and `admerge` use the incoming value
+///
+/// [`join`]: Figment::join()
+/// [`adjoin`]: Figment::adjoin()
+/// [`merge`]: Figment::merge()
+/// [`admerge`]: Figment::admerge()
+///
+/// For examples, refer to each strategy's documentation.
 ///
 /// ## Extraction
 ///
@@ -148,34 +170,168 @@ impl Figment {
         self
     }
 
-    /// Joins `provider` into the current figment. See [merging vs.
-    /// joining](#merging-vs-joining) for details.
+    /// Joins `provider` into the current figment.
+    /// See [conflict resolution](#conflict-resolution) for details.
     ///
     /// ```rust
     /// use figment::Figment;
-    /// use figment::providers::Env;
+    /// use figment::util::map;
+    /// use figment::value::{Dict, Map};
     ///
-    /// let figment = Figment::new().join(Env::raw());
-    /// assert_eq!(figment.metadata().count(), 1);
+    /// let figment = Figment::new()
+    ///     .join(("string", "original"))
+    ///     .join(("vec", vec!["item 1"]))
+    ///     .join(("map", map!["string" => "inner original"]));
+    ///
+    /// let new_figment = Figment::new()
+    ///     .join(("string", "replaced"))
+    ///     .join(("vec", vec!["item 2"]))
+    ///     .join(("map", map!["string" => "inner replaced", "new" => "value"]))
+    ///     .join(("new", "value"));
+    ///
+    /// let figment = figment.join(new_figment); // **join**
+    ///
+    /// let string: String = figment.extract_inner("string").unwrap();
+    /// assert_eq!(string, "original"); // existing value retained
+    ///
+    /// let vec: Vec<String> = figment.extract_inner("vec").unwrap();
+    /// assert_eq!(vec, vec!["item 1"]); // existing value retained
+    ///
+    /// let map: Map<String, String> = figment.extract_inner("map").unwrap();
+    /// assert_eq!(map, map! {
+    ///     "string".into() => "inner original".into(), // existing value retained
+    ///     "new".into() => "value".into(), // new key added
+    /// });
+    ///
+    /// let new: String = figment.extract_inner("new").unwrap();
+    /// assert_eq!(new, "value"); // new key added
     /// ```
     #[track_caller]
     pub fn join<T: Provider>(self, provider: T) -> Self {
         self.provide(provider, Order::Join)
     }
 
-    /// Merges `provider` into the current figment. See [merging vs.
-    /// joining](#merging-vs-joining) for details.
+    /// Joins `provider` into the current figment while concatenating vectors.
+    /// See [conflict resolution](#conflict-resolution) for details.
     ///
     /// ```rust
     /// use figment::Figment;
-    /// use figment::providers::Env;
+    /// use figment::util::map;
+    /// use figment::value::{Dict, Map};
     ///
-    /// let figment = Figment::new().merge(Env::raw());
-    /// assert_eq!(figment.metadata().count(), 1);
+    /// let figment = Figment::new()
+    ///     .join(("string", "original"))
+    ///     .join(("vec", vec!["item 1"]))
+    ///     .join(("map", map!["vec" => vec!["inner item 1"]]));
+    ///
+    /// let new_figment = Figment::new()
+    ///     .join(("string", "replaced"))
+    ///     .join(("vec", vec!["item 2"]))
+    ///     .join(("map", map!["vec" => vec!["inner item 2"], "new" => vec!["value"]]))
+    ///     .join(("new", "value"));
+    ///
+    /// let figment = figment.adjoin(new_figment); // **adjoin**
+    ///
+    /// let string: String = figment.extract_inner("string").unwrap();
+    /// assert_eq!(string, "original"); // existing value retained
+    ///
+    /// let vec: Vec<String> = figment.extract_inner("vec").unwrap();
+    /// assert_eq!(vec, vec!["item 1", "item 2"]); // arrays concatenated
+    ///
+    /// let map: Map<String, Vec<String>> = figment.extract_inner("map").unwrap();
+    /// assert_eq!(map, map! {
+    ///     "vec".into() => vec!["inner item 1".into(), "inner item 2".into()], // arrays concatenated
+    ///     "new".into() => vec!["value".into()], // new key added
+    /// });
+    ///
+    /// let new: String = figment.extract_inner("new").unwrap();
+    /// assert_eq!(new, "value"); // new key added
+    /// ```
+    #[track_caller]
+    pub fn adjoin<T: Provider>(self, provider: T) -> Self {
+        self.provide(provider, Order::Adjoin)
+    }
+
+    /// Merges `provider` into the current figment.
+    /// See [conflict resolution](#conflict-resolution) for details.
+    ///
+    /// ```rust
+    /// use figment::Figment;
+    /// use figment::util::map;
+    /// use figment::value::{Dict, Map};
+    ///
+    /// let figment = Figment::new()
+    ///     .join(("string", "original"))
+    ///     .join(("vec", vec!["item 1"]))
+    ///     .join(("map", map!["string" => "inner original"]));
+    ///
+    /// let new_figment = Figment::new()
+    ///     .join(("string", "replaced"))
+    ///     .join(("vec", vec!["item 2"]))
+    ///     .join(("map", map!["string" => "inner replaced", "new" => "value"]))
+    ///     .join(("new", "value"));
+    ///
+    /// let figment = figment.merge(new_figment); // **merge**
+    ///
+    /// let string: String = figment.extract_inner("string").unwrap();
+    /// assert_eq!(string, "replaced"); // incoming value replaced existing
+    ///
+    /// let vec: Vec<String> = figment.extract_inner("vec").unwrap();
+    /// assert_eq!(vec, vec!["item 2"]); // incoming value replaced existing
+    ///
+    /// let map: Map<String, String> = figment.extract_inner("map").unwrap();
+    /// assert_eq!(map, map! {
+    ///     "string".into() => "inner replaced".into(), // incoming value replaced existing
+    ///     "new".into() => "value".into(), // new key added
+    /// });
+    ///
+    /// let new: String = figment.extract_inner("new").unwrap();
+    /// assert_eq!(new, "value"); // new key added
     /// ```
     #[track_caller]
     pub fn merge<T: Provider>(self, provider: T) -> Self {
         self.provide(provider, Order::Merge)
+    }
+
+    /// Merges `provider` into the current figment while concatenating vectors.
+    /// See [conflict resolution](#conflict-resolution) for details.
+    ///
+    /// ```rust
+    /// use figment::Figment;
+    /// use figment::util::map;
+    /// use figment::value::{Dict, Map};
+    ///
+    /// let figment = Figment::new()
+    ///     .join(("string", "original"))
+    ///     .join(("vec", vec!["item 1"]))
+    ///     .join(("map", map!["vec" => vec!["inner item 1"]]));
+    ///
+    /// let new_figment = Figment::new()
+    ///     .join(("string", "replaced"))
+    ///     .join(("vec", vec!["item 2"]))
+    ///     .join(("map", map!["vec" => vec!["inner item 2"], "new" => vec!["value"]]))
+    ///     .join(("new", "value"));
+    ///
+    /// let figment = figment.admerge(new_figment); // **admerge**
+    ///
+    /// let string: String = figment.extract_inner("string").unwrap();
+    /// assert_eq!(string, "replaced"); // incoming value replaced existing
+    ///
+    /// let vec: Vec<String> = figment.extract_inner("vec").unwrap();
+    /// assert_eq!(vec, vec!["item 1", "item 2"]); // arrays concatenated
+    ///
+    /// let map: Map<String, Vec<String>> = figment.extract_inner("map").unwrap();
+    /// assert_eq!(map, map! {
+    ///     "vec".into() => vec!["inner item 1".into(), "inner item 2".into()], // arrays concatenated
+    ///     "new".into() => vec!["value".into()], // new key added
+    /// });
+    ///
+    /// let new: String = figment.extract_inner("new").unwrap();
+    /// assert_eq!(new, "value"); // new key added
+    /// ```
+    #[track_caller]
+    pub fn admerge<T: Provider>(self, provider: T) -> Self {
+        self.provide(provider, Order::Admerge)
     }
 
     /// Sets the profile to extract from to `profile`.

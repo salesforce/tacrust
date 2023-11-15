@@ -236,9 +236,36 @@ impl RelativePathBuf {
         &self.path
     }
 
-    /// Returns this path relative to the file it was delcared in, if any.
-    /// Returns the original if this path was not declared in a file or if the
-    /// path has a root.
+    /// Returns this path resolved relative to the file it was declared in, if any.
+    ///
+    /// If the configured path was relative and it was configured from a file,
+    /// this function returns that path prefixed with that file's parent
+    /// directory. Otherwise it returns the original path. Where
+    /// `config_file_path` is the location of the configuration file, this
+    /// corresponds to:
+    ///
+    /// ```rust
+    /// # use figment::{Figment, value::magic::RelativePathBuf, Jail};
+    /// # use figment::providers::{Format, Toml};
+    /// # use serde::Deserialize;
+    /// #
+    /// # #[derive(Debug, PartialEq, Deserialize)]
+    /// # struct Config {
+    /// #     path: RelativePathBuf,
+    /// # }
+    /// # Jail::expect_with(|jail| {
+    /// # let config_file_path = jail.directory().join("Config.toml");
+    /// # let config_file = jail.create_file("Config.toml", r#"path = "hello.html""#)?;
+    /// # let config: Config = Figment::from(Toml::file("Config.toml")).extract()?;
+    /// # let relative_path_buf = config.path;
+    /// let relative = config_file_path
+    ///     .parent()
+    ///     .unwrap()
+    ///     .join(relative_path_buf.original());
+    /// # assert_eq!(relative_path_buf.relative(), relative);
+    /// # Ok(())
+    /// # });
+    /// ```
     ///
     /// # Example
     ///
@@ -358,16 +385,17 @@ impl RelativePathBuf {
     }
 }
 
+// /// MAGIC
 // #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 // #[serde(rename = "___figment_selected_profile")]
 // pub struct SelectedProfile {
-//     profile: Profile,
+//     profile: crate::Profile,
 // }
 //
-// /// TODO: This doesn't work when it's in a map and the config doesn't
-// contain a value for the corresponding field; we never get to call
-// `deserialize` on the field's value. We can't fabricate this from no value. We
-// either need to fake the field name, somehow, or just not have this.
+// /// TODO: This doesn't work when it's in a map and the config doesn't contain a
+// /// value for the corresponding field; we never get to call `deserialize` on the
+// /// field's value. We can't fabricate this from no value. We either need to fake
+// /// the field name, somehow, or just not have this.
 // impl Magic for SelectedProfile {
 //     const NAME: &'static str = "___figment_selected_profile";
 //     const FIELDS: &'static [&'static str] = &["profile"];
@@ -383,7 +411,7 @@ impl RelativePathBuf {
 // }
 //
 // impl Deref for SelectedProfile {
-//     type Target = Profile;
+//     type Target = crate::Profile;
 //
 //     fn deref(&self) -> &Self::Target {
 //         &self.profile
@@ -450,6 +478,7 @@ impl RelativePathBuf {
 /// assert_eq!(config.path_or_bytes, Either::Right(vec![3, 7, 13]));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// #[serde(untagged)]
 // #[derive(Serialize)]
 pub enum Either<A, B> {
     /// The "left" variant.
@@ -627,6 +656,7 @@ impl<T> From<T> for Tagged<T> {
 mod _serde {
     use super::*;
 
+    #[allow(unused_imports)]
     pub mod export {
         // These are re-reexports used by serde's codegen.
         pub use std::clone::Clone;
@@ -1010,22 +1040,10 @@ mod _serde {
             {
                 match *self {
                     Either::Left(ref __field0) => {
-                        _serde::Serializer::serialize_newtype_variant(
-                            __serializer,
-                            "Either",
-                            0u32,
-                            "Left",
-                            __field0,
-                        )
+                        _serde::Serialize::serialize(__field0, __serializer)
                     }
                     Either::Right(ref __field0) => {
-                        _serde::Serializer::serialize_newtype_variant(
-                            __serializer,
-                            "Either",
-                            1u32,
-                            "Right",
-                            __field0,
-                        )
+                        _serde::Serialize::serialize(__field0, __serializer)
                     }
                 }
             }
@@ -1426,11 +1444,14 @@ mod tests {
     // fn test_selected_profile() {
     //     use super::SelectedProfile;
     //
+    //     let profile: SelectedProfile = Figment::new().extract().unwrap();
+    //     assert_eq!(&*profile, crate::Profile::default());
+    //
     //     let profile: SelectedProfile = Figment::new().select("foo").extract().unwrap();
-    //     assert_eq!(profile.as_str(), "foo");
+    //     assert_eq!(&*profile, "foo");
     //
     //     let profile: SelectedProfile = Figment::new().select("bar").extract().unwrap();
-    //     assert_eq!(profile.as_str(), "bar");
+    //     assert_eq!(&*profile, "bar");
     //
     //     #[derive(serde::Deserialize)]
     //     struct Testing {
@@ -1443,7 +1464,28 @@ mod tests {
     //         .merge(("other", "hi"))
     //         .select("with-value").extract().unwrap();
     //
-    //     assert_eq!(testing.profile.as_str(), "with-value");
+    //     assert_eq!(&*testing.profile, "with-value");
+    //     assert_eq!(testing.value, 123);
+    // }
+
+    // #[test]
+    // fn test_selected_profile_kink() {
+    //     use super::SelectedProfile;
+    //
+    //     #[derive(serde::Deserialize)]
+    //     struct Base {
+    //         profile: SelectedProfile,
+    //     }
+    //
+    //     #[derive(serde::Deserialize)]
+    //     struct Testing {
+    //         base: Base,
+    //         value: usize
+    //     }
+    //
+    //     let testing: Testing = Figment::from(("value", 123)).extract().unwrap();
+    //
+    //     assert_eq!(&*testing.base.profile, "with-value");
     //     assert_eq!(testing.value, 123);
     // }
 

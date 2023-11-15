@@ -2,8 +2,9 @@
 //! TOML into a Rust `struct`
 
 #![deny(warnings)]
+#![allow(dead_code)]
 
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 /// This is what we're going to decode into. Each field is optional, meaning
 /// that it doesn't have to be present in TOML.

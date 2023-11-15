@@ -6,13 +6,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! A map of String to toml::Value.
+//! A map of `String` to [Value].
 //!
 //! By default the map is backed by a [`BTreeMap`]. Enable the `preserve_order`
-//! feature of toml-rs to use [`LinkedHashMap`] instead.
+//! feature of toml-rs to use [`IndexMap`] instead.
 //!
 //! [`BTreeMap`]: https://doc.rust-lang.org/std/collections/struct.BTreeMap.html
-//! [`LinkedHashMap`]: https://docs.rs/linked-hash-map/*/linked_hash_map/struct.LinkedHashMap.html
+//! [`IndexMap`]: https://docs.rs/indexmap
 
 use crate::value::Value;
 use serde::{de, ser};
@@ -136,6 +136,20 @@ impl Map<String, Value> {
         Q: Ord + Eq + Hash,
     {
         self.map.remove(key)
+    }
+
+    /// Retains only the elements specified by the `keep` predicate.
+    ///
+    /// In other words, remove all pairs `(k, v)` for which `keep(&k, &mut v)`
+    /// returns `false`.
+    ///
+    /// The elements are visited in iteration order.
+    #[inline]
+    pub fn retain<F>(&mut self, mut keep: F)
+    where
+        F: FnMut(&str, &mut Value) -> bool,
+    {
+        self.map.retain(|key, value| keep(key.as_str(), value));
     }
 
     /// Gets the given key's corresponding entry in the map for in-place

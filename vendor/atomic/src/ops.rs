@@ -5,6 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use bytemuck::NoUninit;
+
 #[cfg(feature = "fallback")]
 use crate::fallback;
 use core::cmp;
@@ -16,31 +18,31 @@ use core::sync::atomic::Ordering;
 macro_rules! match_atomic {
     ($type:ident, $atomic:ident, $impl:expr, $fallback_impl:expr) => {
         match mem::size_of::<$type>() {
-            #[cfg(has_atomic_u8)]
+            #[cfg(target_has_atomic = "8")]
             1 if mem::align_of::<$type>() >= 1 => {
                 type $atomic = core::sync::atomic::AtomicU8;
 
                 $impl
             }
-            #[cfg(has_atomic_u16)]
+            #[cfg(target_has_atomic = "16")]
             2 if mem::align_of::<$type>() >= 2 => {
                 type $atomic = core::sync::atomic::AtomicU16;
 
                 $impl
             }
-            #[cfg(has_atomic_u32)]
+            #[cfg(target_has_atomic = "32")]
             4 if mem::align_of::<$type>() >= 4 => {
                 type $atomic = core::sync::atomic::AtomicU32;
 
                 $impl
             }
-            #[cfg(has_atomic_u64)]
+            #[cfg(target_has_atomic = "64")]
             8 if mem::align_of::<$type>() >= 8 => {
                 type $atomic = core::sync::atomic::AtomicU64;
 
                 $impl
             }
-            #[cfg(has_atomic_u128)]
+            #[cfg(all(feature = "nightly", target_has_atomic = "128"))]
             16 if mem::align_of::<$type>() >= 16 => {
                 type $atomic = core::sync::atomic::AtomicU128;
 
@@ -57,31 +59,31 @@ macro_rules! match_atomic {
 macro_rules! match_signed_atomic {
     ($type:ident, $atomic:ident, $impl:expr, $fallback_impl:expr) => {
         match mem::size_of::<$type>() {
-            #[cfg(has_atomic_i8)]
+            #[cfg(target_has_atomic = "8")]
             1 if mem::align_of::<$type>() >= 1 => {
                 type $atomic = core::sync::atomic::AtomicI8;
 
                 $impl
             }
-            #[cfg(has_atomic_i16)]
+            #[cfg(target_has_atomic = "16")]
             2 if mem::align_of::<$type>() >= 2 => {
                 type $atomic = core::sync::atomic::AtomicI16;
 
                 $impl
             }
-            #[cfg(has_atomic_i32)]
+            #[cfg(target_has_atomic = "32")]
             4 if mem::align_of::<$type>() >= 4 => {
                 type $atomic = core::sync::atomic::AtomicI32;
 
                 $impl
             }
-            #[cfg(has_atomic_i64)]
+            #[cfg(target_has_atomic = "64")]
             8 if mem::align_of::<$type>() >= 8 => {
                 type $atomic = core::sync::atomic::AtomicI64;
 
                 $impl
             }
-            #[cfg(has_atomic_u128)]
+            #[cfg(all(feature = "nightly", target_has_atomic = "128"))]
             16 if mem::align_of::<$type>() >= 16 => {
                 type $atomic = core::sync::atomic::AtomicI128;
 
@@ -100,15 +102,18 @@ pub const fn atomic_is_lock_free<T>() -> bool {
     let size = mem::size_of::<T>();
     let align = mem::align_of::<T>();
 
-    (cfg!(has_atomic_u8) & (size == 1) & (align >= 1))
-        | (cfg!(has_atomic_u16) & (size == 2) & (align >= 2))
-        | (cfg!(has_atomic_u32) & (size == 4) & (align >= 4))
-        | (cfg!(has_atomic_u64) & (size == 8) & (align >= 8))
-        | (cfg!(has_atomic_u128) & (size == 16) & (align >= 16))
+    (cfg!(target_has_atomic = "8") & (size == 1) & (align >= 1))
+        | (cfg!(target_has_atomic = "16") & (size == 2) & (align >= 2))
+        | (cfg!(target_has_atomic = "32") & (size == 4) & (align >= 4))
+        | (cfg!(target_has_atomic = "64") & (size == 8) & (align >= 8))
+        | (cfg!(feature = "nightly")
+            & cfg!(target_has_atomic = "128")
+            & (size == 16)
+            & (align >= 16))
 }
 
 #[inline]
-pub unsafe fn atomic_load<T>(dst: *mut T, order: Ordering) -> T {
+pub unsafe fn atomic_load<T: NoUninit>(dst: *mut T, order: Ordering) -> T {
     match_atomic!(
         T,
         A,
@@ -118,7 +123,7 @@ pub unsafe fn atomic_load<T>(dst: *mut T, order: Ordering) -> T {
 }
 
 #[inline]
-pub unsafe fn atomic_store<T>(dst: *mut T, val: T, order: Ordering) {
+pub unsafe fn atomic_store<T: NoUninit>(dst: *mut T, val: T, order: Ordering) {
     match_atomic!(
         T,
         A,
@@ -128,7 +133,7 @@ pub unsafe fn atomic_store<T>(dst: *mut T, val: T, order: Ordering) {
 }
 
 #[inline]
-pub unsafe fn atomic_swap<T>(dst: *mut T, val: T, order: Ordering) -> T {
+pub unsafe fn atomic_swap<T: NoUninit>(dst: *mut T, val: T, order: Ordering) -> T {
     match_atomic!(
         T,
         A,
@@ -146,7 +151,7 @@ unsafe fn map_result<T, U>(r: Result<T, T>) -> Result<U, U> {
 }
 
 #[inline]
-pub unsafe fn atomic_compare_exchange<T>(
+pub unsafe fn atomic_compare_exchange<T: NoUninit>(
     dst: *mut T,
     current: T,
     new: T,
@@ -167,7 +172,7 @@ pub unsafe fn atomic_compare_exchange<T>(
 }
 
 #[inline]
-pub unsafe fn atomic_compare_exchange_weak<T>(
+pub unsafe fn atomic_compare_exchange_weak<T: NoUninit>(
     dst: *mut T,
     current: T,
     new: T,
@@ -188,7 +193,7 @@ pub unsafe fn atomic_compare_exchange_weak<T>(
 }
 
 #[inline]
-pub unsafe fn atomic_add<T: Copy>(dst: *mut T, val: T, order: Ordering) -> T
+pub unsafe fn atomic_add<T: NoUninit>(dst: *mut T, val: T, order: Ordering) -> T
 where
     Wrapping<T>: ops::Add<Output = Wrapping<T>>,
 {
@@ -201,7 +206,7 @@ where
 }
 
 #[inline]
-pub unsafe fn atomic_sub<T: Copy>(dst: *mut T, val: T, order: Ordering) -> T
+pub unsafe fn atomic_sub<T: NoUninit>(dst: *mut T, val: T, order: Ordering) -> T
 where
     Wrapping<T>: ops::Sub<Output = Wrapping<T>>,
 {
@@ -214,7 +219,7 @@ where
 }
 
 #[inline]
-pub unsafe fn atomic_and<T: Copy + ops::BitAnd<Output = T>>(
+pub unsafe fn atomic_and<T: NoUninit + ops::BitAnd<Output = T>>(
     dst: *mut T,
     val: T,
     order: Ordering,
@@ -228,7 +233,7 @@ pub unsafe fn atomic_and<T: Copy + ops::BitAnd<Output = T>>(
 }
 
 #[inline]
-pub unsafe fn atomic_or<T: Copy + ops::BitOr<Output = T>>(
+pub unsafe fn atomic_or<T: NoUninit + ops::BitOr<Output = T>>(
     dst: *mut T,
     val: T,
     order: Ordering,
@@ -242,7 +247,7 @@ pub unsafe fn atomic_or<T: Copy + ops::BitOr<Output = T>>(
 }
 
 #[inline]
-pub unsafe fn atomic_xor<T: Copy + ops::BitXor<Output = T>>(
+pub unsafe fn atomic_xor<T: NoUninit + ops::BitXor<Output = T>>(
     dst: *mut T,
     val: T,
     order: Ordering,
@@ -256,7 +261,7 @@ pub unsafe fn atomic_xor<T: Copy + ops::BitXor<Output = T>>(
 }
 
 #[inline]
-pub unsafe fn atomic_min<T: Copy + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
+pub unsafe fn atomic_min<T: NoUninit + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
     match_signed_atomic!(
         T,
         A,
@@ -266,7 +271,7 @@ pub unsafe fn atomic_min<T: Copy + cmp::Ord>(dst: *mut T, val: T, order: Orderin
 }
 
 #[inline]
-pub unsafe fn atomic_max<T: Copy + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
+pub unsafe fn atomic_max<T: NoUninit + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
     match_signed_atomic!(
         T,
         A,
@@ -276,7 +281,7 @@ pub unsafe fn atomic_max<T: Copy + cmp::Ord>(dst: *mut T, val: T, order: Orderin
 }
 
 #[inline]
-pub unsafe fn atomic_umin<T: Copy + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
+pub unsafe fn atomic_umin<T: NoUninit + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
     match_atomic!(
         T,
         A,
@@ -286,7 +291,7 @@ pub unsafe fn atomic_umin<T: Copy + cmp::Ord>(dst: *mut T, val: T, order: Orderi
 }
 
 #[inline]
-pub unsafe fn atomic_umax<T: Copy + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
+pub unsafe fn atomic_umax<T: NoUninit + cmp::Ord>(dst: *mut T, val: T, order: Ordering) -> T {
     match_atomic!(
         T,
         A,
