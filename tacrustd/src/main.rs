@@ -447,7 +447,7 @@ fn setup(config_override: Option<&[u8]>) -> Result<Config, Report> {
             }
             layers.push(Layer::Env(Some("TACRUST_".to_string())));
             if config_override.is_none() {
-                layers.push(Layer::Clap(arg_matches.clone()));
+                layers.push(Layer::Clap(arg_matches));
             }
         }
     }
