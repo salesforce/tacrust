@@ -3,57 +3,102 @@
 # When uploading crates to the registry Cargo will automatically
 # "normalize" Cargo.toml files for maximal compatibility
 # with all versions of Cargo and also rewrite `path` dependencies
-# to registry (e.g., crates.io) dependencies
+# to registry (e.g., crates.io) dependencies.
 #
-# If you believe there's an error in this file please file an
-# issue against the rust-lang/cargo repository. If you're
-# editing this file be aware that the upstream Cargo.toml
-# will likely look very different (and much more reasonable)
+# If you are reading this file be aware that the original Cargo.toml
+# will likely look very different (and much more reasonable).
+# See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2018"
+edition = "2021"
 name = "twelf"
-version = "0.1.7"
+version = "0.7.0"
 authors = ["Benjamin Coenen <5719034+bnjjj@users.noreply.github.com>"]
 description = "Twelf is a configuration solution for Rust including 12-Factor support. It is designed with layers in order to configure different sources and formats to build your configuration. The main goal is to be very simple using a proc macro."
 homepage = "https://github.com/bnjjj/twelf"
 readme = "../README.md"
-keywords = ["config", "configuration", "env", "environment", "settings"]
+keywords = [
+    "config",
+    "configuration",
+    "env",
+    "environment",
+    "settings",
+]
 categories = ["config"]
 license = "MIT"
 repository = "https://github.com/bnjjj/twelf"
+
 [dependencies.clap_rs]
-version = "2.33.3"
+version = "3.0"
+features = ["derive"]
+optional = true
 package = "clap"
 
 [dependencies.config-derive]
-version = "0.1"
+version = "0.7"
 
 [dependencies.envy]
 version = "0.4.1"
+optional = true
 
 [dependencies.log]
-version = "0.4.11"
+version = "0.4.14"
 
 [dependencies.serde]
-version = "1.0.117"
+version = "1"
 features = ["derive"]
 
 [dependencies.serde_dhall]
-version = "0.10.0"
+version = "0.11"
+optional = true
 
 [dependencies.serde_ini]
 version = "0.2.0"
+optional = true
 
 [dependencies.serde_json]
-version = "1.0.59"
+version = "1"
 
 [dependencies.serde_yaml]
-version = "0.8.14"
+version = "0.8.23"
+optional = true
 
 [dependencies.thiserror]
-version = "1.0.22"
+version = "1"
 
 [dependencies.toml_rs]
-version = "0.5.7"
+version = "0.5.8"
+optional = true
 package = "toml"
+
+[features]
+clap = [
+    "clap_rs",
+    "config-derive/clap",
+    "envy",
+]
+default = [
+    "env",
+    "clap",
+]
+dhall = [
+    "serde_dhall",
+    "config-derive/dhall",
+]
+env = [
+    "envy",
+    "config-derive/env",
+]
+ini = [
+    "serde_ini",
+    "config-derive/ini",
+]
+json = ["config-derive/json"]
+toml = [
+    "toml_rs",
+    "config-derive/toml",
+]
+yaml = [
+    "serde_yaml",
+    "config-derive/yaml",
+]

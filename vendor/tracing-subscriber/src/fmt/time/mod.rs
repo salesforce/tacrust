@@ -7,17 +7,30 @@ mod datetime;
 
 #[cfg(feature = "time")]
 mod time_crate;
+
 #[cfg(feature = "time")]
 #[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 pub use time_crate::UtcTime;
 
 #[cfg(feature = "local-time")]
-#[cfg_attr(docsrs, doc(cfg(unsound_local_offset, feature = "local-time")))]
+#[cfg_attr(docsrs, doc(cfg(all(unsound_local_offset, feature = "local-time"))))]
 pub use time_crate::LocalTime;
 
 #[cfg(feature = "time")]
 #[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 pub use time_crate::OffsetTime;
+
+/// [`chrono`]-based implementation for [`FormatTime`].
+#[cfg(feature = "chrono")]
+mod chrono_crate;
+
+#[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+pub use chrono_crate::ChronoLocal;
+
+#[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+pub use chrono_crate::ChronoUtc;
 
 /// A type that can measure and format the current time.
 ///
@@ -30,7 +43,7 @@ pub use time_crate::OffsetTime;
 ///
 /// The full list of provided implementations can be found in [`time`].
 ///
-/// [`time`]: ./index.html
+/// [`time`]: self
 pub trait FormatTime {
     /// Measure and write out the current time.
     ///
@@ -52,7 +65,7 @@ pub trait FormatTime {
 /// # }
 /// ```
 pub fn time() -> SystemTime {
-    SystemTime::default()
+    SystemTime
 }
 
 /// Returns a new `Uptime` timestamp provider.

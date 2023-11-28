@@ -33,11 +33,13 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 #![no_std]
+#![cfg_attr(feature = "nightly", feature(integer_atomics))]
 
 #[cfg(any(test, feature = "std"))]
 #[macro_use]
 extern crate std;
 
+use core::mem::MaybeUninit;
 // Re-export some useful definitions from libcore
 pub use core::sync::atomic::{fence, Ordering};
 
@@ -55,7 +57,8 @@ mod ops;
 /// between threads.
 #[repr(transparent)]
 pub struct Atomic<T> {
-    v: UnsafeCell<T>,
+    // The MaybeUninit is here to work around rust-lang/rust#87341.
+    v: UnsafeCell<MaybeUninit<T>>,
 }
 
 // Atomic<T> is only Sync if T is Send
@@ -90,7 +93,7 @@ impl<T> Atomic<T> {
     #[inline]
     pub const fn new(v: T) -> Atomic<T> {
         Atomic {
-            v: UnsafeCell::new(v),
+            v: UnsafeCell::new(MaybeUninit::new(v)),
         }
     }
 
@@ -106,13 +109,18 @@ impl<T> Atomic<T> {
 }
 
 impl<T: Copy> Atomic<T> {
+    #[inline]
+    fn inner_ptr(&self) -> *mut T {
+        self.v.get() as *mut T
+    }
+
     /// Returns a mutable reference to the underlying type.
     ///
     /// This is safe because the mutable reference guarantees that no other threads are
     /// concurrently accessing the atomic data.
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.v.get() }
+        unsafe { &mut *self.inner_ptr() }
     }
 
     /// Consumes the atomic and returns the contained value.
@@ -121,7 +129,7 @@ impl<T: Copy> Atomic<T> {
     /// concurrently accessing the atomic data.
     #[inline]
     pub fn into_inner(self) -> T {
-        self.v.into_inner()
+        unsafe { self.v.into_inner().assume_init() }
     }
 
     /// Loads a value from the `Atomic`.
@@ -134,7 +142,7 @@ impl<T: Copy> Atomic<T> {
     /// Panics if `order` is `Release` or `AcqRel`.
     #[inline]
     pub fn load(&self, order: Ordering) -> T {
-        unsafe { ops::atomic_load(self.v.get(), order) }
+        unsafe { ops::atomic_load(self.inner_ptr(), order) }
     }
 
     /// Stores a value into the `Atomic`.
@@ -148,7 +156,7 @@ impl<T: Copy> Atomic<T> {
     #[inline]
     pub fn store(&self, val: T, order: Ordering) {
         unsafe {
-            ops::atomic_store(self.v.get(), val, order);
+            ops::atomic_store(self.inner_ptr(), val, order);
         }
     }
 
@@ -158,7 +166,7 @@ impl<T: Copy> Atomic<T> {
     /// of this operation.
     #[inline]
     pub fn swap(&self, val: T, order: Ordering) -> T {
-        unsafe { ops::atomic_swap(self.v.get(), val, order) }
+        unsafe { ops::atomic_swap(self.inner_ptr(), val, order) }
     }
 
     /// Stores a value into the `Atomic` if the current value is the same as the
@@ -181,7 +189,7 @@ impl<T: Copy> Atomic<T> {
         success: Ordering,
         failure: Ordering,
     ) -> Result<T, T> {
-        unsafe { ops::atomic_compare_exchange(self.v.get(), current, new, success, failure) }
+        unsafe { ops::atomic_compare_exchange(self.inner_ptr(), current, new, success, failure) }
     }
 
     /// Stores a value into the `Atomic` if the current value is the same as the
@@ -206,7 +214,9 @@ impl<T: Copy> Atomic<T> {
         success: Ordering,
         failure: Ordering,
     ) -> Result<T, T> {
-        unsafe { ops::atomic_compare_exchange_weak(self.v.get(), current, new, success, failure) }
+        unsafe {
+            ops::atomic_compare_exchange_weak(self.inner_ptr(), current, new, success, failure)
+        }
     }
 
     /// Fetches the value, and applies a function to it that returns an optional
@@ -275,7 +285,7 @@ impl Atomic<bool> {
     /// Returns the previous value.
     #[inline]
     pub fn fetch_and(&self, val: bool, order: Ordering) -> bool {
-        unsafe { ops::atomic_and(self.v.get(), val, order) }
+        unsafe { ops::atomic_and(self.inner_ptr(), val, order) }
     }
 
     /// Logical "or" with a boolean value.
@@ -286,7 +296,7 @@ impl Atomic<bool> {
     /// Returns the previous value.
     #[inline]
     pub fn fetch_or(&self, val: bool, order: Ordering) -> bool {
-        unsafe { ops::atomic_or(self.v.get(), val, order) }
+        unsafe { ops::atomic_or(self.inner_ptr(), val, order) }
     }
 
     /// Logical "xor" with a boolean value.
@@ -297,7 +307,7 @@ impl Atomic<bool> {
     /// Returns the previous value.
     #[inline]
     pub fn fetch_xor(&self, val: bool, order: Ordering) -> bool {
-        unsafe { ops::atomic_xor(self.v.get(), val, order) }
+        unsafe { ops::atomic_xor(self.inner_ptr(), val, order) }
     }
 }
 
@@ -307,31 +317,31 @@ macro_rules! atomic_ops_common {
             /// Add to the current value, returning the previous value.
             #[inline]
             pub fn fetch_add(&self, val: $t, order: Ordering) -> $t {
-                unsafe { ops::atomic_add(self.v.get(), val, order) }
+                unsafe { ops::atomic_add(self.inner_ptr(), val, order) }
             }
 
             /// Subtract from the current value, returning the previous value.
             #[inline]
             pub fn fetch_sub(&self, val: $t, order: Ordering) -> $t {
-                unsafe { ops::atomic_sub(self.v.get(), val, order) }
+                unsafe { ops::atomic_sub(self.inner_ptr(), val, order) }
             }
 
             /// Bitwise and with the current value, returning the previous value.
             #[inline]
             pub fn fetch_and(&self, val: $t, order: Ordering) -> $t {
-                unsafe { ops::atomic_and(self.v.get(), val, order) }
+                unsafe { ops::atomic_and(self.inner_ptr(), val, order) }
             }
 
             /// Bitwise or with the current value, returning the previous value.
             #[inline]
             pub fn fetch_or(&self, val: $t, order: Ordering) -> $t {
-                unsafe { ops::atomic_or(self.v.get(), val, order) }
+                unsafe { ops::atomic_or(self.inner_ptr(), val, order) }
             }
 
             /// Bitwise xor with the current value, returning the previous value.
             #[inline]
             pub fn fetch_xor(&self, val: $t, order: Ordering) -> $t {
-                unsafe { ops::atomic_xor(self.v.get(), val, order) }
+                unsafe { ops::atomic_xor(self.inner_ptr(), val, order) }
             }
         }
     )*);
@@ -344,13 +354,13 @@ macro_rules! atomic_ops_signed {
                 /// Minimum with the current value.
                 #[inline]
                 pub fn fetch_min(&self, val: $t, order: Ordering) -> $t {
-                    unsafe { ops::atomic_min(self.v.get(), val, order) }
+                    unsafe { ops::atomic_min(self.inner_ptr(), val, order) }
                 }
 
                 /// Maximum with the current value.
                 #[inline]
                 pub fn fetch_max(&self, val: $t, order: Ordering) -> $t {
-                    unsafe { ops::atomic_max(self.v.get(), val, order) }
+                    unsafe { ops::atomic_max(self.inner_ptr(), val, order) }
                 }
             }
         )*
@@ -364,13 +374,13 @@ macro_rules! atomic_ops_unsigned {
                 /// Minimum with the current value.
                 #[inline]
                 pub fn fetch_min(&self, val: $t, order: Ordering) -> $t {
-                    unsafe { ops::atomic_umin(self.v.get(), val, order) }
+                    unsafe { ops::atomic_umin(self.inner_ptr(), val, order) }
                 }
 
                 /// Maximum with the current value.
                 #[inline]
                 pub fn fetch_max(&self, val: $t, order: Ordering) -> $t {
-                    unsafe { ops::atomic_umax(self.v.get(), val, order) }
+                    unsafe { ops::atomic_umax(self.inner_ptr(), val, order) }
                 }
             }
         )*
@@ -394,7 +404,10 @@ mod tests {
     #[test]
     fn atomic_bool() {
         let a = Atomic::new(false);
-        assert_eq!(Atomic::<bool>::is_lock_free(), cfg!(has_atomic_u8),);
+        assert_eq!(
+            Atomic::<bool>::is_lock_free(),
+            cfg!(target_has_atomic = "8"),
+        );
         assert_eq!(format!("{:?}", a), "Atomic(false)");
         assert_eq!(a.load(SeqCst), false);
         a.store(true, SeqCst);
@@ -410,7 +423,7 @@ mod tests {
     #[test]
     fn atomic_i8() {
         let a = Atomic::new(0i8);
-        assert_eq!(Atomic::<i8>::is_lock_free(), cfg!(has_atomic_u8));
+        assert_eq!(Atomic::<i8>::is_lock_free(), cfg!(target_has_atomic = "8"));
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -431,7 +444,10 @@ mod tests {
     #[test]
     fn atomic_i16() {
         let a = Atomic::new(0i16);
-        assert_eq!(Atomic::<i16>::is_lock_free(), cfg!(has_atomic_u16));
+        assert_eq!(
+            Atomic::<i16>::is_lock_free(),
+            cfg!(target_has_atomic = "16")
+        );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -451,7 +467,10 @@ mod tests {
     #[test]
     fn atomic_i32() {
         let a = Atomic::new(0i32);
-        assert_eq!(Atomic::<i32>::is_lock_free(), cfg!(has_atomic_u32));
+        assert_eq!(
+            Atomic::<i32>::is_lock_free(),
+            cfg!(target_has_atomic = "32")
+        );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -473,7 +492,7 @@ mod tests {
         let a = Atomic::new(0i64);
         assert_eq!(
             Atomic::<i64>::is_lock_free(),
-            cfg!(has_atomic_u64) && mem::align_of::<i64>() == 8
+            cfg!(target_has_atomic = "64") && mem::align_of::<i64>() == 8
         );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
@@ -494,7 +513,10 @@ mod tests {
     #[test]
     fn atomic_i128() {
         let a = Atomic::new(0i128);
-        assert_eq!(Atomic::<i128>::is_lock_free(), cfg!(has_atomic_u128));
+        assert_eq!(
+            Atomic::<i128>::is_lock_free(),
+            cfg!(feature = "nightly") & cfg!(target_has_atomic = "128")
+        );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -533,7 +555,7 @@ mod tests {
     #[test]
     fn atomic_u8() {
         let a = Atomic::new(0u8);
-        assert_eq!(Atomic::<u8>::is_lock_free(), cfg!(has_atomic_u8));
+        assert_eq!(Atomic::<u8>::is_lock_free(), cfg!(target_has_atomic = "8"));
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -553,7 +575,10 @@ mod tests {
     #[test]
     fn atomic_u16() {
         let a = Atomic::new(0u16);
-        assert_eq!(Atomic::<u16>::is_lock_free(), cfg!(has_atomic_u16));
+        assert_eq!(
+            Atomic::<u16>::is_lock_free(),
+            cfg!(target_has_atomic = "16")
+        );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -573,7 +598,10 @@ mod tests {
     #[test]
     fn atomic_u32() {
         let a = Atomic::new(0u32);
-        assert_eq!(Atomic::<u32>::is_lock_free(), cfg!(has_atomic_u32));
+        assert_eq!(
+            Atomic::<u32>::is_lock_free(),
+            cfg!(target_has_atomic = "32")
+        );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -595,7 +623,7 @@ mod tests {
         let a = Atomic::new(0u64);
         assert_eq!(
             Atomic::<u64>::is_lock_free(),
-            cfg!(has_atomic_u64) && mem::align_of::<u64>() == 8
+            cfg!(target_has_atomic = "64") && mem::align_of::<u64>() == 8
         );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
@@ -616,7 +644,10 @@ mod tests {
     #[test]
     fn atomic_u128() {
         let a = Atomic::new(0u128);
-        assert_eq!(Atomic::<u128>::is_lock_free(), cfg!(has_atomic_u128));
+        assert_eq!(
+            Atomic::<u128>::is_lock_free(),
+            cfg!(feature = "nightly") & cfg!(target_has_atomic = "128")
+        );
         assert_eq!(format!("{:?}", a), "Atomic(0)");
         assert_eq!(a.load(SeqCst), 0);
         a.store(1, SeqCst);
@@ -693,7 +724,10 @@ mod tests {
     #[test]
     fn atomic_quxx() {
         let a = Atomic::default();
-        assert_eq!(Atomic::<Quux>::is_lock_free(), cfg!(has_atomic_u32));
+        assert_eq!(
+            Atomic::<Quux>::is_lock_free(),
+            cfg!(target_has_atomic = "32")
+        );
         assert_eq!(format!("{:?}", a), "Atomic(Quux(0))");
         assert_eq!(a.load(SeqCst), Quux(0));
         a.store(Quux(1), SeqCst);

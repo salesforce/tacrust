@@ -1,4 +1,0 @@
-//! # Rule shortcutting
-//!
-//! TODO
-//!

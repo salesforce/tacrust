@@ -13,10 +13,8 @@
 //! - [`AsTrace`] and [`AsLog`] traits for converting between `tracing` and `log` types.
 //! - [`LogTracer`], a [`log::Log`] implementation that consumes [`log::Record`]s
 //!   and outputs them as [`tracing::Event`].
-//! - An [`env_logger`] module, with helpers for using the [`env_logger` crate]
-//!   with `tracing` (optional, enabled by the `env-logger` feature).
 //!
-//! *Compiler support: [requires `rustc` 1.42+][msrv]*
+//! *Compiler support: [requires `rustc` 1.56+][msrv]*
 //!
 //! [msrv]: #supported-rust-versions
 //!
@@ -57,67 +55,56 @@
 //!
 //! ## Caution: Mixing both conversions
 //!
-//! Note that logger implementations that convert log records to trace events
+//! Note that `log::Logger` implementations that convert log records to trace events
 //! should not be used with `Subscriber`s that convert trace events _back_ into
-//! log records (such as the `TraceLogger`), as doing so will result in the
-//! event recursing between the subscriber and the logger forever (or, in real
-//! life, probably overflowing the call stack).
+//! `log` records, as doing so will result in the event recursing between the subscriber
+//! and the logger forever (or, in real life, probably overflowing the call stack).
 //!
 //! If the logging of trace events generated from log records produced by the
 //! `log` crate is desired, either the `log` crate should not be used to
 //! implement this logging, or an additional layer of filtering will be
 //! required to avoid infinitely converting between `Event` and `log::Record`.
 //!
-//! # Feature Flags
-//! * `trace-logger`: enables an experimental `log` subscriber, deprecated since
-//!   version 0.1.1.
+//! ## Feature Flags
+//!
+//! * `std`: enables features that require the Rust standard library (on by default)
 //! * `log-tracer`: enables the `LogTracer` type (on by default)
-//! * `env_logger`: enables the `env_logger` module, with helpers for working
-//!   with the [`env_logger` crate].
+//! * `interest-cache`: makes it possible to configure an interest cache for
+//!   logs emitted through the `log` crate (see [`Builder::with_interest_cache`]); requires `std`
 //!
 //! ## Supported Rust Versions
 //!
 //! Tracing is built against the latest stable release. The minimum supported
-//! version is 1.42. The current Tracing version is not guaranteed to build on
+//! version is 1.56. The current Tracing version is not guaranteed to build on
 //! Rust versions earlier than the minimum supported version.
 //!
 //! Tracing follows the same compiler support policies as the rest of the Tokio
 //! project. The current stable Rust compiler and the three most recent minor
 //! versions before it will always be supported. For example, if the current
-//! stable compiler version is 1.45, the minimum supported version will not be
-//! increased past 1.42, three minor versions prior. Increasing the minimum
+//! stable compiler version is 1.69, the minimum supported version will not be
+//! increased past 1.66, three minor versions prior. Increasing the minimum
 //! supported compiler version is not considered a semver breaking change as
 //! long as doing so complies with this policy.
 //!
-//! [`init`]: struct.LogTracer.html#method.init
-//! [`init_with_filter`]: struct.LogTracer.html#method.init_with_filter
-//! [`AsTrace`]: trait.AsTrace.html
-//! [`AsLog`]: trait.AsLog.html
-//! [`LogTracer`]: struct.LogTracer.html
-//! [`TraceLogger`]: struct.TraceLogger.html
-//! [`env_logger`]: env_logger/index.html
+//! [`init`]: LogTracer::init
+//! [`init_with_filter`]: LogTracer::init_with_filter
 //! [`tracing`]: https://crates.io/crates/tracing
-//! [`log`]: https://crates.io/crates/log
-//! [`env_logger` crate]: https://crates.io/crates/env-logger
-//! [`log::Log`]: https://docs.rs/log/latest/log/trait.Log.html
-//! [`log::Record`]: https://docs.rs/log/latest/log/struct.Record.html
 //! [`tracing::Subscriber`]: https://docs.rs/tracing/latest/tracing/trait.Subscriber.html
 //! [`Subscriber`]: https://docs.rs/tracing/latest/tracing/trait.Subscriber.html
 //! [`tracing::Event`]: https://docs.rs/tracing/latest/tracing/struct.Event.html
 //! [flags]: https://docs.rs/tracing/latest/tracing/#crate-feature-flags
-#![doc(html_root_url = "https://docs.rs/tracing-log/0.1.2")]
+//! [`Builder::with_interest_cache`]: log_tracer::Builder::with_interest_cache
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/tracing/master/assets/logo-type.png",
     issue_tracker_base_url = "https://github.com/tokio-rs/tracing/issues/"
 )]
-#![cfg_attr(docsrs, feature(doc_cfg), deny(broken_intra_doc_links))]
+#![cfg_attr(docsrs, feature(doc_cfg), deny(rustdoc::broken_intra_doc_links))]
 #![warn(
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
     unreachable_pub,
     bad_style,
-    const_err,
     dead_code,
     improper_ctypes,
     non_shorthand_field_patterns,
@@ -133,7 +120,7 @@
     unused_parens,
     while_true
 )]
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 
 use std::{fmt, io};
 
@@ -150,30 +137,22 @@ use tracing_core::{
 #[cfg_attr(docsrs, doc(cfg(feature = "log-tracer")))]
 pub mod log_tracer;
 
-#[cfg(feature = "trace-logger")]
-#[cfg_attr(docsrs, doc(cfg(feature = "trace-logger")))]
-pub mod trace_logger;
-
 #[cfg(feature = "log-tracer")]
 #[cfg_attr(docsrs, doc(cfg(feature = "log-tracer")))]
 #[doc(inline)]
 pub use self::log_tracer::LogTracer;
 
-#[cfg(feature = "trace-logger")]
-#[cfg_attr(docsrs, doc(cfg(feature = "trace-logger")))]
-#[deprecated(
-    since = "0.1.1",
-    note = "use the `tracing` crate's \"log\" feature flag instead"
-)]
-#[allow(deprecated)]
-#[doc(inline)]
-pub use self::trace_logger::TraceLogger;
-
-#[cfg(feature = "env_logger")]
-#[cfg_attr(docsrs, doc(cfg(feature = "env_logger")))]
-pub mod env_logger;
-
 pub use log;
+
+#[cfg(all(feature = "interest-cache", feature = "log-tracer", feature = "std"))]
+mod interest_cache;
+
+#[cfg(all(feature = "interest-cache", feature = "log-tracer", feature = "std"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "interest-cache", feature = "log-tracer", feature = "std")))
+)]
+pub use crate::interest_cache::InterestCacheConfig;
 
 /// Format a log record as a trace event in the current span.
 pub fn format_trace(record: &log::Record<'_>) -> io::Result<()> {
@@ -304,9 +283,9 @@ macro_rules! log_cs {
             "log event",
             "log",
             $level,
-            None,
-            None,
-            None,
+            ::core::option::Option::None,
+            ::core::option::Option::None,
+            ::core::option::Option::None,
             field::FieldSet::new(FIELD_NAMES, identify_callsite!(&$cs)),
             Kind::EVENT,
         );
@@ -341,13 +320,11 @@ log_cs!(
     ErrorCallsite
 );
 
-lazy_static! {
-    static ref TRACE_FIELDS: Fields = Fields::new(&TRACE_CS);
-    static ref DEBUG_FIELDS: Fields = Fields::new(&DEBUG_CS);
-    static ref INFO_FIELDS: Fields = Fields::new(&INFO_CS);
-    static ref WARN_FIELDS: Fields = Fields::new(&WARN_CS);
-    static ref ERROR_FIELDS: Fields = Fields::new(&ERROR_CS);
-}
+static TRACE_FIELDS: Lazy<Fields> = Lazy::new(|| Fields::new(&TRACE_CS));
+static DEBUG_FIELDS: Lazy<Fields> = Lazy::new(|| Fields::new(&DEBUG_CS));
+static INFO_FIELDS: Lazy<Fields> = Lazy::new(|| Fields::new(&INFO_CS));
+static WARN_FIELDS: Lazy<Fields> = Lazy::new(|| Fields::new(&WARN_CS));
+static ERROR_FIELDS: Lazy<Fields> = Lazy::new(|| Fields::new(&ERROR_CS));
 
 fn level_to_cs(level: Level) -> (&'static dyn Callsite, &'static Fields) {
     match level {
@@ -474,9 +451,7 @@ impl AsLog for tracing_core::LevelFilter {
 /// to allow accessing its complete metadata in a consistent way,
 /// regardless of the source of its source.
 ///
-/// [`normalized_metadata`]: trait.NormalizeEvent.html#normalized_metadata
-/// [`AsTrace`]: trait.AsTrace.html
-/// [`log::Record`]: https://docs.rs/log/0.4.7/log/struct.Record.html
+/// [`normalized_metadata`]: NormalizeEvent#normalized_metadata
 pub trait NormalizeEvent<'a>: crate::sealed::Sealed {
     /// If this `Event` comes from a `log`, this method provides a new
     /// normalized `Metadata` which has all available attributes

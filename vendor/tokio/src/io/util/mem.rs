@@ -124,6 +124,18 @@ impl AsyncWrite for DuplexStream {
         Pin::new(&mut *self.write.lock()).poll_write(cx, buf)
     }
 
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut *self.write.lock()).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        true
+    }
+
     #[allow(unused_mut)]
     fn poll_flush(
         mut self: Pin<&mut Self>,
@@ -177,10 +189,8 @@ impl Pipe {
             waker.wake();
         }
     }
-}
 
-impl AsyncRead for Pipe {
-    fn poll_read(
+    fn poll_read_internal(
         mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &mut ReadBuf<'_>,
@@ -204,10 +214,8 @@ impl AsyncRead for Pipe {
             Poll::Pending
         }
     }
-}
 
-impl AsyncWrite for Pipe {
-    fn poll_write(
+    fn poll_write_internal(
         mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &[u8],
@@ -227,6 +235,129 @@ impl AsyncWrite for Pipe {
             waker.wake();
         }
         Poll::Ready(Ok(len))
+    }
+
+    fn poll_write_vectored_internal(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        if self.is_closed {
+            return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
+        }
+        let avail = self.max_buf_size - self.buffer.len();
+        if avail == 0 {
+            self.write_waker = Some(cx.waker().clone());
+            return Poll::Pending;
+        }
+
+        let mut rem = avail;
+        for buf in bufs {
+            if rem == 0 {
+                break;
+            }
+
+            let len = buf.len().min(rem);
+            self.buffer.extend_from_slice(&buf[..len]);
+            rem -= len;
+        }
+
+        if let Some(waker) = self.read_waker.take() {
+            waker.wake();
+        }
+        Poll::Ready(Ok(avail - rem))
+    }
+}
+
+impl AsyncRead for Pipe {
+    cfg_coop! {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            ready!(crate::trace::trace_leaf(cx));
+            let coop = ready!(crate::runtime::coop::poll_proceed(cx));
+
+            let ret = self.poll_read_internal(cx, buf);
+            if ret.is_ready() {
+                coop.made_progress();
+            }
+            ret
+        }
+    }
+
+    cfg_not_coop! {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            ready!(crate::trace::trace_leaf(cx));
+            self.poll_read_internal(cx, buf)
+        }
+    }
+}
+
+impl AsyncWrite for Pipe {
+    cfg_coop! {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            ready!(crate::trace::trace_leaf(cx));
+            let coop = ready!(crate::runtime::coop::poll_proceed(cx));
+
+            let ret = self.poll_write_internal(cx, buf);
+            if ret.is_ready() {
+                coop.made_progress();
+            }
+            ret
+        }
+    }
+
+    cfg_not_coop! {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            ready!(crate::trace::trace_leaf(cx));
+            self.poll_write_internal(cx, buf)
+        }
+    }
+
+    cfg_coop! {
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            bufs: &[std::io::IoSlice<'_>],
+        ) -> Poll<Result<usize, std::io::Error>> {
+            ready!(crate::trace::trace_leaf(cx));
+            let coop = ready!(crate::runtime::coop::poll_proceed(cx));
+
+            let ret = self.poll_write_vectored_internal(cx, bufs);
+            if ret.is_ready() {
+                coop.made_progress();
+            }
+            ret
+        }
+    }
+
+    cfg_not_coop! {
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+            bufs: &[std::io::IoSlice<'_>],
+        ) -> Poll<Result<usize, std::io::Error>> {
+            ready!(crate::trace::trace_leaf(cx));
+            self.poll_write_vectored_internal(cx, bufs)
+        }
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        true
     }
 
     fn poll_flush(self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<std::io::Result<()>> {

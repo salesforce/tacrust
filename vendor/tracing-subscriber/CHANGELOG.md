@@ -1,3 +1,228 @@
+# 0.3.18 (November 13, 2023)
+
+This release of `tracing-subscriber` adds support for the [`NO_COLOR`] environment
+variable (an informal standard to disable emitting ANSI color escape codes) in
+`fmt::Layer`, reintroduces support for the [`chrono`] crate, and increases the
+minimum supported Rust version (MSRV) to Rust 1.63.0.
+
+It also introduces several minor API improvements.
+
+### Added
+
+- **chrono**: Add [`chrono`] implementations of `FormatTime` ([#2690])
+- **subscriber**: Add support for the [`NO_COLOR`] environment variable in
+`fmt::Layer` ([#2647])
+- **fmt**: make `format::Writer::new()` public ([#2680])
+- **filter**: Implement `layer::Filter` for `Option<Filter>` ([#2407])
+
+### Changed
+
+- **log**: bump version of `tracing-log` to 0.2 ([#2772])
+- Increased minimum supported Rust version (MSRV) to 1.63.0+.
+
+[`chrono`]: https://github.com/chronotope/chrono
+[`NO_COLOR`]: https://no-color.org/
+[#2690]: https://github.com/tokio-rs/tracing/pull/2690
+[#2647]: https://github.com/tokio-rs/tracing/pull/2647
+[#2680]: https://github.com/tokio-rs/tracing/pull/2680
+[#2407]: https://github.com/tokio-rs/tracing/pull/2407
+[#2772]: https://github.com/tokio-rs/tracing/pull/2772
+
+Thanks to @shayne-fletcher, @dmlary, @kaifastromai, and @jsgf for contributing!
+
+# 0.3.17 (April 21, 2023)
+
+This release of `tracing-subscriber` fixes a build error when using `env-filter`
+with recent versions of the `regex` crate. It also introduces several minor API
+improvements.
+
+### Fixed
+
+- **env-filter**: Add "unicode-case" and "unicode-perl" to the `regex`
+  dependency, fixing a build error with recent versions of `regex` ([#2566])
+- A number of minor documentation typos and other fixes ([#2384], [#2378],
+  [#2368], [#2548])
+
+### Added
+
+- **filter**: Add `fmt::Display` impl for `filter::Targets` ([#2343])
+- **fmt**: Made `with_ansi(false)` no longer require the "ansi" feature, so that
+  ANSI formatting escapes can be disabled without requiring ANSI-specific
+  dependencies ([#2532])
+
+### Changed
+
+- **fmt**: Dim targets in the `Compact` formatter, matching the default
+  formatter ([#2409])
+
+Thanks to @keepsimple1, @andrewhalle, @LeoniePhiline, @LukeMathWalker,
+@howardjohn, @daxpedda, and @dbidwell94 for contributing to this release!
+
+[#2566]: https://github.com/tokio-rs/tracing/pull/2566
+[#2384]: https://github.com/tokio-rs/tracing/pull/2384
+[#2378]: https://github.com/tokio-rs/tracing/pull/2378
+[#2368]: https://github.com/tokio-rs/tracing/pull/2368
+[#2548]: https://github.com/tokio-rs/tracing/pull/2548
+[#2343]: https://github.com/tokio-rs/tracing/pull/2343
+[#2532]: https://github.com/tokio-rs/tracing/pull/2532
+[#2409]: https://github.com/tokio-rs/tracing/pull/2409
+
+# 0.3.16 (October 6, 2022)
+
+This release of `tracing-subscriber` fixes a regression introduced in
+[v0.3.15][subscriber-0.3.15] where `Option::None`'s `Layer` implementation would
+set the max level hint to `OFF`. In addition, it adds several new APIs,
+including the `Filter::event_enabled` method for filtering events based on
+fields values, and the ability to log internal errors that occur when writing a
+log line.
+
+This release also replaces the dependency on the unmaintained [`ansi-term`]
+crate with the [`nu-ansi-term`] crate, resolving an *informational* security
+advisory ([RUSTSEC-2021-0139]) for [`ansi-term`]'s maintainance status. This
+increases the minimum supported Rust version (MSRV) to Rust 1.50+, although the
+crate should still compile for the previous MSRV of Rust 1.49+ when the `ansi`
+feature is not enabled.
+
+### Fixed
+
+- **layer**: `Option::None`'s `Layer` impl always setting the `max_level_hint`
+  to `LevelFilter::OFF` ([#2321])
+- Compilation with `-Z minimal versions` ([#2246])
+- **env-filter**: Clarify that disabled level warnings are emitted by
+  `tracing-subscriber` ([#2285])
+
+### Added
+
+- **fmt**: Log internal errors to `stderr` if writing a log line fails ([#2102])
+- **fmt**: `FmtLayer::log_internal_errors` and
+  `FmtSubscriber::log_internal_errors` methods for configuring whether internal
+  writer errors are printed to `stderr` ([#2102])
+- **fmt**: `#[must_use]` attributes on builders to warn if a `Subscriber` is
+  configured but not set as the default subscriber ([#2239])
+- **filter**: `Filter::event_enabled` method for filtering an event based on its
+  fields ([#2245], [#2251])
+- **filter**: `Targets::default_level` accessor ([#2242])
+
+### Changed
+
+- **ansi**: Replaced dependency on unmaintained `ansi-term` crate with
+  `nu-ansi-term` (([#2287], fixes informational advisory [RUSTSEC-2021-0139])
+- `tracing-core`: updated to [0.1.30][core-0.1.30]
+- Minimum Supported Rust Version (MSRV) increased to Rust 1.50+ (when the
+  `ansi`) feature flag is enabled ([#2287])
+
+### Documented
+
+- **fmt**: Correct inaccuracies in `fmt::init` documentation ([#2224])
+- **filter**: Fix incorrect doc link in `filter::Not` combinator ([#2249])
+
+Thanks to new contributors @cgbur, @DesmondWillowbrook, @RalfJung, and
+@poliorcetics, as well as returning contributors @CAD97, @connec, @jswrenn,
+@guswynn, and @bryangarza, for contributing to this release!
+
+[nu-ansi-term]: https://github.com/nushell/nu-ansi-term
+[ansi_term]: https://github.com/ogham/rust-ansi-term
+[RUSTSEC-2021-0139]: https://rustsec.org/advisories/RUSTSEC-2021-0139.html
+[core-0.1.30]: https://github.com/tokio-rs/tracing/releases/tag/tracing-core-0.1.30
+[subscriber-0.3.15]: https://github.com/tokio-rs/tracing/releases/tag/tracing-subscriber-0.3.15
+[#2321]: https://github.com/tokio-rs/tracing/pull/2321
+[#2246]: https://github.com/tokio-rs/tracing/pull/2246
+[#2285]: https://github.com/tokio-rs/tracing/pull/2285
+[#2102]: https://github.com/tokio-rs/tracing/pull/2102
+[#2239]: https://github.com/tokio-rs/tracing/pull/2239
+[#2245]: https://github.com/tokio-rs/tracing/pull/2245
+[#2251]: https://github.com/tokio-rs/tracing/pull/2251
+[#2287]: https://github.com/tokio-rs/tracing/pull/2287
+[#2224]: https://github.com/tokio-rs/tracing/pull/2224
+[#2249]: https://github.com/tokio-rs/tracing/pull/2249
+
+# 0.3.15 (Jul 20, 2022)
+
+This release fixes a bug where the `reload` layer would fail to pass through
+`max_level_hint` to the underlying layer, potentially breaking filtering.
+
+### Fixed
+
+- **reload**: pass through `max_level_hint` to the inner `Layer` ([#2204])
+
+Thanks to @guswynn for contributing to this release!
+
+[#2204]: https://github.com/tokio-rs/tracing/pull/2204
+
+# 0.3.14 (Jul 1, 2022)
+
+This release fixes multiple filtering bugs in the `Layer` implementations for
+`Option<impl Layer>` and `Vec<impl Layer>`.
+
+### Fixed
+
+- **layer**: `Layer::event_enabled` implementation for `Option<impl Layer<S>>`
+  returning `false` when the `Option` is `None`, disabling all events globally
+  ([#2193])
+- **layer**: `Layer::max_level_hint` implementation for `Option<impl Layer<S>>`
+  incorrectly disabling max level filtering when the option is `None` ([#2195])
+- **layer**: `Layer::max_level_hint` implementation for `Vec<impl Layer<S>>`
+  returning `LevelFilter::ERROR` rather than `LevelFilter::OFF` when the `Vec`
+  is empty ([#2195])
+
+Thanks to @CAD97 and @guswynn for contributing to this release!
+
+[#2193]: https://github.com/tokio-rs/tracing/pull/2193
+[#2195]: https://github.com/tokio-rs/tracing/pull/2195
+
+# 0.3.13 (Jun 30, 2022) (YANKED)
+
+This release of `tracing-subscriber` fixes a compilation failure due to an
+incorrect `tracing-core` dependency that was introduced in v0.3.12.
+
+### Changed
+
+- **tracing_core**: Updated minimum dependency version to 0.1.28 ([#2190])
+
+[#2190]: https://github.com/tokio-rs/tracing/pull/2190
+
+# 0.3.12 (Jun 29, 2022) (YANKED)
+
+This release of `tracing-subscriber` adds a new `Layer::event_enabled` method,
+which allows `Layer`s to filter events *after* their field values are recorded;
+a `Filter` implementation for `reload::Layer`, to make using `reload` with
+per-layer filtering more ergonomic, and additional inherent method downcasting
+APIs for the `Layered` type. In addition, it includes dependency updates, and
+minor fixes for documentation and feature flagging.
+
+### Added
+
+- **layer**: `Layer::event_enabled` method, which can be implemented to filter
+  events based on their field values ([#2008])
+- **reload**: `Filter` implementation for `reload::Layer` ([#2159])
+- **layer**: `Layered::downcast_ref` and `Layered::is` inherent methods
+  ([#2160])
+
+### Changed
+
+- **parking_lot**: Updated dependency on `parking_lot` to 0.13.0 ([#2143])
+- Replaced `lazy_static` dependency with `once_cell` ([#2147])
+
+### Fixed
+
+- Don't enable `tracing-core` features by default ([#2107])
+- Several documentation link and typo fixes ([#2064], [#2068], #[2077], [#2161],
+  [#1088])
+
+Thanks to @ben0x539, @jamesmunns, @georgemp, @james7132, @jswrenn, @CAD97, and
+@guswynn for contributing to this release!
+
+[#2008]: https://github.com/tokio-rs/tracing/pull/2008
+[#2159]: https://github.com/tokio-rs/tracing/pull/2159
+[#2160]: https://github.com/tokio-rs/tracing/pull/2160
+[#2143]: https://github.com/tokio-rs/tracing/pull/2143
+[#2107]: https://github.com/tokio-rs/tracing/pull/2107
+[#2064]: https://github.com/tokio-rs/tracing/pull/2064
+[#2068]: https://github.com/tokio-rs/tracing/pull/2068
+[#2077]: https://github.com/tokio-rs/tracing/pull/2077
+[#2161]: https://github.com/tokio-rs/tracing/pull/2161
+[#1088]: https://github.com/tokio-rs/tracing/pull/1088
+
 # 0.3.11 (Apr 9, 2022)
 
 This is a bugfix release for the `Filter` implementation for `EnvFilter` added

@@ -1,3 +1,5 @@
+#![cfg(all(feature = "full", not(target_os = "wasi")))] // Wasi does not support direct socket operations
+
 use tokio::net;
 use tokio_test::assert_ok;
 

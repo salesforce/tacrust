@@ -5,19 +5,13 @@
 // The alternative would be for each of these tests to be defined in a separate
 // file, which is :(
 #![cfg(feature = "std")]
-
-#[macro_use]
-extern crate tracing;
 use tracing::{
     field::display,
     span::{Attributes, Id, Record},
     subscriber::{with_default, Interest, Subscriber},
     Event, Level, Metadata,
 };
-
-mod support;
-
-use self::support::*;
+use tracing_mock::{expect, subscriber};
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[test]
@@ -34,7 +28,7 @@ fn event_macros_dont_infinite_loop() {
 
         fn enabled(&self, meta: &Metadata<'_>) -> bool {
             assert!(meta.fields().iter().any(|f| f.name() == "foo"));
-            event!(Level::TRACE, bar = false);
+            tracing::event!(Level::TRACE, bar = false);
             true
         }
 
@@ -48,7 +42,7 @@ fn event_macros_dont_infinite_loop() {
 
         fn event(&self, event: &Event<'_>) {
             assert!(event.metadata().fields().iter().any(|f| f.name() == "foo"));
-            event!(Level::TRACE, baz = false);
+            tracing::event!(Level::TRACE, baz = false);
         }
 
         fn enter(&self, _: &Id) {}
@@ -57,7 +51,7 @@ fn event_macros_dont_infinite_loop() {
     }
 
     with_default(TestSubscriber, || {
-        event!(Level::TRACE, foo = false);
+        tracing::event!(Level::TRACE, foo = false);
     })
 }
 
@@ -66,22 +60,22 @@ fn event_macros_dont_infinite_loop() {
 fn boxed_subscriber() {
     let (subscriber, handle) = subscriber::mock()
         .new_span(
-            span::mock().named("foo").with_field(
-                field::mock("bar")
+            expect::span().named("foo").with_field(
+                expect::field("bar")
                     .with_value(&display("hello from my span"))
                     .only(),
             ),
         )
-        .enter(span::mock().named("foo"))
-        .exit(span::mock().named("foo"))
-        .drop_span(span::mock().named("foo"))
-        .done()
+        .enter(expect::span().named("foo"))
+        .exit(expect::span().named("foo"))
+        .drop_span(expect::span().named("foo"))
+        .only()
         .run_with_handle();
     let subscriber: Box<dyn Subscriber + Send + Sync + 'static> = Box::new(subscriber);
 
     with_default(subscriber, || {
         let from = "my span";
-        let span = span!(
+        let span = tracing::span!(
             Level::TRACE,
             "foo",
             bar = format_args!("hello from {}", from)
@@ -99,27 +93,27 @@ fn arced_subscriber() {
 
     let (subscriber, handle) = subscriber::mock()
         .new_span(
-            span::mock().named("foo").with_field(
-                field::mock("bar")
+            expect::span().named("foo").with_field(
+                expect::field("bar")
                     .with_value(&display("hello from my span"))
                     .only(),
             ),
         )
-        .enter(span::mock().named("foo"))
-        .exit(span::mock().named("foo"))
-        .drop_span(span::mock().named("foo"))
+        .enter(expect::span().named("foo"))
+        .exit(expect::span().named("foo"))
+        .drop_span(expect::span().named("foo"))
         .event(
-            event::mock()
-                .with_fields(field::mock("message").with_value(&display("hello from my event"))),
+            expect::event()
+                .with_fields(expect::field("message").with_value(&display("hello from my event"))),
         )
-        .done()
+        .only()
         .run_with_handle();
     let subscriber: Arc<dyn Subscriber + Send + Sync + 'static> = Arc::new(subscriber);
 
     // Test using a clone of the `Arc`ed subscriber
     with_default(subscriber.clone(), || {
         let from = "my span";
-        let span = span!(
+        let span = tracing::span!(
             Level::TRACE,
             "foo",
             bar = format_args!("hello from {}", from)

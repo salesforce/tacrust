@@ -7,10 +7,10 @@
 //! a dedicated logging thread. It also provides a [`RollingFileAppender`][file_appender] that can
 //! be used with _or_ without the non-blocking writer.
 //!
-//! *Compiler support: [requires `rustc` 1.53+][msrv]*
+//! *Compiler support: [requires `rustc` 1.63+][msrv]*
 //!
 //! [msrv]: #supported-rust-versions
-//! [file_appender]: ./rolling/struct.RollingFileAppender.html
+//! [file_appender]: rolling::RollingFileAppender
 //! [tracing]: https://docs.rs/tracing/
 //!
 //! # Usage
@@ -26,20 +26,34 @@
 //!  - Using a combination of [`NonBlocking`][non_blocking] and [`RollingFileAppender`][rolling_struct] to allow writes to a log file
 //! without blocking.
 //!
-//! ## Rolling File Appender
+//! ## File Appender
+//!
+//! The [`rolling` module][rolling] provides functions to create rolling and non-rolling file
+//! appenders.
+//!
+//! Rolling file appender rotation options are [`Rotation::MINUTELY`](rolling::Rotation::MINUTELY),
+//! [`Rotation::HOURLY`](rolling::Rotation::HOURLY), and
+//! [`Rotation::DAILY`](rolling::Rotation::DAILY).
+//!
+//! To create a non-rolling file appender, use
+//! [`tracing_appender::rolling::never(/*...*/)`](rolling::never) or
+//! [`Rotation::NEVER`](rolling::Rotation::NEVER).
+//!
+//! The following example creates an hourly rotating file appender that writes to
+//! `/some/directory/prefix.log.YYYY-MM-DD-HH`:
 //!
 //! ```rust
 //! # fn docs() {
 //! let file_appender = tracing_appender::rolling::hourly("/some/directory", "prefix.log");
 //! # }
 //! ```
-//! This creates an hourly rotating file appender that writes to `/some/directory/prefix.log.YYYY-MM-DD-HH`.
-//! [`Rotation::DAILY`](rolling::Rotation::DAILY) and [`Rotation::NEVER`](rolling::Rotation::NEVER) are the other available options.
 //!
-//! The file appender implements [`std::io::Write`][write]. To be used with [`tracing_subscriber::FmtSubscriber`][fmt_subscriber],
-//! it must be combined with a [`MakeWriter`][make_writer] implementation to be able to record tracing spans/event.
+//! The file appender implements [`std::io::Write`][write]. To be used with
+//! [`tracing_subscriber::FmtSubscriber`][fmt_subscriber], it must be combined with a
+//! [`MakeWriter`][make_writer] implementation to be able to record tracing spans/event.
 //!
-//! The [`rolling` module][rolling]'s documentation provides more detail on how to use this file appender.
+//! See the [`rolling` module][rolling]'s documentation for more detail on how to use this file
+//! appender.
 //!
 //! ## Non-Blocking Writer
 //!
@@ -88,13 +102,12 @@
 //!
 //! The [`non_blocking` module][non_blocking]'s documentation provides more detail on how to use `non_blocking`.
 //!
-//! [non_blocking]: ./non_blocking/index.html
-//! [write]: https://doc.rust-lang.org/std/io/trait.Write.html
-//! [guard]: ./non_blocking/struct.WorkerGuard.html
-//! [rolling]: ./rolling/index.html
-//! [make_writer]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/trait.MakeWriter.html
-//! [rolling_struct]: ./rolling/struct.RollingFileAppender.html
-//! [fmt_subscriber]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/struct.Subscriber.html
+//! [non_blocking]: mod@non_blocking
+//! [write]: std::io::Write
+//! [guard]: non_blocking::WorkerGuard
+//! [make_writer]: tracing_subscriber::fmt::MakeWriter
+//! [rolling_struct]: rolling::RollingFileAppender
+//! [fmt_subscriber]: tracing_subscriber::fmt::Subscriber
 //!
 //! ## Non-Blocking Rolling File Appender
 //!
@@ -111,18 +124,17 @@
 //! ## Supported Rust Versions
 //!
 //! `tracing-appender` is built against the latest stable release. The minimum supported
-//! version is 1.53. The current `tracing-appender` version is not guaranteed to build on
+//! version is 1.63. The current `tracing-appender` version is not guaranteed to build on
 //! Rust versions earlier than the minimum supported version.
 //!
 //! Tracing follows the same compiler support policies as the rest of the Tokio
 //! project. The current stable Rust compiler and the three most recent minor
 //! versions before it will always be supported. For example, if the current
-//! stable compiler version is 1.45, the minimum supported version will not be
-//! increased past 1.42, three minor versions prior. Increasing the minimum
+//! stable compiler version is 1.69, the minimum supported version will not be
+//! increased past 1.66, three minor versions prior. Increasing the minimum
 //! supported compiler version is not considered a semver breaking change as
 //! long as doing so complies with this policy.
 //!
-#![doc(html_root_url = "https://docs.rs/tracing-appender/0.2.2")]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/tracing/master/assets/logo-type.png",
     issue_tracker_base_url = "https://github.com/tokio-rs/tracing/issues/"
@@ -134,7 +146,6 @@
     rust_2018_idioms,
     unreachable_pub,
     bad_style,
-    const_err,
     dead_code,
     improper_ctypes,
     non_shorthand_field_patterns,
@@ -166,7 +177,7 @@ pub(crate) mod sync;
 ///
 /// See the [`non_blocking` module's docs][non_blocking]'s for more details.
 ///
-/// [non_blocking]: ./non_blocking/index.html
+/// [non_blocking]: mod@non_blocking
 ///
 /// # Examples
 ///
@@ -179,7 +190,7 @@ pub(crate) mod sync;
 /// });
 /// # }
 /// ```
-pub fn non_blocking<T: Write + Send + Sync + 'static>(writer: T) -> (NonBlocking, WorkerGuard) {
+pub fn non_blocking<T: Write + Send + 'static>(writer: T) -> (NonBlocking, WorkerGuard) {
     NonBlocking::new(writer)
 }
 

@@ -22,7 +22,7 @@ pub mod display;
 /// data to, configuration variables that determine the visitor's behavior, or
 /// `()` when no input is required to produce a visitor.
 ///
-/// [visitors]: https://docs.rs/tracing-core/latest/tracing_core/field/trait.Visit.html
+/// [visitors]: tracing_core::field::Visit
 pub trait MakeVisitor<T> {
     /// The visitor type produced by this `MakeVisitor`.
     type Visitor: Visit;
@@ -33,7 +33,7 @@ pub trait MakeVisitor<T> {
 
 /// A [visitor] that produces output once it has visited a set of fields.
 ///
-/// [visitor]: https://docs.rs/tracing-core/latest/tracing_core/field/trait.Visit.html
+/// [visitor]: tracing_core::field::Visit
 pub trait VisitOutput<Out>: Visit {
     /// Completes the visitor, returning any output.
     ///
@@ -55,7 +55,7 @@ pub trait VisitOutput<Out>: Visit {
 /// Extension trait implemented by types which can be recorded by a [visitor].
 ///
 /// This allows writing code that is generic over `tracing_core`'s
-/// [`span::Attributes`][attr], [`span::Record`][rec], and [`Event`][event]
+/// [`span::Attributes`][attr], [`span::Record`][rec], and [`Event`]
 /// types. These types all provide inherent `record` methods that allow a
 /// visitor to record their fields, but there is no common trait representing this.
 ///
@@ -82,10 +82,9 @@ pub trait VisitOutput<Out>: Visit {
 ///     r.record(&mut visitor);
 /// }
 /// ```
-/// [visitor]: https://docs.rs/tracing-core/latest/tracing_core/field/trait.Visit.html
-/// [attr]: https://docs.rs/tracing-core/latest/tracing_core/span/struct.Attributes.html
-/// [rec]: https://docs.rs/tracing-core/latest/tracing_core/span/struct.Record.html
-/// [event]: https://docs.rs/tracing-core/latest/tracing_core/event/struct.Event.html
+/// [visitor]: tracing_core::field::Visit
+/// [attr]: tracing_core::span::Attributes
+/// [rec]: tracing_core::span::Record
 pub trait RecordFields: crate::sealed::Sealed<RecordFieldsMarker> {
     /// Record all the fields in `self` with the provided `visitor`.
     fn record(&self, visitor: &mut dyn Visit);

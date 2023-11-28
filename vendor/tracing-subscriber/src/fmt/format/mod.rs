@@ -46,7 +46,7 @@ use tracing_core::{
 use tracing_log::NormalizeEvent;
 
 #[cfg(feature = "ansi")]
-use ansi_term::{Colour, Style};
+use nu_ansi_term::{Color, Style};
 
 #[cfg(feature = "json")]
 mod json;
@@ -101,7 +101,7 @@ pub use pretty::*;
 ///   does not support ANSI escape codes (such as a log file), and they should
 ///   not be emitted.
 ///
-///   Crates like [`ansi_term`] and [`owo-colors`] can be used to add ANSI
+///   Crates like [`nu_ansi_term`] and [`owo-colors`] can be used to add ANSI
 ///   escape codes to formatted output.
 ///
 /// * The actual [`Event`] to be formatted.
@@ -189,7 +189,7 @@ pub use pretty::*;
 /// [implements `FormatFields`]: super::FmtContext#impl-FormatFields<'writer>
 /// [ANSI terminal escape codes]: https://en.wikipedia.org/wiki/ANSI_escape_code
 /// [`Writer::has_ansi_escapes`]: Writer::has_ansi_escapes
-/// [`ansi_term`]: https://crates.io/crates/ansi_term
+/// [`nu_ansi_term`]: https://crates.io/crates/nu_ansi_term
 /// [`owo-colors`]: https://crates.io/crates/owo-colors
 /// [default formatter]: Full
 pub trait FormatEvent<S, N>
@@ -227,8 +227,8 @@ where
 /// time a span or event with fields is recorded, the subscriber will format
 /// those fields with its associated `FormatFields` implementation.
 ///
-/// [set of fields]: ../field/trait.RecordFields.html
-/// [`FmtSubscriber`]: ../fmt/struct.Subscriber.html
+/// [set of fields]: crate::field::RecordFields
+/// [`FmtSubscriber`]: super::Subscriber
 pub trait FormatFields<'writer> {
     /// Format the provided `fields` to the provided [`Writer`], returning a result.
     fn format_fields<R: RecordFields>(&self, writer: Writer<'writer>, fields: R) -> fmt::Result;
@@ -281,7 +281,6 @@ pub fn json() -> Format<Json> {
 /// Returns a [`FormatFields`] implementation that formats fields using the
 /// provided function or closure.
 ///
-/// [`FormatFields`]: trait.FormatFields.html
 pub fn debug_fn<F>(f: F) -> FieldFn<F>
 where
     F: Fn(&mut Writer<'_>, &Field, &dyn fmt::Debug) -> fmt::Result + Clone,
@@ -313,14 +312,12 @@ pub struct Writer<'writer> {
 /// A [`FormatFields`] implementation that formats fields by calling a function
 /// or closure.
 ///
-/// [`FormatFields`]: trait.FormatFields.html
 #[derive(Debug, Clone)]
 pub struct FieldFn<F>(F);
 /// The [visitor] produced by [`FieldFn`]'s [`MakeVisitor`] implementation.
 ///
-/// [visitor]: ../../field/trait.Visit.html
-/// [`FieldFn`]: struct.FieldFn.html
-/// [`MakeVisitor`]: ../../field/trait.MakeVisitor.html
+/// [visitor]: super::super::field::Visit
+/// [`MakeVisitor`]: super::super::field::MakeVisitor
 pub struct FieldFnVisitor<'a, F> {
     f: F,
     writer: Writer<'a>,
@@ -329,8 +326,10 @@ pub struct FieldFnVisitor<'a, F> {
 /// Marker for [`Format`] that indicates that the compact log format should be used.
 ///
 /// The compact format includes fields from all currently entered spans, after
-/// the event's fields. Span names are listed in order before fields are
-/// displayed.
+/// the event's fields. Span fields are ordered (but not grouped) by
+/// span, and span names are  not shown. A more compact representation of the
+/// event's [`Level`] is used, and additional information—such as the event's
+/// target—is disabled by default.
 ///
 /// # Example Output
 ///
@@ -419,7 +418,19 @@ impl<'writer> Writer<'writer> {
     // We may not want to do that if we choose to expose specialized
     // constructors instead (e.g. `from_string` that stores whether the string
     // is empty...?)
-    pub(crate) fn new(writer: &'writer mut impl fmt::Write) -> Self {
+    //(@kaifastromai) I suppose having dedicated constructors may have certain benefits
+    // but I am not privy to the larger direction of tracing/subscriber.
+    /// Create a new [`Writer`] from any type that implements [`fmt::Write`].
+    ///
+    /// The returned `Writer` value may be passed as an argument to methods
+    /// such as [`Format::format_event`]. Since constructing a `Writer`
+    /// mutably borrows the underlying [`fmt::Write`] instance, that value may
+    /// be accessed again once the `Writer` is dropped. For example, if the
+    /// value implementing [`fmt::Write`] is a [`String`], it will contain
+    /// the formatted output of [`Format::format_event`], which may then be
+    /// used for other purposes.
+    #[must_use]
+    pub fn new(writer: &'writer mut impl fmt::Write) -> Self {
         Self {
             writer: writer as &mut dyn fmt::Write,
             is_ansi: false,
@@ -664,8 +675,6 @@ impl<F, T> Format<F, T> {
     ///
     /// - [`Format::flatten_event`] can be used to enable flattening event fields into the root
     /// object.
-    ///
-    /// [`Format::flatten_event`]: #method.flatten_event
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn json(self) -> Format<Json, T> {
@@ -753,9 +762,9 @@ impl<F, T> Format<F, T> {
     }
 
     /// Sets whether or not the [thread ID] of the current thread is displayed
-    /// when formatting events
+    /// when formatting events.
     ///
-    /// [thread ID]: https://doc.rust-lang.org/stable/std/thread/struct.ThreadId.html
+    /// [thread ID]: std::thread::ThreadId
     pub fn with_thread_ids(self, display_thread_id: bool) -> Format<F, T> {
         Format {
             display_thread_id,
@@ -764,9 +773,9 @@ impl<F, T> Format<F, T> {
     }
 
     /// Sets whether or not the [name] of the current thread is displayed
-    /// when formatting events
+    /// when formatting events.
     ///
-    /// [name]: https://doc.rust-lang.org/stable/std/thread/index.html#naming-threads
+    /// [name]: std::thread#naming-threads
     pub fn with_thread_names(self, display_thread_name: bool) -> Format<F, T> {
         Format {
             display_thread_name,
@@ -855,7 +864,7 @@ impl<T> Format<Json, T> {
     /// ```ignore,json
     /// {"timestamp":"Feb 20 11:28:15.096","level":"INFO","target":"mycrate", "message":"some message", "key": "value"}
     /// ```
-    /// See [`Json`](../format/struct.Json.html).
+    /// See [`Json`][super::format::Json].
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn flatten_event(mut self, flatten_event: bool) -> Format<Json, T> {
@@ -866,7 +875,7 @@ impl<T> Format<Json, T> {
     /// Sets whether or not the formatter will include the current span in
     /// formatted events.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`][Json]
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn with_current_span(mut self, display_current_span: bool) -> Format<Json, T> {
@@ -877,7 +886,7 @@ impl<T> Format<Json, T> {
     /// Sets whether or not the formatter will include a list (from root to
     /// leaf) of all currently entered spans in formatted events.
     ///
-    /// See [`format::Json`](../fmt/format/struct.Json.html)
+    /// See [`format::Json`][Json]
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn with_span_list(mut self, display_span_list: bool) -> Format<Json, T> {
@@ -1087,12 +1096,16 @@ where
         };
         write!(writer, "{}", fmt_ctx)?;
 
-        let bold = writer.bold();
         let dimmed = writer.dimmed();
 
         let mut needs_space = false;
         if self.display_target {
-            write!(writer, "{}{}", bold.paint(meta.target()), dimmed.paint(":"))?;
+            write!(
+                writer,
+                "{}{}",
+                dimmed.paint(meta.target()),
+                dimmed.paint(":")
+            )?;
             needs_space = true;
         }
 
@@ -1101,7 +1114,7 @@ where
                 if self.display_target {
                     writer.write_char(' ')?;
                 }
-                write!(writer, "{}{}", bold.paint(filename), dimmed.paint(":"))?;
+                write!(writer, "{}{}", dimmed.paint(filename), dimmed.paint(":"))?;
                 needs_space = true;
             }
         }
@@ -1111,9 +1124,9 @@ where
                 write!(
                     writer,
                     "{}{}{}{}",
-                    bold.prefix(),
+                    dimmed.prefix(),
                     line_number,
-                    bold.suffix(),
+                    dimmed.suffix(),
                     dimmed.paint(":")
                 )?;
                 needs_space = true;
@@ -1157,7 +1170,6 @@ where
 
 /// The default [`FormatFields`] implementation.
 ///
-/// [`FormatFields`]: trait.FormatFields.html
 #[derive(Debug)]
 pub struct DefaultFields {
     // reserve the ability to add fields to this without causing a breaking
@@ -1179,7 +1191,6 @@ pub struct DefaultVisitor<'a> {
 impl DefaultFields {
     /// Returns a new default [`FormatFields`] implementation.
     ///
-    /// [`FormatFields`]: trait.FormatFields.html
     pub fn new() -> Self {
         Self { _private: () }
     }
@@ -1491,11 +1502,11 @@ impl<'a> fmt::Display for FmtLevel<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.ansi {
             match *self.level {
-                Level::TRACE => write!(f, "{}", Colour::Purple.paint(TRACE_STR)),
-                Level::DEBUG => write!(f, "{}", Colour::Blue.paint(DEBUG_STR)),
-                Level::INFO => write!(f, "{}", Colour::Green.paint(INFO_STR)),
-                Level::WARN => write!(f, "{}", Colour::Yellow.paint(WARN_STR)),
-                Level::ERROR => write!(f, "{}", Colour::Red.paint(ERROR_STR)),
+                Level::TRACE => write!(f, "{}", Color::Purple.paint(TRACE_STR)),
+                Level::DEBUG => write!(f, "{}", Color::Blue.paint(DEBUG_STR)),
+                Level::INFO => write!(f, "{}", Color::Green.paint(INFO_STR)),
+                Level::WARN => write!(f, "{}", Color::Yellow.paint(WARN_STR)),
+                Level::ERROR => write!(f, "{}", Color::Red.paint(ERROR_STR)),
             }
         } else {
             match *self.level {
@@ -1569,7 +1580,7 @@ impl<'a, F> fmt::Debug for FieldFnVisitor<'a, F> {
 
 /// Configures what points in the span lifecycle are logged as events.
 ///
-/// See also [`with_span_events`](../struct.SubscriberBuilder.html#method.with_span_events).
+/// See also [`with_span_events`](super::SubscriberBuilder.html::with_span_events).
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct FmtSpan(u8);
 
@@ -2046,7 +2057,7 @@ pub(super) mod test {
         #[cfg(feature = "ansi")]
         #[test]
         fn with_ansi_true() {
-            let expected = "\u{1b}[2mfake time\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m \u{1b}[1mtracing_subscriber::fmt::format::test\u{1b}[0m\u{1b}[2m:\u{1b}[0m hello\n";
+            let expected = "\u{1b}[2mfake time\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m \u{1b}[2mtracing_subscriber::fmt::format::test\u{1b}[0m\u{1b}[2m:\u{1b}[0m hello\n";
             test_ansi(true, expected, crate::fmt::Subscriber::builder().compact())
         }
 

@@ -11,6 +11,7 @@ use tracing::level_filters::STATIC_MAX_LEVEL;
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct Builder {
     regex: bool,
     env: Option<String>,
@@ -169,15 +170,16 @@ impl Builder {
         self.parse_lossy(var)
     }
 
-    /// Returns a new [`EnvFilter`] from the directives in the in the configured
-    /// environment variable, or an error if the environment variable is not set
-    /// or contains invalid directives.
+    /// Returns a new [`EnvFilter`] from the directives in the configured
+    /// environment variable. If the environment variable is unset, no directive is added.
+    ///
+    /// An error is returned if the environment contains invalid directives.
     pub fn from_env(&self) -> Result<EnvFilter, FromEnvError> {
         let var = env::var(self.env_var_name()).unwrap_or_default();
         self.parse(var).map_err(Into::into)
     }
 
-    /// Returns a new [`EnvFilter`] from the directives in the in the configured
+    /// Returns a new [`EnvFilter`] from the directives in the configured
     /// environment variable, or an error if the environment variable is not set
     /// or contains invalid directives.
     pub fn try_from_env(&self) -> Result<EnvFilter, FromEnvError> {
@@ -208,15 +210,15 @@ impl Builder {
         }
 
         if !disabled.is_empty() {
-            #[cfg(feature = "ansi_term")]
-            use ansi_term::{Color, Style};
+            #[cfg(feature = "nu_ansi_term")]
+            use nu_ansi_term::{Color, Style};
             // NOTE: We can't use a configured `MakeWriter` because the EnvFilter
-            // has no knowledge of any underlying subscriber or collector, which
+            // has no knowledge of any underlying subscriber or subscriber, which
             // may or may not use a `MakeWriter`.
             let warn = |msg: &str| {
-                #[cfg(not(feature = "ansi_term"))]
+                #[cfg(not(feature = "nu_ansi_term"))]
                 let msg = format!("warning: {}", msg);
-                #[cfg(feature = "ansi_term")]
+                #[cfg(feature = "nu_ansi_term")]
                 let msg = {
                     let bold = Style::new().bold();
                     let mut warning = Color::Yellow.paint("warning");
@@ -226,9 +228,9 @@ impl Builder {
                 eprintln!("{}", msg);
             };
             let ctx_prefixed = |prefix: &str, msg: &str| {
-                #[cfg(not(feature = "ansi_term"))]
+                #[cfg(not(feature = "nu_ansi_term"))]
                 let msg = format!("{} {}", prefix, msg);
-                #[cfg(feature = "ansi_term")]
+                #[cfg(feature = "nu_ansi_term")]
                 let msg = {
                     let mut equal = Color::Fixed(21).paint("="); // dark blue
                     equal.style_ref_mut().is_bold = true;
@@ -239,9 +241,9 @@ impl Builder {
             let ctx_help = |msg| ctx_prefixed("help:", msg);
             let ctx_note = |msg| ctx_prefixed("note:", msg);
             let ctx = |msg: &str| {
-                #[cfg(not(feature = "ansi_term"))]
+                #[cfg(not(feature = "nu_ansi_term"))]
                 let msg = format!("note: {}", msg);
-                #[cfg(feature = "ansi_term")]
+                #[cfg(feature = "nu_ansi_term")]
                 let msg = {
                     let mut pipe = Color::Fixed(21).paint("|");
                     pipe.style_ref_mut().is_bold = true;
@@ -281,7 +283,7 @@ impl Builder {
             };
             let (feature, earlier_level) = help_msg();
             ctx_help(&format!(
-                "to enable {}logging, remove the `{}` feature",
+                "to enable {}logging, remove the `{}` feature from the `tracing` crate",
                 earlier_level, feature
             ));
         }

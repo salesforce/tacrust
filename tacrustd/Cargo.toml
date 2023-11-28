@@ -1,21 +1,21 @@
 [package]
 name = "tacrustd"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tacrust = { path = ".." }
-clap_rs = { version = "2.33.3", package = "clap" }
+clap_rs = { version = "3.2.25", package = "clap" }
 color-eyre = { version = "0.5.11" }
-tokio = { version = "1.9.0", features = ["full"] }
+tokio = { version = "1.34.0", features = ["full"] }
 tracing = { version = "0.1.26" }
 tracing-subscriber = { version = "0.3.11", features = ["default", "env-filter"] }
-tracing-appender = { version = "0.2.2" }
-figment = { version = "0.10.6", features = ["test", "env", "toml"] }
+tracing-appender = { version = "0.2.3" }
+figment = { version = "=0.10.8", features = ["test", "env", "toml"] }
 serde = { version = "1.0.133", features = ["derive"] }
-twelf = { version = "0.1.7" }
+twelf = { version = "0.7.0", default-features = false, features = ["clap", "env", "json"] }
 futures = { version = "0.3.19" }
 tokio-stream = { version = "0.1.8" }
 tokio-util = { version = "0.6.9", features = ["full"] }
@@ -27,7 +27,7 @@ once_cell = { version = "1.15.0" }
 lazy_static = { version = "1.4.0" }
 serial_test = { version = "0.5.1" }
 base64 = { version = "0.13.0" }
-tempfile = { version = "3.2.0" }
+tempfile = { version = "3.8.1" }
 itertools = { version = "0.10.3" }
 indexmap = { version = "1.9.1" }
 

@@ -1,12 +1,10 @@
 #![cfg(feature = "registry")]
-mod support;
-use self::support::*;
-
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 use tracing::{Level, Subscriber};
+use tracing_mock::{expect, layer};
 use tracing_subscriber::{filter, prelude::*};
 
 #[test]
@@ -25,13 +23,13 @@ fn multiple_layer_filter_interests_are_cached() {
     let seen_info = seen_info2;
 
     let (info_layer, info_handle) = layer::named("info")
-        .event(event::mock().at_level(Level::INFO))
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .event(event::mock().at_level(Level::INFO))
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .done()
+        .event(expect::event().at_level(Level::INFO))
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .event(expect::event().at_level(Level::INFO))
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .only()
         .run_with_handle();
     let info_layer = info_layer.with_filter(filter);
 
@@ -49,11 +47,11 @@ fn multiple_layer_filter_interests_are_cached() {
     let seen_warn = seen_warn2;
 
     let (warn_layer, warn_handle) = layer::named("warn")
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .done()
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .only()
         .run_with_handle();
     let warn_layer = warn_layer.with_filter(filter);
 

@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::io::Write;
 use std::{io, thread};
 
-pub(crate) struct Worker<T: Write + Send + Sync + 'static> {
+pub(crate) struct Worker<T: Write + Send + 'static> {
     writer: T,
     receiver: Receiver<Msg>,
     shutdown: Receiver<()>,
@@ -18,7 +18,7 @@ pub(crate) enum WorkerState {
     Shutdown,
 }
 
-impl<T: Write + Send + Sync + 'static> Worker<T> {
+impl<T: Write + Send + 'static> Worker<T> {
     pub(crate) fn new(receiver: Receiver<Msg>, writer: T, shutdown: Receiver<()>) -> Worker<T> {
         Self {
             writer,
@@ -67,23 +67,26 @@ impl<T: Write + Send + Sync + 'static> Worker<T> {
     }
 
     /// Creates a worker thread that processes a channel until it's disconnected
-    pub(crate) fn worker_thread(mut self) -> std::thread::JoinHandle<()> {
-        thread::spawn(move || {
-            loop {
-                match self.work() {
-                    Ok(WorkerState::Continue) | Ok(WorkerState::Empty) => {}
-                    Ok(WorkerState::Shutdown) | Ok(WorkerState::Disconnected) => {
-                        let _ = self.shutdown.recv();
-                        break;
-                    }
-                    Err(_) => {
-                        // TODO: Expose a metric for IO Errors, or print to stderr
+    pub(crate) fn worker_thread(mut self, name: String) -> std::thread::JoinHandle<()> {
+        thread::Builder::new()
+            .name(name)
+            .spawn(move || {
+                loop {
+                    match self.work() {
+                        Ok(WorkerState::Continue) | Ok(WorkerState::Empty) => {}
+                        Ok(WorkerState::Shutdown) | Ok(WorkerState::Disconnected) => {
+                            let _ = self.shutdown.recv();
+                            break;
+                        }
+                        Err(_) => {
+                            // TODO: Expose a metric for IO Errors, or print to stderr
+                        }
                     }
                 }
-            }
-            if let Err(e) = self.writer.flush() {
-                eprintln!("Failed to flush. Error: {}", e);
-            }
-        })
+                if let Err(e) = self.writer.flush() {
+                    eprintln!("Failed to flush. Error: {}", e);
+                }
+            })
+            .expect("failed to spawn `tracing-appender` non-blocking worker thread")
     }
 }

@@ -1,17 +1,15 @@
 #![cfg(feature = "registry")]
-mod support;
-use self::support::*;
-
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 use tracing::{Level, Subscriber};
+use tracing_mock::{layer::MockLayer, *};
 use tracing_subscriber::{filter, prelude::*};
 
 #[test]
 fn vec_layer_filter_interests_are_cached() {
-    let mk_filtered = |level: Level, subscriber: ExpectLayer| {
+    let mk_filtered = |level: Level, subscriber: MockLayer| {
         let seen = Arc::new(Mutex::new(HashMap::new()));
         let filter = filter::filter_fn({
             let seen = seen.clone();
@@ -25,23 +23,23 @@ fn vec_layer_filter_interests_are_cached() {
 
     // This layer will return Interest::always for INFO and lower.
     let (info_layer, info_handle) = layer::named("info")
-        .event(event::mock().at_level(Level::INFO))
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .event(event::mock().at_level(Level::INFO))
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .done()
+        .event(expect::event().at_level(Level::INFO))
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .event(expect::event().at_level(Level::INFO))
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .only()
         .run_with_handle();
     let (info_layer, seen_info) = mk_filtered(Level::INFO, info_layer);
 
     // This layer will return Interest::always for WARN and lower.
     let (warn_layer, warn_handle) = layer::named("warn")
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .event(event::mock().at_level(Level::WARN))
-        .event(event::mock().at_level(Level::ERROR))
-        .done()
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .event(expect::event().at_level(Level::WARN))
+        .event(expect::event().at_level(Level::ERROR))
+        .only()
         .run_with_handle();
     let (warn_layer, seen_warn) = mk_filtered(Level::WARN, warn_layer);
 

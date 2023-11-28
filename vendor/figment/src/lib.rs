@@ -49,22 +49,30 @@
 //!     "profiles", profile selection, nesting, and extraction.
 //!   * [Crate Feature Flags](#crate-feature-flags) - Feature flags and what
 //!     they enable.
-//!   * [Built-In Providers](#built-in-providers) - Table of providers provided
-//!     by this crate.
+//!   * [Available Providers](#available-providers) - Table of providers
+//!     provided by this and other crates.
 //!   * [For `Provider` Authors](#for-provider-authors) - Tips for writing
 //!     [`Provider`]s.
 //!   * [For Library Authors](#for-library-authors) - Brief guide for authors
 //!     wishing to use Figment in their libraries or frameworks.
 //!   * [For Application Authors](#for-application-authors) - Brief guide for
 //!     authors of applications that use libraries that use Figment.
+//!   * [For CLI Application Authors](#for-cli-application-authors) - Brief
+//!     guide for authors of applications with a CLI and other configuration
+//!     sources.
 //!   * [Tips](#tips) - Things to remember when working with Figment.
 //!   * [Type Index](#modules) - The real rustdocs.
 //!
 //! # Overview
 //!
 //! Figment is a library for declaring and combining configuration sources and
-//! extracting typed values from the combined sources. There are two prevailing
-//! concepts:
+//! extracting typed values from the combined sources. It distinguishes itself
+//! from other libraries with similar motives by seamlessly and comprehensively
+//! tracking configuration value provenance, even in the face of myriad sources.
+//! This means that error values and messages are precise and know exactly where
+//! and how misconfiguration arose.
+//!
+//! There are two prevailing concepts:
 //!
 //!   * **Providers:** Types implementing the [`Provider`] trait, which
 //!     implement a configuration source.
@@ -91,8 +99,8 @@
 //!
 //! Most figments will use more than one provider, merging and joining as
 //! necessary. The figment below reads `App.toml`, environment variables
-//! prefixed with `APP_` and fills any holes (but does replace existing values)
-//! with values from `App.json`:
+//! prefixed with `APP_` and fills any holes (but does not replace existing
+//! values) with values from `App.json`:
 //!
 //! ```
 //! use figment::{Figment, providers::{Format, Toml, Json, Env}};
@@ -284,18 +292,21 @@
 //! To help with compilation times, types, modules, and providers are gated by
 //! features. They are:
 //!
-//! | feature | gated namespace     | description                             |
-//! |---------|---------------------|-----------------------------------------|
-//! | `test`  | [`Jail`]            | Semi-sandboxed environment for testing. |
-//! | `env`   | [`providers::Env`]  | Environment variable [`Provider`].      |
-//! | `toml`  | [`providers::Toml`] | TOML file/string [`Provider`].          |
-//! | `json`  | [`providers::Json`] | JSON file/string [`Provider`].          |
-//! | `yaml`  | [`providers::Yaml`] | YAML file/string [`Provider`].          |
+//! | feature | gated namespace             | description                               |
+//! |---------|-----------------------------|-------------------------------------------|
+//! | `test`  | [`Jail`]                    | Semi-sandboxed environment for testing.   |
+//! | `env`   | [`providers::Env`]          | Environment variable [`Provider`].        |
+//! | `toml`  | [`providers::Toml`]         | TOML file/string [`Provider`].            |
+//! | `json`  | [`providers::Json`]         | JSON file/string [`Provider`].            |
+//! | `yaml`  | [`providers::Yaml`]         | YAML file/string [`Provider`].            |
+//! | `yaml`  | [`providers::YamlExtended`] | [YAML Extended] file/string [`Provider`]. |
 //!
-//! # Built-In Providers
+//! [YAML Extended]: providers::YamlExtended::from_str()
 //!
-//! In addition to the four gated providers, figment provides the following
-//! providers out-of-the-box:
+//! # Available Providers
+//!
+//! In addition to the four gated providers above, figment provides the
+//! following providers out-of-the-box:
 //!
 //! | provider                              | description                            |
 //! |---------------------------------------|----------------------------------------|
@@ -306,6 +317,16 @@
 //! [`Serialize`]: serde::Serialize
 //! [`(impl AsRef<str>, impl Serialize)`]: Provider#impl-Provider-for-(K%2C%20V)
 //! [`&T` _where_ `T: Provider`]: Provider#impl-Provider-for-%26%27_%20T
+//!
+//! ### Third-Party Providers
+//!
+//! The following external libraries implement Figment providers:
+//!
+//!  - [`figment_file_provider_adapter`](https://crates.io/crates/figment_file_provider_adapter)
+//!
+//!    Wraps existing providers. For any key ending in `_FILE` (configurable),
+//!    emits a key without the `_FILE` suffix with a value corresponding to the
+//!    contents of the file whose path is the original key's value.
 //!
 //! # For Provider Authors
 //!
@@ -455,6 +476,77 @@
 //!     .merge(Toml::file("App.toml"))
 //!     .merge(Env::prefixed("APP_"));
 //! ```
+//!
+//! # For CLI Application Authors
+//!
+//! As an author of an application with a CLI, you may want to use Figment in
+//! combination with a library like [`clap`] if:
+//!
+//!   * You want to read configuration from sources outside of the CLI.
+//!   * You want flexibility in how configuration sources are combined.
+//!   * You want great error messages irrespective of how the application is
+//!     configured.
+//!
+//! [`clap`]: https://docs.rs/clap/latest/clap/
+//!
+//! If any of these conditions apply, Figment is a great choice.
+//!
+//! If you are already using a library like [`clap`], you'll likely have a
+//! configuration structure defined:
+//!
+//! ```rust
+//! use clap::Parser;
+//!
+//! #[derive(Parser, Debug)]
+//! struct Config {
+//!    /// Name of the person to greet.
+//!    #[clap(short, long, value_parser)]
+//!    name: String,
+//!
+//!    /// Number of times to greet
+//!    #[clap(short, long, value_parser, default_value_t = 1)]
+//!    count: u8,
+//! }
+//! ```
+//!
+//! To enable the structure to be combined with other Figment sources, derive
+//! `Serialize` and `Deserialize` for the structure:
+//!
+//! ```diff
+//! + use serde::{Serialize, Deserialize};
+//!
+//! - #[derive(Parser, Debug)]
+//! + #[derive(Parser, Debug, Serialize, Deserialize)]
+//! struct Config {
+//! ```
+//!
+//! It can then be combined with other sources via the
+//! [`Serialized`](providers::Serialized) provider:
+//!
+//! ```rust
+//! use clap::Parser;
+//! use figment::{Figment, providers::{Serialized, Toml, Env, Format}};
+//! use serde::{Serialize, Deserialize};
+//!
+//! #[derive(Parser, Debug, Serialize, Deserialize)]
+//! struct Config {
+//!     // ...
+//! }
+//!
+//! # figment::Jail::try_with(|_| {
+//! // Parse CLI arguments. Override CLI config values with those in
+//! // `Config.toml` and `APP_`-prefixed environment variables.
+//! let config: Config = Figment::new()
+//!     .merge(Serialized::defaults(Config::parse()))
+//!     .merge(Toml::file("Config.toml"))
+//!     .merge(Env::prefixed("APP_"))
+//!     .extract()?;
+//! # Ok(())
+//! # });
+//! ```
+//!
+//! See [For Application Authors](#for-application-authors) for further, general
+//! guidance on using Figment for application configuration.
 //!
 //! # Tips
 //!

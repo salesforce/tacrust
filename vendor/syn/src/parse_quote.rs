@@ -24,9 +24,8 @@
 /// }
 /// ```
 ///
-/// *This macro is available only if Syn is built with the `"parsing"` feature,
-/// although interpolation of syntax tree nodes into the quoted tokens is only
-/// supported if Syn is built with the `"printing"` feature as well.*
+/// *This macro is available only if Syn is built with both the `"parsing"` and
+/// `"printing"` features.*
 ///
 /// # Example
 ///
@@ -58,7 +57,6 @@
 ///   `P` with optional trailing punctuation
 /// - [`Vec<Stmt>`] — parses the same as `Block::parse_within`
 ///
-/// [`Punctuated<T, P>`]: crate::punctuated::Punctuated
 /// [`Vec<Stmt>`]: Block::parse_within
 ///
 /// # Panics
@@ -66,14 +64,43 @@
 /// Panics if the tokens fail to parse as the expected syntax tree type. The
 /// caller is responsible for ensuring that the input tokens are syntactically
 /// valid.
-//
-// TODO: allow Punctuated to be inferred as intra doc link, currently blocked on
-// https://github.com/rust-lang/rust/issues/62834
 #[cfg_attr(doc_cfg, doc(cfg(all(feature = "parsing", feature = "printing"))))]
 #[macro_export]
 macro_rules! parse_quote {
     ($($tt:tt)*) => {
-        $crate::parse_quote::parse($crate::__private::quote::quote!($($tt)*))
+        $crate::__private::parse_quote($crate::__private::quote::quote!($($tt)*))
+    };
+}
+
+/// This macro is [`parse_quote!`] + [`quote_spanned!`][quote::quote_spanned].
+///
+/// Please refer to each of their documentation.
+///
+/// # Example
+///
+/// ```
+/// use quote::{quote, quote_spanned};
+/// use syn::spanned::Spanned;
+/// use syn::{parse_quote_spanned, ReturnType, Signature};
+///
+/// // Changes `fn()` to `fn() -> Pin<Box<dyn Future<Output = ()>>>`,
+/// // and `fn() -> T` to `fn() -> Pin<Box<dyn Future<Output = T>>>`,
+/// // without introducing any call_site() spans.
+/// fn make_ret_pinned_future(sig: &mut Signature) {
+///     let ret = match &sig.output {
+///         ReturnType::Default => quote_spanned!(sig.paren_token.span=> ()),
+///         ReturnType::Type(_, ret) => quote!(#ret),
+///     };
+///     sig.output = parse_quote_spanned! {ret.span()=>
+///         -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = #ret>>>
+///     };
+/// }
+/// ```
+#[cfg_attr(doc_cfg, doc(cfg(all(feature = "parsing", feature = "printing"))))]
+#[macro_export]
+macro_rules! parse_quote_spanned {
+    ($span:expr=> $($tt:tt)*) => {
+        $crate::__private::parse_quote($crate::__private::quote::quote_spanned!($span=> $($tt)*))
     };
 }
 
@@ -93,7 +120,6 @@ pub fn parse<T: ParseQuote>(token_stream: TokenStream) -> T {
     }
 }
 
-// Not public API.
 #[doc(hidden)]
 pub trait ParseQuote: Sized {
     fn parse(input: ParseStream) -> Result<Self>;
@@ -112,7 +138,7 @@ use crate::punctuated::Punctuated;
 #[cfg(any(feature = "full", feature = "derive"))]
 use crate::{attr, Attribute};
 #[cfg(feature = "full")]
-use crate::{Block, Stmt};
+use crate::{Block, Pat, Stmt};
 
 #[cfg(any(feature = "full", feature = "derive"))]
 impl ParseQuote for Attribute {
@@ -122,6 +148,20 @@ impl ParseQuote for Attribute {
         } else {
             attr::parsing::single_parse_outer(input)
         }
+    }
+}
+
+#[cfg(feature = "full")]
+impl ParseQuote for Pat {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Pat::parse_multi_with_leading_vert(input)
+    }
+}
+
+#[cfg(feature = "full")]
+impl ParseQuote for Box<Pat> {
+    fn parse(input: ParseStream) -> Result<Self> {
+        <Pat as ParseQuote>::parse(input).map(Box::new)
     }
 }
 

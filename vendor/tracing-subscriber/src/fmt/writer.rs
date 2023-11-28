@@ -1,6 +1,6 @@
 //! Abstractions for creating [`io::Write`] instances.
 //!
-//! [`io::Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+//! [`io::Write`]: std::io::Write
 use std::{
     fmt,
     io::{self, Write},
@@ -16,7 +16,7 @@ use tracing_core::Metadata;
 /// This trait is already implemented for function pointers and
 /// immutably-borrowing closures that return an instance of [`io::Write`], such
 /// as [`io::stdout`] and [`io::stderr`]. Additionally, it is implemented for
-/// [`std::sync::Mutex`][mutex] when the tyoe inside the mutex implements
+/// [`std::sync::Mutex`] when the type inside the mutex implements
 /// [`io::Write`].
 ///
 /// # Examples
@@ -66,7 +66,7 @@ use tracing_core::Metadata;
 /// ```
 ///
 /// A single instance of a type implementing [`io::Write`] may be used as a
-/// `MakeWriter` by wrapping it in a [`Mutex`][mutex]. For example, we could
+/// `MakeWriter` by wrapping it in a [`Mutex`]. For example, we could
 /// write to a file like so:
 ///
 /// ```
@@ -88,7 +88,6 @@ use tracing_core::Metadata;
 /// [`Event`]: tracing_core::event::Event
 /// [`io::stdout`]: std::io::stdout()
 /// [`io::stderr`]: std::io::stderr()
-/// [mutex]: std::sync::Mutex
 /// [`MakeWriter::make_writer_for`]: MakeWriter::make_writer_for
 /// [`Metadata`]: tracing_core::Metadata
 /// [levels]: tracing_core::Level
@@ -96,8 +95,8 @@ use tracing_core::Metadata;
 pub trait MakeWriter<'a> {
     /// The concrete [`io::Write`] implementation returned by [`make_writer`].
     ///
-    /// [`io::Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
-    /// [`make_writer`]: #tymethod.make_writer
+    /// [`io::Write`]: std::io::Write
+    /// [`make_writer`]: MakeWriter::make_writer
     type Writer: io::Write;
 
     /// Returns an instance of [`Writer`].
@@ -109,7 +108,7 @@ pub trait MakeWriter<'a> {
     /// creating a [`io::Write`] instance is expensive, be sure to cache it when implementing
     /// [`MakeWriter`] to improve performance.
     ///
-    /// [`Writer`]: #associatedtype.Writer
+    /// [`Writer`]: MakeWriter::Writer
     /// [`fmt::Layer`]: crate::fmt::Layer
     /// [`fmt::Subscriber`]: crate::fmt::Subscriber
     /// [`io::Write`]: std::io::Write
@@ -325,7 +324,7 @@ pub trait MakeWriterExt<'a>: MakeWriter<'a> {
 
     /// Wraps `self` with a predicate that takes a span or event's [`Metadata`]
     /// and returns a `bool`. The returned [`MakeWriter`]'s
-    /// [`MakeWriter::make_writer_for`][mwf] method will check the predicate to
+    /// [`MakeWriter::make_writer_for`] method will check the predicate to
     /// determine if  a writer should be produced for a given span or event.
     ///
     /// If the predicate returns `false`, the wrapped [`MakeWriter`]'s
@@ -501,13 +500,13 @@ pub trait MakeWriterExt<'a>: MakeWriter<'a> {
 /// Writing to [`io::stdout`] and [`io::stderr`] produces the same results as using
 /// [`libtest`'s `--nocapture` option][nocapture] which may make the results look unreadable.
 ///
-/// [`fmt::Subscriber`]: ../struct.Subscriber.html
-/// [`fmt::Layer`]: ../struct.Layer.html
+/// [`fmt::Subscriber`]: super::Subscriber
+/// [`fmt::Layer`]: super::Layer
 /// [capturing]: https://doc.rust-lang.org/book/ch11-02-running-tests.html#showing-function-output
 /// [nocapture]: https://doc.rust-lang.org/cargo/commands/cargo-test.html
-/// [`io::stdout`]: https://doc.rust-lang.org/std/io/fn.stdout.html
-/// [`io::stderr`]: https://doc.rust-lang.org/std/io/fn.stderr.html
-/// [`print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`io::stdout`]: std::io::stdout
+/// [`io::stderr`]: std::io::stderr
+/// [`print!`]: std::print!
 #[derive(Default, Debug)]
 pub struct TestWriter {
     _p: (),
@@ -544,7 +543,7 @@ pub struct BoxMakeWriter {
     name: &'static str,
 }
 
-/// A [writer] that is one of two types implementing [`io::Write`][writer].
+/// A [writer] that is one of two types implementing [`io::Write`].
 ///
 /// This may be used by [`MakeWriter`] implementations that may conditionally
 /// return one of two writers.
@@ -646,10 +645,9 @@ pub struct Tee<A, B> {
 /// requires the `Writer` type to implement [`io::Write`], it's necessary to add
 /// a newtype that forwards the trait implementation.
 ///
-/// [`io::Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
-/// [`MutexGuard`]: https://doc.rust-lang.org/std/sync/struct.MutexGuard.html
-/// [`Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
-/// [`MakeWriter`]: trait.MakeWriter.html
+/// [`io::Write`]: std::io::Write
+/// [`MutexGuard`]: std::sync::MutexGuard
+/// [`Mutex`]: std::sync::Mutex
 #[derive(Debug)]
 pub struct MutexGuardWriter<'a, W>(MutexGuard<'a, W>);
 
@@ -689,7 +687,7 @@ where
 {
     type Writer = &'a W;
     fn make_writer(&'a self) -> Self::Writer {
-        &*self
+        self
     }
 }
 
@@ -734,7 +732,6 @@ impl<'a> MakeWriter<'a> for TestWriter {
 impl BoxMakeWriter {
     /// Constructs a `BoxMakeWriter` wrapping a type implementing [`MakeWriter`].
     ///
-    /// [`MakeWriter`]: trait.MakeWriter.html
     pub fn new<M>(make_writer: M) -> Self
     where
         M: for<'a> MakeWriter<'a> + Send + Sync + 'static,

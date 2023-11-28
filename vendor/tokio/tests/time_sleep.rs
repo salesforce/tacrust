@@ -168,6 +168,7 @@ async fn reset_sleep_to_past() {
     assert_ready!(sleep.poll());
 }
 
+#[cfg(not(target_os = "wasi"))] // Wasi doesn't support panic recovery
 #[test]
 #[should_panic]
 fn creating_sleep_outside_of_context() {
@@ -188,10 +189,7 @@ async fn greater_than_max() {
 
 #[tokio::test]
 async fn short_sleeps() {
-    for i in 0..10000 {
-        if (i % 10) == 0 {
-            eprintln!("=== {}", i);
-        }
+    for _ in 0..1000 {
         tokio::time::sleep(std::time::Duration::from_millis(0)).await;
     }
 }
@@ -236,22 +234,6 @@ async fn long_sleeps() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "Duration too far into the future")]
-async fn very_long_sleeps() {
-    tokio::time::pause();
-
-    // Some platforms (eg macos) can't represent times this far in the future
-    if let Some(deadline) = tokio::time::Instant::now().checked_add(Duration::from_secs(1u64 << 62))
-    {
-        tokio::time::sleep_until(deadline).await;
-    } else {
-        // make it pass anyway (we can't skip/ignore the test based on the
-        // result of checked_add)
-        panic!("Duration too far into the future (test ignored)")
-    }
-}
-
-#[tokio::test]
 async fn reset_after_firing() {
     let timer = tokio::time::sleep(std::time::Duration::from_millis(1));
     tokio::pin!(timer);
@@ -283,6 +265,20 @@ const MAX_DURATION: u64 = (1 << (6 * NUM_LEVELS)) - 1;
 async fn exactly_max() {
     time::pause();
     time::sleep(ms(MAX_DURATION)).await;
+}
+
+#[tokio::test]
+async fn issue_5183() {
+    time::pause();
+
+    let big = std::time::Duration::from_secs(u64::MAX / 10);
+    // This is a workaround since awaiting sleep(big) will never finish.
+    #[rustfmt::skip]
+    tokio::select! {
+	biased;
+        _ = tokio::time::sleep(big) => {}
+        _ = tokio::time::sleep(std::time::Duration::from_nanos(1)) => {}
+    }
 }
 
 #[tokio::test]
@@ -333,17 +329,17 @@ async fn drop_from_wake() {
 
     tokio::time::pause();
 
-    let mut lock = list.lock().unwrap();
+    {
+        let mut lock = list.lock().unwrap();
 
-    for _ in 0..100 {
-        let mut timer = Box::pin(tokio::time::sleep(Duration::from_millis(10)));
+        for _ in 0..100 {
+            let mut timer = Box::pin(tokio::time::sleep(Duration::from_millis(10)));
 
-        let _ = timer.as_mut().poll(&mut Context::from_waker(&arc_wake));
+            let _ = timer.as_mut().poll(&mut Context::from_waker(&arc_wake));
 
-        lock.push(timer);
+            lock.push(timer);
+        }
     }
-
-    drop(lock);
 
     tokio::time::sleep(Duration::from_millis(11)).await;
 

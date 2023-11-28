@@ -4,13 +4,16 @@ use tokio_test::task;
 use std::task::Waker;
 
 trait AssertSend: Send {}
-trait AssertSync: Send {}
+trait AssertSync: Sync {}
 
 impl AssertSend for AtomicWaker {}
 impl AssertSync for AtomicWaker {}
 
 impl AssertSend for Waker {}
 impl AssertSync for Waker {}
+
+#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 #[test]
 fn basic_usage() {
@@ -33,7 +36,9 @@ fn wake_without_register() {
     assert!(!waker.is_woken());
 }
 
+#[cfg(panic = "unwind")]
 #[test]
+#[cfg(not(target_family = "wasm"))] // wasm currently doesn't support unwinding
 fn atomic_waker_panic_safe() {
     use std::panic;
     use std::ptr;

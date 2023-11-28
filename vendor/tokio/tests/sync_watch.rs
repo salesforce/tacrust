@@ -1,6 +1,9 @@
 #![allow(clippy::cognitive_complexity)]
 #![warn(rust_2018_idioms)]
-#![cfg(feature = "full")]
+#![cfg(feature = "sync")]
+
+#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 use tokio::sync::watch;
 use tokio_test::task::spawn;
@@ -38,6 +41,64 @@ fn single_rx_recv() {
         assert!(t.is_woken());
         assert_ready_err!(t.poll());
     }
+    assert_eq!(*rx.borrow(), "two");
+}
+
+#[test]
+fn rx_version_underflow() {
+    let (_tx, mut rx) = watch::channel("one");
+
+    // Version starts at 2, validate we do not underflow
+    rx.mark_changed();
+    rx.mark_changed();
+}
+
+#[test]
+fn rx_mark_changed() {
+    let (tx, mut rx) = watch::channel("one");
+
+    let mut rx2 = rx.clone();
+    let mut rx3 = rx.clone();
+    let mut rx4 = rx.clone();
+    {
+        rx.mark_changed();
+        assert!(rx.has_changed().unwrap());
+
+        let mut t = spawn(rx.changed());
+        assert_ready_ok!(t.poll());
+    }
+
+    {
+        assert!(!rx2.has_changed().unwrap());
+
+        let mut t = spawn(rx2.changed());
+        assert_pending!(t.poll());
+    }
+
+    {
+        rx3.mark_changed();
+        assert_eq!(*rx3.borrow(), "one");
+
+        assert!(rx3.has_changed().unwrap());
+
+        assert_eq!(*rx3.borrow_and_update(), "one");
+
+        assert!(!rx3.has_changed().unwrap());
+
+        let mut t = spawn(rx3.changed());
+        assert_pending!(t.poll());
+    }
+
+    {
+        tx.send("two").unwrap();
+        assert!(rx4.has_changed().unwrap());
+        assert_eq!(*rx4.borrow_and_update(), "two");
+
+        rx4.mark_changed();
+        assert!(rx4.has_changed().unwrap());
+        assert_eq!(*rx4.borrow_and_update(), "two")
+    }
+
     assert_eq!(*rx.borrow(), "two");
 }
 
@@ -174,17 +235,24 @@ fn poll_close() {
 fn borrow_and_update() {
     let (tx, mut rx) = watch::channel("one");
 
+    assert!(!rx.has_changed().unwrap());
+
     tx.send("two").unwrap();
+    assert!(rx.has_changed().unwrap());
     assert_ready!(spawn(rx.changed()).poll()).unwrap();
     assert_pending!(spawn(rx.changed()).poll());
+    assert!(!rx.has_changed().unwrap());
 
     tx.send("three").unwrap();
+    assert!(rx.has_changed().unwrap());
     assert_eq!(*rx.borrow_and_update(), "three");
     assert_pending!(spawn(rx.changed()).poll());
+    assert!(!rx.has_changed().unwrap());
 
     drop(tx);
     assert_eq!(*rx.borrow_and_update(), "three");
     assert_ready!(spawn(rx.changed()).poll()).unwrap_err();
+    assert!(rx.has_changed().is_err());
 }
 
 #[test]
@@ -200,4 +268,34 @@ fn reopened_after_subscribe() {
 
     drop(rx);
     assert!(tx.is_closed());
+}
+
+#[test]
+#[cfg(panic = "unwind")]
+#[cfg(not(target_family = "wasm"))] // wasm currently doesn't support unwinding
+fn send_modify_panic() {
+    let (tx, mut rx) = watch::channel("one");
+
+    tx.send_modify(|old| *old = "two");
+    assert_eq!(*rx.borrow_and_update(), "two");
+
+    let mut rx2 = rx.clone();
+    assert_eq!(*rx2.borrow_and_update(), "two");
+
+    let mut task = spawn(rx2.changed());
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tx.send_modify(|old| {
+            *old = "panicked";
+            panic!();
+        })
+    }));
+    assert!(result.is_err());
+
+    assert_pending!(task.poll());
+    assert_eq!(*rx.borrow(), "panicked");
+
+    tx.send_modify(|old| *old = "three");
+    assert_ready_ok!(task.poll());
+    assert_eq!(*rx.borrow_and_update(), "three");
 }
