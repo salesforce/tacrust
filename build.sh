@@ -12,7 +12,6 @@ export VERSION_NUMBER="${BUILD_ID}"
 ITERATION=$(date +"%Y%m%d%H%M%S")
 echo "${ITERATION}" > .iteration
 
-
 if [ -f /etc/os-release ]; then
     # freedesktop.org and systemd
     . /etc/os-release
@@ -28,8 +27,10 @@ export FULL_VERSION="${VERSION_NUMBER}-${ITERATION}"
 cd "$(dirname "${BASH_SOURCE[0]}")"
 make build-release
 
+rm -rf rpmbuild
 mkdir -p rpmbuild/usr/bin
 cp target/release/tacrustd rpmbuild/usr/bin/tacrustd
+rm -rf rpm-generated
 mkdir rpm-generated || true
 
 if [[ "${DIST}" == 7 ]]; then
@@ -51,14 +52,12 @@ elif [[ "${DIST}" =~ ^9.* ]]; then
     fi
     echo "ITERATION: ${ITERATION}"
     export ITERATION
-    cd rpmbuild && fpm -s dir -t rpm \
-        -n "${PROJ_NAME}" \
-        -m "platform-integrity-c4ssh@salesforce.com" \
-        --rpm-os linux \
-        --iteration "${ITERATION}.el9" \
-        --version ${VERSION_NUMBER} \
-	--epoch ${EPOCH} \
-	--verbose \
-        . && \
-	mv ./*.rpm ../rpm-generated/
+    rpmbuild --noclean --buildroot=${PWD}/rpmbuild \
+      --define "_rpmdir ${PWD}" \
+      --define "_sourcedir ${PWD}" \
+      -ba tacrust.spec \
+      --define "%my_iteration ${ITERATION}" \
+      --define "%my_version ${VERSION_NUMBER}" \
+      --define "%proj_path ${PWD}"
+    mv ./x86_64/*.rpm ./rpm-generated/
 fi

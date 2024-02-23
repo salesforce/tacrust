@@ -1,6 +1,8 @@
 /target
-rpmbuild/
-rpm-generated/
+/rpmbuild
+/rpm-generated
+/x86_64
 coveralls.json
 .idea
+.iteration
 *.profraw
