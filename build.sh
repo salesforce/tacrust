@@ -52,7 +52,7 @@ elif [[ "${DIST}" =~ ^9.* ]]; then
     fi
     echo "ITERATION: ${ITERATION}"
     export ITERATION
-    rpmbuild --noclean --buildroot=${PWD}/rpmbuild \
+    rpmbuild --noclean --buildroot="${PWD}/rpmbuild" \
       --define "_rpmdir ${PWD}" \
       --define "_sourcedir ${PWD}" \
       -ba tacrust.spec \
