@@ -11,5 +11,3 @@ docker_package_images:
 package_generation_command: ./build.sh                  # The command we'll run to package your RPMs
 package_repository: kuleana                             # Please see the list of available yum repos and create a PR if your group
 promote_to_falcon: true
-docker_images:                                          # Provide a map of image names to custom Dockerfile names
-   kuleana-tacrust: ./Dockerfile
