@@ -4,7 +4,7 @@ Release:      %{my_iteration}.el9
 BuildArch:    x86_64
 Summary:      TACACS+ implementation in Rust
 License:      Salesforce Proprietary Copyright
-URL:          https://git.soma.salesforce.com/Kuleana/tacrust
+URL:          https://github.com/salesforce/tacrust
 Packager:     platform-integrity-c4ssh@salesforce.com
 
 %description
