@@ -12,18 +12,16 @@ Tacrust is a grounds-up implementation of the TACACS+ protocol in Rust. The memo
     * Command and service definitions at user level (instead of requiring groups)
     * Supports integration with PAM for authentication. Also supports local password validation. 
 
-Tacrust has been extensively tested to run with multiple vendors. Here is a list of vendors tested for:
-- Cisco 9000 Switch
+Tacrust has been extensively tested to run with multiple vendors. Here are some of them:
+- Cisco Catalyst & Nexus Switches
 - F5 LB
 - Juniper Firewall
 - MRV Jumpbox
 - Ciena Waveserver
 - OpenGear Jumpbox
 - Fortigate Firewall
-- Cisco ASA
+- Cisco ASA, ASR
 - SafeNet Encryptor
-* AuthZ testing matrix to model the original daemon's behavior for reference: [sfdc.co/shrubbery-authz-matrix](https://sfdc.co/shrubbery-authz-matrix)
-* Hardware test matrix and instructions at: [sfdc.co/tacrust-testing](https://sfdc.co/tacrust-testing)
 
 ## Status
 
